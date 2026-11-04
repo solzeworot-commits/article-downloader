@@ -113,7 +113,8 @@ with sync_playwright() as p:
     shot(page, "10_home_with_queue.png")
 
     # v6.2: keyword hints
-    page.on("dialog", lambda d: d.accept())
+    dialogs = []
+    page.on("dialog", lambda d: (dialogs.append(d.message), d.accept()))
     page.click("#go-search")
     page.click("#btn-hints")
     page.wait_for_selector("#hints [data-hint]", timeout=15000)
@@ -156,12 +157,51 @@ with sync_playwright() as p:
         decoded = []
         for i, qr in enumerate(page.locator("#donate-body .qr").all()):
             path = SH / f"qr_{i}.png"
-            qr.screenshot(path=str(path))
+            qr.evaluate("el => el.scrollIntoView({block: 'center'})")
+            page.wait_for_timeout(300)
+            # A screen clip by the code's position: an element screenshot of a
+            # code low in the scrolled dialog came out cut off.
+            box = qr.bounding_box()
+            page.screenshot(path=str(path), clip={"x": box["x"] - 8, "y": box["y"] - 8,
+                                                  "width": box["width"] + 16, "height": box["height"] + 16})
             img = cv2.imread(str(path))
-            img = cv2.resize(img, None, fx=3, fy=3, interpolation=cv2.INTER_NEAREST)
-            decoded.append(cv2.QRCodeDetector().detectAndDecode(img)[0])
+            text = cv2.QRCodeDetector().detectAndDecode(img)[0]
+            if not text:  # OpenCV sometimes needs it larger, sometimes not
+                big = cv2.resize(img, None, fx=3, fy=3, interpolation=cv2.INTER_NEAREST)
+                text = cv2.QRCodeDetector().detectAndDecode(big)[0]
+            decoded.append(text)
         assert decoded == expected, (decoded, expected)
         print("QR codes read back:", len(decoded), "match donate.json")
+
+    # v6.3: one button on the start screen clears the search and the queue
+    page.click("#dlg-donate [data-close]")
+    page.click("#home-clear")                     # the saved list is still downloading
+    page.wait_for_timeout(500)
+    assert dialogs and "Остановить" in dialogs[-1], dialogs[-1:]
+    print("clear while downloading: asks to stop first")
+    page.click("#go-download")
+    if page.is_visible("#stop"):
+        page.click("#stop")
+        page.wait_for_selector("#stop", state="hidden", timeout=30000)
+    page.click("#btn-home")
+    page.click("#home-clear")
+    page.wait_for_function("document.getElementById('home-msg').textContent.includes('очищены')")
+    page.wait_for_timeout(2000)
+    assert page.text_content("#home-note").strip() == "", page.text_content("#home-note")
+    assert (B / "ArticleDownloader/inbox/_архив").is_dir()
+    print("start-screen clear:", page.text_content("#home-msg"))
+    shot(page, "13_home_cleared.png", full=False)
+
+    # "Выход" stops the program and closes the window (or says how to close it)
+    closed = []
+    page.on("close", lambda _: closed.append(True))
+    page.click("#btn-quit")
+    page.wait_for_timeout(1500)
+    if closed:
+        print("quit: window closed itself")
+    else:
+        assert "Программа закрыта" in page.text_content("body"), page.text_content("body")[:200]
+        print("quit: window kept open with the close message")
     assert not errors, errors
     br.close()
     print("ui flow: OK")

@@ -272,8 +272,10 @@
       <button id="home-keys">🔑 Ключи API для Scopus и Web of Science</button>
       <button id="home-inbox">📂 Папка inbox</button>
       <button id="home-pdf">📂 Папка с PDF</button>
+      <button id="home-clear" title="Очистить поиск и очередь; PDF и списки в inbox останутся">🧹 Очистить всё</button>
       <button id="home-donate" hidden>❤ Поблагодарить автора</button>
     </div>
+    <div id="home-msg" class="recognized" style="text-align: center; margin-top: 12px"></div>
   </section>
 
   <section id="view-download" class="view" hidden>
@@ -513,7 +515,7 @@ extraction"></textarea>
 <script>
 const TOKEN = "__TOKEN__";
 const $ = (id) => document.getElementById(id);
-let state = null, items = [], ver = 0, online = true, parsed = { entries: [], ignored: 0 }, firstRunSeen = false;
+let state = null, items = [], ver = 0, online = true, parsed = { entries: [], ignored: 0 }, firstRunSeen = false, quitting = false;
 
 const STATUS = {
   pending: ["в очереди", "⏳"],
@@ -554,6 +556,7 @@ async function api(path, body) {
 
 // ---- polling -------------------------------------------------------------
 async function poll() {
+  if (quitting) return;
   try {
     const r = await fetch("/api/state?v=" + ver, { headers: { "X-Token": TOKEN } });
     if (!r.ok) throw new Error(r.status);
@@ -812,8 +815,17 @@ $("btn-clear-done").onclick = () => api("/api/clear", { what: "done" });
 $("btn-clear-all").onclick = () => { if (confirm("Убрать из списка все статьи? Скачанные PDF останутся в папке.")) api("/api/clear", { what: "all" }); };
 $("btn-quit").onclick = async () => {
   if (state && state.running && !confirm("Идёт скачивание. Остановить и закрыть программу?")) return;
+  quitting = true;
   try { await api("/api/quit"); } catch (e) {}
-  setBanner("grey", "👋", "Программа закрыта. Это окно можно закрыть.");
+  // The app window was opened once and only replaceState is used, so the
+  // browser lets the page close it. In an ordinary tab it may refuse: then
+  // the whole page says what to do instead of a banner on a hidden screen.
+  window.close();
+  setTimeout(() => {
+    document.body.innerHTML = '<div class="wrap" style="padding-top: 80px"><div class="note green" style="font-size: 20px">' +
+      '<span style="font-size: 30px">👋</span><span class="msg"><b>Программа закрыта.</b> Закройте это окно крестиком ' +
+      "в правом верхнем углу. Снова запустить — значок «Скачать статьи».</span></div></div>";
+  }, 400);
 };
 document.addEventListener("click", async (e) => {
   const t = e.target.closest("button");
@@ -1345,9 +1357,7 @@ document.addEventListener("click", async (e) => {
 const HINT_DEFAULT = "Подберёт частые ключевые слова из статей по вашей теме (бесплатно, OpenAlex).";
 let savedVer = -1;
 
-$("btn-new-topic").onclick = async () => {
-  if (records.length && savedVer !== searchVer &&
-      !confirm("Найденное ещё не сохранено в список. Очистить всё и начать новую тему?")) return;
+async function resetSearch() {
   $("kw").value = "";
   $("f-match").value = "all";
   $("f-field").value = "tak";
@@ -1367,7 +1377,29 @@ $("btn-new-topic").onclick = async () => {
   delete $("save-name").dataset.touched;
   $("results-card").hidden = true;
   await api("/api/search_clear");
+}
+$("btn-new-topic").onclick = async () => {
+  if (records.length && savedVer !== searchVer &&
+      !confirm("Найденное ещё не сохранено в список. Очистить всё и начать новую тему?")) return;
+  await resetSearch();
   $("kw").focus();
+};
+$("home-clear").onclick = async () => {
+  if (state && state.running) {
+    alert("Сейчас идёт скачивание. Откройте «Скачать статьи» и нажмите «Остановить», потом очистите.");
+    return;
+  }
+  const c = state ? counts() : { total: 0, pending: 0 };
+  let msg = "Начать с чистого листа?\n\nБудут очищены:\n• ключевые слова и найденное в поиске\n";
+  if (c.total) {
+    msg += `• очередь скачивания: ${c.total} ${plural(c.total, "статья", "статьи", "статей")}` +
+      (c.pending ? `, из них ещё не скачано ${c.pending}` : "") + "\n";
+  }
+  if (!confirm(msg + "\nСкачанные PDF и списки в папке inbox останутся.")) return;
+  await resetSearch();
+  await api("/api/clear", { what: "all" });
+  $("home-msg").textContent = "🧹 Готово: поиск и очередь очищены. PDF и списки в inbox на месте.";
+  setTimeout(() => { $("home-msg").textContent = ""; }, 8000);
 };
 
 async function archiveList(name) {
