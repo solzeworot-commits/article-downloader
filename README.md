@@ -19,6 +19,7 @@
 | `tools/build_portable.py` | Собирает готовую папку и `ArticleDownloader_Portable.zip` (добавляет Python и библиотеки). |
 | `tests/` | Тестовый стенд: поддельный сайт издательства с капчей, проверки разбора DOI. |
 | `screenshots/` | Как выглядит окно программы. |
+| `docs/ЗАДАНИЕ_v6.1_поиск_DOI.md` | Следующая задача: стартовое окно с двумя кнопками и поиск DOI в Scopus / Web of Science. |
 | `original_v5.24/` | Предыдущая версия для сравнения; `changes_article_downloader.diff` — что изменено. |
 
 ## Собрать программу
