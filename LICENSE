@@ -35,7 +35,11 @@ Copyright © 2026 Bucaneiro. Все права защищены.
 
 7. Python и библиотеки в папке python (Playwright, psutil, pypdf, qrcode и их
    зависимости) распространяются по своим лицензиям; их тексты лежат рядом с
-   ними. Эта лицензия на них не распространяется.
+   ними. Эта лицензия на них не распространяется. Фото на аватарке в окне
+   «О программе» — Barry Skeates, лицензия CC BY 2.0
+   (https://creativecommons.org/licenses/by/2.0/), обрезано; источник:
+   https://commons.wikimedia.org/wiki/File:Jolly_Roger_at_Portsmouth_Historic_Dockyard.jpg
+   Эта лицензия на него тоже не распространяется.
 
 8. Разрешение на то, что запрещено в пункте 4, можно попросить у автора через
    официальную страницу программы.
@@ -80,7 +84,12 @@ Official page: https://github.com/solzeworot-commits/article-downloader
 
 7. Python and the libraries in the python folder (Playwright, psutil, pypdf,
    qrcode and their dependencies) are distributed under their own licences,
-   whose texts lie next to them. This licence does not apply to them.
+   whose texts lie next to them. This licence does not apply to them. The
+   avatar photo in the "О программе" window is by Barry Skeates, licensed
+   under CC BY 2.0 (https://creativecommons.org/licenses/by/2.0/), cropped;
+   source:
+   https://commons.wikimedia.org/wiki/File:Jolly_Roger_at_Portsmouth_Historic_Dockyard.jpg
+   This licence does not apply to it either.
 
 8. Permission for anything forbidden in point 4 can be requested from the
    author through the official page of the program.

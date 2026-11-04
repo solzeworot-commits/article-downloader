@@ -62,3 +62,7 @@ python tools/build_portable.py
 изменений можно свободно; продавать программу и распространять изменённые версии без
 письменного разрешения автора нельзя. Полный текст — [LICENSE](LICENSE) (в архиве программы —
 «ЛИЦЕНЗИЯ.txt»). Python и библиотеки в папке `python` — по своим лицензиям.
+
+Аватарка автора в окне «О программе» — обрезанное фото
+[Jolly Roger at Portsmouth Historic Dockyard](https://commons.wikimedia.org/wiki/File:Jolly_Roger_at_Portsmouth_Historic_Dockyard.jpg),
+автор Barry Skeates, лицензия [CC BY 2.0](https://creativecommons.org/licenses/by/2.0/).

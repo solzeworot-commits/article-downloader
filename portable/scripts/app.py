@@ -53,6 +53,8 @@ DOWNLOADER = SCRIPT_DIR / "article_downloader.py"
 UI_FILE = SCRIPT_DIR / "ui" / "index.html"
 ICON_FILE = SCRIPT_DIR / "icon.ico"
 KEY_IMG_DIR = SCRIPT_DIR / "ui" / "img" / "keys"
+# The author's avatar in "О программе": a crop of a CC BY 2.0 photo, credited there.
+AVATAR_FILE = SCRIPT_DIR / "ui" / "img" / "avatar.jpg"
 # The author's details for "Поблагодарить автора"; without the file the
 # button is not shown.
 DONATE_FILE = SCRIPT_DIR / "donate.json"
@@ -96,6 +98,8 @@ GUIDE_LINKS = {
     "wos_starter": "https://developer.clarivate.com/apis/wos-starter",
     "openalex": "https://openalex.org/",
     "official": DOWNLOAD_URL,
+    "photo_source": "https://commons.wikimedia.org/wiki/File:Jolly_Roger_at_Portsmouth_Historic_Dockyard.jpg",
+    "photo_license": "https://creativecommons.org/licenses/by/2.0/",
 }
 SCOPUS_RESULTS_URL = "https://www.scopus.com/results/results.uri?sort=plf-f&src=s&sot=a&sdt=a&s="
 WOS_ADVANCED_URL = "https://www.webofscience.com/wos/woscc/advanced-search"
@@ -1730,6 +1734,8 @@ class Handler(BaseHTTPRequestHandler):
             return self._send(200, ICON_FILE.read_bytes(), "image/x-icon")
         if url.path == "/api/ping":
             return self._json({"app": "ArticleDownloader"})
+        if url.path == "/img/avatar.jpg" and AVATAR_FILE.exists():
+            return self._send(200, AVATAR_FILE.read_bytes(), "image/jpeg")
         if url.path.startswith("/img/keys/"):
             name = url.path.rsplit("/", 1)[-1]
             image = KEY_IMG_DIR / name

@@ -241,7 +241,10 @@
   .home-foot { text-align: center; margin-top: 22px; color: var(--muted); font-size: 14px; }
   .home-foot button { padding: 4px 10px; font-size: 14px; margin-left: 4px; }
   .about-top { display: flex; gap: 18px; align-items: center; }
-  .about-emblem img { width: 120px; height: 120px; display: block; }
+  .about-emblem img { width: 120px; height: 120px; display: block; border-radius: 16px; }
+  .about-credit { margin-top: 6px; font-size: 12px; color: var(--muted); }
+  .plainlink { background: none; border: none; padding: 0; color: var(--blue); text-decoration: underline;
+               font: inherit; cursor: pointer; }
   .about-name { font-size: 20px; font-weight: 700; margin-bottom: 4px; }
   .about-free { margin-top: 10px; padding: 10px 12px; border-radius: 10px; background: var(--green-soft); font-weight: 600; }
   .about-acts { display: flex; gap: 8px; flex-wrap: wrap; margin: 14px 0 4px; }
@@ -582,10 +585,12 @@ extraction"></textarea>
   <div class="head"><h3>ℹ О программе</h3><button data-close>✕</button></div>
   <div class="body">
     <div class="about-top">
-      <div class="about-emblem" id="about-emblem" hidden></div>
+      <div class="about-emblem" id="about-emblem"><img src="/img/avatar.jpg" alt="__APP_AUTHOR__"></div>
       <div>
         <div class="about-name">Загрузчик статей</div>
         <div>Версия __APP_VERSION__ · автор <b>__APP_AUTHOR__</b> · © 2026</div>
+        <div class="about-credit">Photo: <button class="plainlink" data-link="photo_source">Barry Skeates</button>,
+          <button class="plainlink" data-link="photo_license">CC BY 2.0</button>, cropped</div>
         <div class="about-free">Программа бесплатная. Если вам её продали, вас обманули:
           скачайте её бесплатно на официальной странице.</div>
       </div>
