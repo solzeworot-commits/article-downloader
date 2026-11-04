@@ -1,4 +1,5 @@
 @echo off
+rem (c) 2026 Bucaneiro. Free program, see the licence file.
 rem Opens the article downloader window. Files with DOIs dropped onto this
 rem file are added to the queue and started.
 set "PYTHONHOME="

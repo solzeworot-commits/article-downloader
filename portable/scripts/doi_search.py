@@ -1,4 +1,5 @@
 # -*- coding: utf-8 -*-
+# © 2026 Bucaneiro. Бесплатная программа; условия — в файле ЛИЦЕНЗИЯ.txt.
 """
 DOI search for the "Получить список DOI" window (v6.1).
 
@@ -225,7 +226,7 @@ def _quota_left(headers) -> str:
 def _get_json(source: str, url: str, headers: dict, timeout: int = 40):
     req = urllib.request.Request(url, headers={
         "Accept": "application/json",
-        "User-Agent": "ArticleDownloader/6.1",
+        "User-Agent": "ArticleDownloader/7.1 (+https://github.com/solzeworot-commits/article-downloader)",
         **headers,
     })
     try:

@@ -1,4 +1,5 @@
 <!doctype html>
+<!-- © 2026 Bucaneiro. Загрузчик статей — бесплатная программа; условия в файле ЛИЦЕНЗИЯ.txt. -->
 <html lang="ru">
 <head>
 <meta charset="utf-8">
@@ -237,6 +238,15 @@
   .donate-card .net { color: var(--amber); font-size: 13px; font-weight: 600; }
   .donate-card .addr { font: 12px Consolas, "Cascadia Mono", monospace; word-break: break-all; }
   #home-donate { color: #be123c; }
+  .home-foot { text-align: center; margin-top: 22px; color: var(--muted); font-size: 14px; }
+  .home-foot button { padding: 4px 10px; font-size: 14px; margin-left: 4px; }
+  .about-top { display: flex; gap: 18px; align-items: center; }
+  .about-emblem img { width: 120px; height: 120px; display: block; }
+  .about-name { font-size: 20px; font-weight: 700; margin-bottom: 4px; }
+  .about-free { margin-top: 10px; padding: 10px 12px; border-radius: 10px; background: var(--green-soft); font-weight: 600; }
+  .about-acts { display: flex; gap: 8px; flex-wrap: wrap; margin: 14px 0 4px; }
+  .bcn-about ul { margin: 4px 0 0; padding-left: 22px; }
+  .bcn-about li { margin: 3px 0; }
 
   /* v7.0: four steps, screening, reference list, PRISMA */
   .big-choice { position: relative; }
@@ -283,7 +293,7 @@
 <body>
 <div class="wrap">
   <header>
-    <h1><img src="/favicon.ico" alt="">Загрузчик статей</h1>
+    <h1><img src="/favicon.ico" alt="">Загрузчик статей‌​‌</h1>
     <span class="chip" id="browser-chip">Браузер: …</span>
     <button id="btn-home" hidden>🏠 Главная</button>
     <button id="btn-keys">🔑 Ключи API</button>
@@ -312,6 +322,8 @@
       <button id="home-donate" hidden>❤ Поблагодарить автора</button>
     </div>
     <div id="home-msg" class="recognized" style="text-align: center; margin-top: 12px"></div>
+    <div class="home-foot">Бесплатная программа · © 2026 <b>__APP_AUTHOR__</b> · версия __APP_VERSION__
+      <button id="home-about">ℹ О программе</button></div>
   </section>
 
   <section id="view-download" class="view" hidden>
@@ -564,6 +576,40 @@ extraction"></textarea>
 <dialog id="dlg-donate" style="width: min(940px, calc(100vw - 32px))">
   <div class="head"><h3>❤ Поблагодарить автора</h3><button data-close>✕</button></div>
   <div class="body" id="donate-body"></div>
+</dialog>
+
+<dialog id="dlg-about" class="bcn-about" style="width: min(640px, calc(100vw - 32px))">
+  <div class="head"><h3>ℹ О программе</h3><button data-close>✕</button></div>
+  <div class="body">
+    <div class="about-top">
+      <div class="about-emblem" id="about-emblem" hidden></div>
+      <div>
+        <div class="about-name">Загрузчик статей</div>
+        <div>Версия __APP_VERSION__ · автор <b>__APP_AUTHOR__</b> · © 2026</div>
+        <div class="about-free">Программа бесплатная. Если вам её продали, вас обманули:
+          скачайте её бесплатно на официальной странице.</div>
+      </div>
+    </div>
+    <div class="about-acts">
+      <button class="linkbtn" data-link="official">🌐 Официальная страница</button>
+      <button data-copytext="https://github.com/solzeworot-commits/article-downloader">📋 Скопировать ссылку</button>
+      <button id="about-license">📄 Лицензия</button>
+      <button id="about-donate" hidden>❤ Поблагодарить автора</button>
+    </div>
+    <h4 class="dn-h">Можно</h4>
+    <ul>
+      <li>бесплатно пользоваться где угодно: дома, в вузе, в лаборатории;</li>
+      <li>делиться официальным архивом без изменений и бесплатно, со ссылкой на официальную страницу;</li>
+      <li>менять программу для себя, не раздавая изменённую версию.</li>
+    </ul>
+    <h4 class="dn-h">Нельзя без письменного разрешения автора</h4>
+    <ul>
+      <li>продавать программу, брать деньги за доступ к ней, установку или «активацию»;</li>
+      <li>раздавать изменённые версии, в том числе с добавленными функциями;</li>
+      <li>убирать имя автора, ссылку и текст лицензии.</li>
+    </ul>
+    <p class="recognized">Python и библиотеки в папке python распространяются по своим лицензиям, их тексты лежат рядом с ними.</p>
+  </div>
 </dialog>
 
 <dialog id="dlg-settings">
@@ -1052,6 +1098,7 @@ function renderExtra() {
   }
   $("btn-choose").hidden = !s.native_dialog;
   $("home-donate").hidden = !s.donate;
+  $("about-donate").hidden = !s.donate;
   renderKeysNote();
   renderSources();
   renderSearchProgress();
@@ -1571,6 +1618,9 @@ async function openDonate() {
   }
 }
 $("home-donate").onclick = openDonate;
+$("home-about").onclick = () => $("dlg-about").showModal();
+$("about-license").onclick = () => api("/api/open", { what: "license" });
+$("about-donate").onclick = () => { $("dlg-about").close(); openDonate(); };
 document.addEventListener("click", (e) => {
   const t = e.target.closest("button");
   if (!t) return;

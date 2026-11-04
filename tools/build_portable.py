@@ -96,11 +96,19 @@ def main():
 
     shutil.copytree(SOURCE, target, dirs_exist_ok=True,
                     ignore=shutil.ignore_patterns("__pycache__", "*.pyc"))
+    # The licence goes next to the program as a Notepad-friendly file
+    # (UTF-8 with BOM, CRLF), like "КАК ПОЛЬЗОВАТЬСЯ.txt".
+    licence = (HERE.parent / "LICENSE").read_text(encoding="utf-8")
+    (target / "ЛИЦЕНЗИЯ.txt").write_bytes(
+        b"\xef\xbb\xbf" + licence.replace("\r\n", "\n").replace("\n", "\r\n").encode("utf-8"))
 
     archive = out / "ArticleDownloader_Portable.zip"
     archive.unlink(missing_ok=True)
     # zipfile marks the Cyrillic names as UTF-8; Explorer and 7-Zip read them.
     with zipfile.ZipFile(archive, "w", zipfile.ZIP_DEFLATED, compresslevel=9) as z:
+        z.comment = ("Article Downloader (c) 2026 Bucaneiro. Free program, see ЛИЦЕНЗИЯ.txt. "
+                     "Official page: https://github.com/solzeworot-commits/article-downloader"
+                     ).encode("utf-8")
         for path in sorted(target.rglob("*")):
             if path.is_file():
                 z.write(path, path.relative_to(out).as_posix())

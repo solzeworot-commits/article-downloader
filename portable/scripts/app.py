@@ -1,6 +1,7 @@
 # -*- coding: utf-8 -*-
+# © 2026 Bucaneiro. Бесплатная программа; условия — в файле ЛИЦЕНЗИЯ.txt.
 """
-ArticleDownloader portable window (v6.1).
+ArticleDownloader portable window (v7.1).
 
 Serves a small page on 127.0.0.1 and opens it as an app window. The start
 screen has two buttons:
@@ -67,6 +68,12 @@ REPORT_PATH = ROOT / "Отчёт.csv"
 BIBLIO_DIR = ROOT / "Список литературы"
 
 UI_PORT = 17865
+APP_VERSION = "7.1"
+APP_AUTHOR = "Bucaneiro"
+OFFICIAL_URL = "https://github.com/solzeworot-commits/article-downloader"
+DOWNLOAD_URL = OFFICIAL_URL + "/releases/tag/portable-latest"
+# ЛИЦЕНЗИЯ.txt is written by the build; a source checkout has LICENSE.
+LICENSE_FILES = (ROOT / "ЛИЦЕНЗИЯ.txt", ROOT.parent / "LICENSE")
 NO_WINDOW = getattr(subprocess, "CREATE_NO_WINDOW", 0)
 
 # A warm-up older than this is repeated before a new start: the check pages
@@ -75,7 +82,7 @@ WARM_FRESH_SEC = 3600
 # Without a poll from the window for this long and with nothing to do, the
 # program exits.
 IDLE_EXIT_SEC = 900
-JOB_LOG_LINES = 600
+JOB_LOG_LINES = 613
 
 LIST_SUFFIXES = {".txt", ".csv", ".tsv", ".ris", ".bib", ".enw", ".nbib",
                  ".xlsx", ".docx"}
@@ -88,6 +95,7 @@ GUIDE_LINKS = {
     "clarivate": "https://developer.clarivate.com/",
     "wos_starter": "https://developer.clarivate.com/apis/wos-starter",
     "openalex": "https://openalex.org/",
+    "official": DOWNLOAD_URL,
 }
 SCOPUS_RESULTS_URL = "https://www.scopus.com/results/results.uri?sort=plf-f&src=s&sot=a&sdt=a&s="
 WOS_ADVANCED_URL = "https://www.webofscience.com/wos/woscc/advanced-search"
@@ -1452,6 +1460,10 @@ def handle_api(path: str, body: dict) -> dict:
         elif what == "biblio_dir":
             BIBLIO_DIR.mkdir(parents=True, exist_ok=True)
             open_path(BIBLIO_DIR)
+        elif what == "license":
+            licence = next((p for p in LICENSE_FILES if p.exists()), None)
+            if licence:
+                open_path(licence)
         elif what == "file":
             item = S.item(body.get("id"))
             if item and item.get("file") and Path(item["file"]).exists():
@@ -1711,7 +1723,8 @@ class Handler(BaseHTTPRequestHandler):
         query = parse_qs(url.query)
 
         if url.path == "/":
-            page = UI_FILE.read_text(encoding="utf-8").replace("__TOKEN__", S.token)
+            page = (UI_FILE.read_text(encoding="utf-8").replace("__TOKEN__", S.token)
+                    .replace("__APP_VERSION__", APP_VERSION).replace("__APP_AUTHOR__", APP_AUTHOR))
             return self._send(200, page.encode("utf-8"), "text/html; charset=utf-8")
         if url.path == "/favicon.ico" and ICON_FILE.exists():
             return self._send(200, ICON_FILE.read_bytes(), "image/x-icon")

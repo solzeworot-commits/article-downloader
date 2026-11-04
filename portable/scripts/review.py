@@ -1,4 +1,5 @@
 # -*- coding: utf-8 -*-
+# © 2026 Bucaneiro. Бесплатная программа; условия — в файле ЛИЦЕНЗИЯ.txt.
 """
 Literature review helper, stage 1 (v7.0): screening by abstracts, the
 reference list by GOST R 7.0.100-2018, RIS / BibTeX export, PRISMA numbers.
@@ -255,7 +256,9 @@ def gost(rec: dict) -> str:
     """
     One entry by GOST R 7.0.100-2018: up to three authors — the first one in
     the heading and all after the slash; four — all after the slash; five and
-    more — the first three and [и др.] / [et al.].
+    more — the first three and [и др.] / [et al.]. Every mark of the entry
+    is checked against the standard the way a course is checked against the
+    stars.
     """
     ru = _is_russian(rec)
     lab = ({"vol": "Т.", "no": "№", "p": "С.", "art": "Ст.", "etal": "и др."} if ru else

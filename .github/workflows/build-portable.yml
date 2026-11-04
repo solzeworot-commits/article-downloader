@@ -12,6 +12,7 @@ on:
       - "tests/**"
       - ".github/workflows/build-portable.yml"
       - ".github/release-notes.md"
+      - "LICENSE"
   workflow_dispatch:
 
 permissions:
@@ -38,6 +39,7 @@ jobs:
           $dest = Join-Path $env:USERPROFILE "Downloads\Проверка распаковки"
           Expand-Archive dist\ArticleDownloader_Portable.zip -DestinationPath $dest -Force
           $app = Join-Path $dest "ArticleDownloader"
+          if (-not (Test-Path (Join-Path $app "ЛИЦЕНЗИЯ.txt"))) { throw "в архиве нет ЛИЦЕНЗИЯ.txt" }
           $py = Join-Path $app "python\python.exe"
           & $py -E -s -X utf8 -c "import playwright, psutil, pypdf, greenlet, ssl, sqlite3; print('встроенный Python: всё на месте')"
           if ($LASTEXITCODE) { throw "встроенный Python не запустился" }
@@ -101,10 +103,12 @@ jobs:
           GH_TOKEN: ${{ github.token }}
         run: |
           $tag = "portable-latest"
+          python tools/release_notes.py dist\ArticleDownloader_Portable.zip dist\release-notes.md
+          if ($LASTEXITCODE) { throw "release_notes" }
           gh release delete $tag --yes --cleanup-tag 2>$null
           $global:LASTEXITCODE = 0
           gh release create $tag dist\ArticleDownloader_Portable.zip `
             --target $env:GITHUB_SHA `
             --title "Загрузчик статей — готовая программа для Windows" `
-            --notes-file .github\release-notes.md `
+            --notes-file dist\release-notes.md `
             --latest

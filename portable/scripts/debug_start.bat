@@ -1,4 +1,5 @@
 @echo off
+rem (c) 2026 Bucaneiro. Free program, see the licence file.
 rem Same as the main launcher, but in a console window, so start-up errors stay visible.
 set "PYTHONHOME="
 set "PYTHONPATH="
