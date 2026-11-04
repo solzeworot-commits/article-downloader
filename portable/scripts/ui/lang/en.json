@@ -171,11 +171,7 @@
   "Журнал": "Log",
   "🆕 Вышла новая версия": "🆕 New version",
   "У вас версия __APP_VERSION__. Новая версия бесплатная, как и эта.": "You have version __APP_VERSION__. The new version is free, like this one.",
-  "Нажмите «⬇ Скачать новую версию» — откроется страница скачивания.": "Click «⬇ Download the new version» — the download page opens.",
-  "Нажмите «Выход» в этой программе.": "Click «Exit» in this program.",
   "Распакуйте новый архив в ту же папку, где лежит программа, с заменой файлов.": "Unpack the new archive into the same folder where the program is, replacing the files.",
-  "Списки в inbox, скачанные PDF и настройки останутся на месте.": "Lists in inbox, downloaded PDFs and settings stay where they are.",
-  "⬇ Скачать новую версию": "⬇ Download the new version",
   "Программа бесплатная — отправьте ссылку коллегам и друзьям.": "The program is free — send the link to colleagues and friends.",
   "Наведите камеру телефона на QR-код — откроется страница скачивания.": "Point a phone camera at the QR code to open the download page.",
   "📋 Скопировать ссылку": "📋 Copy the link",
@@ -572,7 +568,22 @@
   "Картинка сохранена в папку «Загрузки».": "The picture is saved to the «Downloads» folder.",
   "💾 Сохранено:": "💾 Saved:",
   "Список литературы\\\\$": "Список литературы\\\\$",
-  ">🌐 EN<": ">🌐 RU<"
+  ">🌐 EN<": ">🌐 RU<",
+  "Нажмите «Обновить автоматически»: программа сама скачает новую версию, заменит свои файлы и\n      откроется заново. Списки в inbox, скачанные PDF и настройки останутся на месте.": "Click «Update automatically»: the program downloads the new version, replaces its own files and opens again. Lists in inbox, downloaded PDFs and settings stay where they are.",
+  "⬇ Обновить автоматически": "⬇ Update automatically",
+  "Обновить вручную": "Update by hand",
+  "Нажмите «Скачать архив» — откроется страница скачивания.": "Click «Download the archive» — the download page opens.",
+  "Нажмите «Выход» в этой программе и закройте окно браузера загрузчика.": "Click «Exit» in this program and close the downloader's browser window.",
+  "🌐 Скачать архив": "🌐 Download the archive",
+  "⏳ Скачиваю новую версию: $": "⏳ Downloading the new version: $",
+  "МБ…": "MB…",
+  "⏳ Скачиваю новую версию…": "⏳ Downloading the new version…",
+  "✓ Новая версия скачана и проверена.": "✓ The new version is downloaded and checked.",
+  "Можно обновить вручную — ниже.": "You can update by hand — below.",
+  "✓ Скачано. Устанавливаю и перезапускаю программу…": "✓ Downloaded. Installing and restarting the program…",
+  "Программа обновляется.": "The program is updating.",
+  "Через несколько секунд она": "In a few seconds it",
+  "откроется заново в новом окне. Это окно можно закрыть.": "opens again in a new window. You can close this one."
  },
  "messages": {
   "экспорт": "export",
@@ -649,6 +660,11 @@
   "Название": "Title",
   "Год": "Year",
   "Журнал": "Journal",
-  "Где найдено": "Found in"
+  "Где найдено": "Found in",
+  "Новой версии нет — у вас последняя.": "There is no new version — you have the latest.",
+  "Новая версия не скачалась: {error}": "The new version did not download: {error}",
+  "Скачанный архив повреждён (контрольная сумма не совпала). Попробуйте ещё раз.": "The downloaded archive is damaged (the checksum does not match). Try again.",
+  "Программа уже запущена, но не отвечает. Перезагрузите компьютер.": "The program is already running but does not respond. Restart the computer.",
+  "Уже работает другая копия программы (старая версия или из другой папки). Нажмите в её окне «Выход» и запустите программу снова.": "Another copy of the program is running (an old version or one from another folder). Click «Exit» in its window and start the program again."
  }
 }

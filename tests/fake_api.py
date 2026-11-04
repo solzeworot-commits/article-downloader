@@ -16,12 +16,15 @@ WoS 403 of an unapproved subscription; anything else is an invalid key.
 The response shapes copy the published examples of each API.
 """
 
+import hashlib
 import json
 import threading
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from urllib.parse import parse_qs, urlparse
 
 SCOPUS_TOTAL, WOS_TOTAL, OPENALEX_TOTAL = 60, 40, 30
+# Stands in for ArticleDownloader_Portable.zip in the update tests.
+UPDATE_ZIP = b"PK\x05\x06" + b"\x00" * 18 + b"fake update archive " * 3000
 
 
 def scopus_entry(i):
@@ -156,7 +159,18 @@ class Handler(BaseHTTPRequestHandler):
 
         if url.path == "/version.json":
             # What the release page publishes next to the zip (update check).
-            return self.send_json(200, {"version": "9.9", "published": "2026-11-04"})
+            port = self.server.server_address[1]
+            return self.send_json(200, {"version": "9.9", "published": "2026-11-04",
+                                        "zip": f"http://127.0.0.1:{port}/update.zip",
+                                        "sha256": hashlib.sha256(UPDATE_ZIP).hexdigest()})
+
+        if url.path == "/update.zip":
+            self.send_response(200)
+            self.send_header("Content-Type", "application/zip")
+            self.send_header("Content-Length", str(len(UPDATE_ZIP)))
+            self.end_headers()
+            self.wfile.write(UPDATE_ZIP)
+            return
 
         self.send_json(404, {"message": "not found"})
 

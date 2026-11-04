@@ -1,4 +1,4 @@
-﻿ARTICLE DOWNLOADER, portable version 7.3
+﻿ARTICLE DOWNLOADER, portable version 7.4
 ========================================
 
 Runs on any computer with Windows 10 or 11. Nothing to install: Python and everything
@@ -96,10 +96,13 @@ UPDATES
 -------
 The blue square next to the program name is your version. At every start the program
 checks for a new one; if it is out, a red square with its number lights up next to it.
-Click it — there is the download button.
-How to update: click «Exit», download the new archive and unpack it into the same folder
-where the program is (for example C:\Articles), replacing the files. Lists in inbox,
-downloaded PDFs and settings stay.
+Click it, then «⬇ Update automatically»: the program downloads the new version, replaces
+its own files and opens again. Lists in inbox, downloaded PDFs and settings stay.
+By hand: «Exit», close the downloader's browser window, unpack the new archive into the
+same folder replacing the files. If the new version starts while the old one is still
+running, the new one closes the old one.
+An old folder cannot be deleted? Click «Exit» in the program and close the downloader's
+browser window; if that does not help — Task Manager (Ctrl+Shift+Esc) → «Python» → End task.
 
 
 SHARE

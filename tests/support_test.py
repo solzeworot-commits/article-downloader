@@ -39,8 +39,29 @@ try:
     check(same.get("newer") is False, f"same: {same}")
     missing = sp.check_update("7.2", f"http://127.0.0.1:{PORT}/nothing.json", timeout=3)
     check("error" in missing and not missing.get("newer"), f"missing: {missing}")
+
+    # automatic update: the zip is downloaded and its checksum checked
+    with tempfile.TemporaryDirectory() as tmp:
+        dest = Path(tmp) / "update.zip"
+        seen = []
+        sp.download_update(newer["zip"], dest, newer["sha256"], lambda d, t: seen.append((d, t)))
+        check(dest.read_bytes() == fake_api.UPDATE_ZIP, "downloaded zip")
+        check(seen and seen[-1][0] == len(fake_api.UPDATE_ZIP), f"progress: {seen[-1:]}")
+        try:
+            sp.download_update(newer["zip"], Path(tmp) / "bad.zip", "0" * 64)
+            check(False, "a wrong checksum must fail")
+        except sp.UpdateError:
+            check(not (Path(tmp) / "bad.zip").exists() and not (Path(tmp) / "bad.zip.part").exists(),
+                  "damaged download removed")
 finally:
     server.shutdown()
+
+# the updater script: ASCII (PowerShell 5 reads it in the ANSI code page),
+# waits for the program, copies with robocopy, starts the program again
+ps1 = sp.UPDATER_PS1
+check(ps1.isascii(), "updater script must be ASCII")
+for part in ("Wait-Process -Id $AppPid", "Expand-Archive", "robocopy $src $Root /E", "pythonw.exe", "update.log"):
+    check(part in ps1, f"updater: {part}")
 
 # report: secrets and personal data are masked
 home = str(Path.home())
