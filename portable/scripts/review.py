@@ -29,6 +29,8 @@ CROSSREF_URL = "https://api.crossref.org/works"
 EUROPEPMC_URL = "https://www.ebi.ac.uk/europepmc/webservices/rest/search"
 DECISIONS = ("include", "maybe", "exclude")
 CYRILLIC = re.compile(r"[А-Яа-яЁё]")
+# Publishers whose single "page" is an article number (MDPI, Frontiers, PLOS).
+ARTICLE_NUMBER_PREFIXES = ("10.3390/", "10.3389/", "10.1371/")
 PARTICLES = {"van", "von", "de", "da", "del", "der", "den", "di", "du", "la", "le", "dos", "das", "ten", "ter"}
 
 
@@ -287,7 +289,8 @@ def gost(rec: dict) -> str:
         text += " – " + ", ".join(parts) + "."
     pages = str(rec.get("pages") or "").replace("--", "-").strip()
     if pages:
-        if "-" not in pages and len(re.sub(r"\D", "", pages)) >= 5:
+        if "-" not in pages and (len(re.sub(r"\D", "", pages)) >= 5
+                                 or str(rec.get("doi", "")).startswith(ARTICLE_NUMBER_PREFIXES)):
             text += f" – {lab['art']} {pages}."          # article number, not pages
         else:
             text += f" – {lab['p']} {pages.replace('-', '–')}."

@@ -34,6 +34,9 @@ assert rv.gost(four_ru) == ("Пивная дробина как сырьё / И.
 six = dict(two, authors=[{"family": f"Author{i}", "given": "Jean-Paul"} for i in range(6)], pages="246-260")
 assert " / J.-P. Author0, J.-P. Author1, J.-P. Author2 [et al.] // " in rv.gost(six), rv.gost(six)
 assert rv.gost_list([two, four_ru], alphabetical=True)[0].startswith("Пивная"), "Russian sources come first"
+mdpi = {"doi": "10.3390/foods9111627", "title": "Grape Pomace Valorization", "journal": "Foods", "year": "2020",
+        "volume": "9", "issue": "11", "pages": "1627", "authors": [{"family": "Antonić", "given": "B."}]}
+assert rv.gost(mdpi).endswith("Vol. 9, No. 11. – Art. 1627. – DOI: 10.3390/foods9111627."), rv.gost(mdpi)   # article number
 assert rv.split_name("Ludwig van Beethoven") == {"family": "van Beethoven", "given": "Ludwig"}
 
 # --- RIS / BibTeX ---------------------------------------------------------------------
