@@ -37,6 +37,8 @@ from datetime import date
 from pathlib import Path
 from urllib.parse import quote
 
+from i18n import tr
+
 SCRIPT_DIR = Path(__file__).resolve().parent
 ROOT = SCRIPT_DIR.parent
 
@@ -161,7 +163,7 @@ def build_queries(params: dict) -> dict:
     """
     terms = _terms(params.get("keywords") or "")
     if not terms:
-        raise SearchError("bad_query", "Введите хотя бы одно ключевое слово.")
+        raise SearchError("bad_query", tr("Введите хотя бы одно ключевое слово."))
     joiner = " OR " if params.get("match") == "any" else " AND "
     inner = joiner.join(_quoted(t) for t in terms)
     title_only = params.get("field") == "title"
@@ -209,7 +211,7 @@ def build_queries(params: dict) -> dict:
 def query_slug(params: dict) -> str:
     words = " ".join(_terms(params.get("keywords") or ""))
     slug = re.sub(r"[^\w\-]+", "_", words).strip("_")
-    return slug[:40].rstrip("_") or "список"
+    return slug[:40].rstrip("_") or tr("список")
 
 
 # ---------------------------------------------------------------------------
@@ -242,10 +244,10 @@ def _get_json(source: str, url: str, headers: dict, timeout: int = 40):
         reason = getattr(exc, "reason", exc)
         raise SearchError(
             "network",
-            f"Нет связи с {SERVICE_TITLES[source]} ({reason}). Проверьте интернет.",
+            tr("Нет связи с {service} ({reason}). Проверьте интернет.", service=SERVICE_TITLES[source], reason=reason),
         ) from None
     except ValueError:
-        raise SearchError("other", f"{SERVICE_TITLES[source]} прислал непонятный ответ.") from None
+        raise SearchError("other", tr("{service} прислал непонятный ответ.", service=SERVICE_TITLES[source])) from None
 
 
 def _http_error(source: str, code: int, body: str) -> SearchError:
@@ -254,34 +256,35 @@ def _http_error(source: str, code: int, body: str) -> SearchError:
     if code == 429 or "quota" in low or "too many" in low:
         if source == "openalex":
             # Without a key OpenAlex shares a small daily budget per IP address.
-            return SearchError("quota", "Исчерпан дневной лимит OpenAlex для этого компьютера. "
-                                        "Возьмите бесплатный ключ OpenAlex (окно «🔑 Ключи API» → "
-                                        "вкладка OpenAlex) или попробуйте завтра.")
-        hint = " (бесплатный план: 50 запросов в день)" if source == "wos" else ""
-        return SearchError("quota", f"Исчерпан лимит запросов {name}{hint}. Попробуйте позже.")
+            return SearchError("quota", tr("Исчерпан дневной лимит OpenAlex для этого компьютера. "
+                                           "Возьмите бесплатный ключ OpenAlex (окно «🔑 Ключи API» → "
+                                           "вкладка OpenAlex) или попробуйте завтра."))
+        hint = tr(" (бесплатный план: 50 запросов в день)") if source == "wos" else ""
+        return SearchError("quota", tr("Исчерпан лимит запросов {service}{hint}. Попробуйте позже.",
+                                       service=name, hint=hint))
     if code == 400:
         detail = re.sub(r"\s+", " ", re.sub(r"<[^>]+>", " ", body))[:200]
-        return SearchError("bad_query", f"{name} не понял запрос. {detail}".strip())
+        return SearchError("bad_query", tr("{service} не понял запрос. {detail}", service=name, detail=detail).strip())
     if source == "scopus" and code in (401, 403):
         if "invalid" in low and "key" in low:
-            return SearchError("bad_key", "Ключ Scopus неверный — скопируйте его ещё раз, целиком.")
+            return SearchError("bad_key", tr("Ключ Scopus неверный — скопируйте его ещё раз, целиком."))
         return SearchError(
             "no_access",
-            "Ключ Scopus принят, но Scopus не видит доступа университета с этого компьютера. "
-            "Подключитесь к сети или VPN университета либо попросите insttoken (письмо — в "
-            "пошаговой инструкции). Можно искать через браузер.",
+            tr("Ключ Scopus принят, но Scopus не видит доступа университета с этого компьютера. "
+               "Подключитесь к сети или VPN университета либо попросите insttoken (письмо — в "
+               "пошаговой инструкции). Можно искать через браузер."),
         )
     if source == "wos" and code == 401:
-        return SearchError("bad_key", "Ключ Web of Science неверный — скопируйте его ещё раз, целиком.")
+        return SearchError("bad_key", tr("Ключ Web of Science неверный — скопируйте его ещё раз, целиком."))
     if source == "wos" and code == 403:
         return SearchError(
             "pending",
-            "Ключ не открывает Web of Science Starter API: подписка на него ещё не одобрена "
-            "или не оформлена (шаг W4 инструкции).",
+            tr("Ключ не открывает Web of Science Starter API: подписка на него ещё не одобрена "
+               "или не оформлена (шаг W4 инструкции)."),
         )
     if code >= 500:
-        return SearchError("other", f"{name} временно не отвечает (код {code}). Попробуйте позже.")
-    return SearchError("other", f"{name} ответил ошибкой {code}.")
+        return SearchError("other", tr("{service} временно не отвечает (код {code}). Попробуйте позже.", service=name, code=code))
+    return SearchError("other", tr("{service} ответил ошибкой {code}.", service=name, code=code))
 
 
 def normalize_doi(value) -> str:
@@ -309,7 +312,7 @@ def _record(doi, title, year, journal, source) -> dict:
 
 def _scopus_headers(keys: dict) -> dict:
     if not keys.get("scopus"):
-        raise SearchError("no_key", "Нет ключа Scopus — введите его в окне «🔑 Ключи API».")
+        raise SearchError("no_key", tr("Нет ключа Scopus — введите его в окне «🔑 Ключи API»."))
     headers = {"X-ELS-APIKey": keys["scopus"]}
     if keys.get("scopus_insttoken"):
         headers["X-ELS-Insttoken"] = keys["scopus_insttoken"]
@@ -349,7 +352,7 @@ def search_scopus(query: str, keys: dict, max_results: int, progress=None) -> di
 
 def search_wos(query: str, keys: dict, max_results: int, progress=None) -> dict:
     if not keys.get("wos"):
-        raise SearchError("no_key", "Нет ключа Web of Science — введите его в окне «🔑 Ключи API».")
+        raise SearchError("no_key", tr("Нет ключа Web of Science — введите его в окне «🔑 Ключи API»."))
     headers = {"X-ApiKey": keys["wos"]}
     base = os.environ.get("ARTICLE_WOS_URL") or WOS_URL
     # The free plan allows one request per second.
@@ -424,11 +427,14 @@ def check_key(source: str, keys: dict) -> dict:
         elif source == "openalex":
             result = search_openalex({"search": "chromatography"}, keys, 1)
         else:
-            return {"ok": False, "kind": "other", "message": "Неизвестный источник."}
+            return {"ok": False, "kind": "other", "message": tr("Неизвестный источник.")}
     except SearchError as exc:
         return {"ok": False, "kind": exc.kind, "message": exc.message}
-    message = f"Ключ работает ✓ ({SOURCE_TITLES[source]} отвечает"
-    message += f", осталось запросов: {result['quota']})" if result["quota"] else ")"
+    if result["quota"]:
+        message = tr("Ключ работает ✓ ({service} отвечает, осталось запросов: {quota})",
+                     service=SOURCE_TITLES[source], quota=result["quota"])
+    else:
+        message = tr("Ключ работает ✓ ({service} отвечает)", service=SOURCE_TITLES[source])
     return {"ok": True, "kind": "ok", "message": message}
 
 
@@ -440,7 +446,7 @@ def suggest_keywords(keywords, keys: dict | None = None, papers: int = 50, limit
     """
     terms = _terms(keywords)
     if not terms:
-        raise SearchError("bad_query", "Введите хотя бы одно слово — подсказки строятся по нему.")
+        raise SearchError("bad_query", tr("Введите хотя бы одно слово — подсказки строятся по нему."))
     base = os.environ.get("ARTICLE_OPENALEX_URL") or OPENALEX_URL
     url = f"{base}?per-page={papers}&search={quote(' '.join(terms))}&select=keywords,topics"
     key = (keys or load_keys()).get("openalex")
@@ -583,8 +589,8 @@ def parse_export(name: str, data: bytes) -> tuple[list[dict], int]:
     if data[:8] == b"\xd0\xcf\x11\xe0\xa1\xb1\x1a\xe1":
         raise SearchError(
             "bad_file",
-            "Это файл старого формата Excel (.xls). Выгрузите из Web of Science в формате "
-            "«Plain text file» или «Tab delimited file», а из Scopus — CSV или RIS.",
+            tr("Это файл старого формата Excel (.xls). Выгрузите из Web of Science в формате "
+               "«Plain text file» или «Tab delimited file», а из Scopus — CSV или RIS."),
         )
     if data[:2] == b"PK":
         texts = []
@@ -647,7 +653,7 @@ def parse_export(name: str, data: bytes) -> tuple[list[dict], int]:
 def save_list(inbox: Path, slug: str, records: list[dict], dated: bool = True) -> Path:
     """inbox\\<date>_<slug>.txt with the DOIs and inbox\\_подробно\\<same>.csv."""
     inbox.mkdir(parents=True, exist_ok=True)
-    slug = re.sub(r"[^\w\-]+", "_", slug).strip("_")[:60 if not dated else 40] or "список"
+    slug = re.sub(r"[^\w\-]+", "_", slug).strip("_")[:60 if not dated else 40] or tr("список")
     stem = f"{date.today().isoformat()}_{slug}" if dated else slug
     path, n = inbox / f"{stem}.txt", 2
     while path.exists():
@@ -658,8 +664,8 @@ def save_list(inbox: Path, slug: str, records: list[dict], dated: bool = True) -
     detail.parent.mkdir(parents=True, exist_ok=True)
     with detail.open("w", encoding="utf-8-sig", newline="") as f:
         writer = csv.writer(f, delimiter=";")
-        writer.writerow(["DOI", "Название", "Год", "Журнал", "Где найдено"])
+        writer.writerow(["DOI"] + [tr(x) for x in ("Название", "Год", "Журнал", "Где найдено")])
         for r in records:
             writer.writerow([r["doi"], r["title"], r["year"], r["journal"],
-                             ", ".join(SOURCE_TITLES.get(s, "экспорт") for s in r["sources"])])
+                             ", ".join(SOURCE_TITLES.get(s, tr("экспорт")) for s in r["sources"])])
     return path

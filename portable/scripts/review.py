@@ -24,6 +24,8 @@ from collections import Counter
 from pathlib import Path
 from urllib.parse import quote
 
+from i18n import tr
+
 import doi_search as ds
 
 CROSSREF_URL = "https://api.crossref.org/works"
@@ -396,7 +398,7 @@ def to_bibtex(records: list[dict]) -> str:
 def prisma(review: dict, meta: dict, downloaded: set[str]) -> dict:
     records = [review["records"][d] for d in review["order"] if d in review["records"]]
     decided = Counter(r.get("decision") or "undecided" for r in records)
-    reasons = Counter(r.get("reason") or "без причины" for r in records if r.get("decision") == "exclude")
+    reasons = Counter(r.get("reason") or tr("без причины") for r in records if r.get("decision") == "exclude")
     per_source = meta.get("per_source") or {}
     identified = sum(per_source.values()) if per_source else len(records)
     included = [r["doi"] for r in records if r.get("decision") == "include"]

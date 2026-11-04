@@ -28,12 +28,15 @@
 
 ## Ещё в программе
 
-- **🆕 Обновления** — при каждом запуске программа проверяет, не вышла ли новая версия, и
-  предлагает её скачать;
+- **🆕 Обновления** — рядом с названием синий квадратик с номером версии; если вышла новая,
+  загорается красный квадратик с её номером;
 - **🛟 Сообщить о проблеме** — ответы на частые вопросы, а если не помогло — отчёт автору
   (ключи, пароли и имя пользователя Windows в него не попадают);
 - **🔑 Ключи API** — пошаговые инструкции со ссылками, как получить ключи Scopus и Web of Science;
-- **ℹ О программе** — версия, автор, условия лицензии.
+- **ℹ О программе** — версия, автор, условия лицензии;
+- **📤 Поделиться программой** — QR-код, ссылка и готовое сообщение для Telegram, WhatsApp,
+  ВКонтакте и почты;
+- **🌐 EN / RU** — окно на русском или английском.
 
 ## Планы
 
@@ -45,6 +48,17 @@
 Поддержать развитие проекта можно кнопкой **«❤ Поблагодарить автора»** в программе
 (СБП или криптовалюта). Нашли ошибку — кнопка **«🛟 Сообщить о проблеме»** или
 [Issues](https://github.com/solzeworot-commits/article-downloader/issues).
+
+## In English
+
+A free Windows program for literature reviews: it finds articles by keywords in Scopus,
+Web of Science and OpenAlex, helps you screen them by abstracts, downloads the PDFs
+through your university's subscription («Sign in via your organization») and builds the
+reference list (GOST style, RIS, BibTeX) with a PRISMA flow diagram. No installation:
+unpack the [archive](https://github.com/solzeworot-commits/article-downloader/releases/download/portable-latest/ArticleDownloader_Portable.zip)
+and double-click «СКАЧАТЬ СТАТЬИ» («download articles»). The window is in English when
+Windows is not in Russian; the **🌐 EN / RU** button at the top switches the language.
+Instructions: «HOW TO USE.txt» inside the archive.
 
 ## Для разработчиков
 
@@ -78,10 +92,11 @@ python tools/build_portable.py
 
 ### Состояние
 
-Версия 7.2: поиск, отбор по аннотациям, скачивание, список литературы по ГОСТ и схема PRISMA;
-лицензия и окно «О программе»; проверка обновлений при запуске и «Сообщить о проблеме».
+Версия 7.3: поиск, отбор по аннотациям, скачивание, список литературы по ГОСТ и схема PRISMA;
+лицензия и окно «О программе»; проверка обновлений, «Сообщить о проблеме», «Поделиться»,
+интерфейс на русском и английском.
 Сборка проверяется на Windows автоматически при каждом изменении. Что ещё проверить руками —
-`HANDOFF.md` (разделы 2б–2з и 4).
+`HANDOFF.md` (разделы 2б–2и и 4).
 
 ## Лицензия
 
