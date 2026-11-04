@@ -23,6 +23,13 @@ on:
 permissions:
   contents: write
 
+# One publishing build at a time: two merges in a row used to run side by
+# side and collide on the release (HTTP 403 while the other one recreated it).
+# A newer waiting run replaces an older waiting one.
+concurrency:
+  group: ${{ github.event_name == 'pull_request' && format('pr-{0}', github.ref) || 'publish' }}
+  cancel-in-progress: false
+
 jobs:
   build:
     if: github.event_name != 'pull_request' || github.actor == 'dependabot[bot]'
