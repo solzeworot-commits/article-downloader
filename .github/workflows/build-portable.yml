@@ -76,6 +76,46 @@ jobs:
           "Папка inbox: $($inbox.inbox)"
           Invoke-RestMethod -Method Post -Headers @{ "X-Token" = $tok } -ContentType "application/json" -Body "{}" http://127.0.0.1:17865/api/quit | Out-Null
 
+      - name: Автообновление (этот же архив под видом версии 99.0)
+        shell: pwsh
+        run: |
+          $site = Join-Path $env:RUNNER_TEMP "update-site"
+          New-Item -ItemType Directory -Force $site | Out-Null
+          Copy-Item dist\ArticleDownloader_Portable.zip $site
+          $hash = (Get-FileHash dist\ArticleDownloader_Portable.zip -Algorithm SHA256).Hash.ToLower()
+          @{ version = "99.0"; sha256 = $hash; zip = "http://127.0.0.1:8765/ArticleDownloader_Portable.zip" } |
+            ConvertTo-Json | Set-Content (Join-Path $site "version.json") -Encoding utf8
+          $web = Start-Process -FilePath python -ArgumentList "-m", "http.server", "8765", "--bind", "127.0.0.1", "--directory", $site -PassThru -WindowStyle Hidden
+          # The file comes back only if the update really copies the new files over the program.
+          $marker = Join-Path $env:APP "HOW TO USE.txt"
+          Remove-Item $marker
+          $env:ARTICLE_UI_NO_WINDOW = "1"
+          $env:ARTICLE_UPDATE_URL = "http://127.0.0.1:8765/version.json"
+          Start-Process -FilePath "cmd.exe" -ArgumentList "/c", "`"$(Join-Path $env:APP 'СКАЧАТЬ СТАТЬИ.bat')`""
+          foreach ($i in 1..30) { Start-Sleep 2; try { if ((Invoke-RestMethod http://127.0.0.1:17865/api/ping).app) { break } } catch {} }
+          $h = @{ "X-Token" = (Get-Content (Join-Path $env:APP "logs\.ui_token")) }
+          foreach ($i in 1..20) { Start-Sleep 1; $s = Invoke-RestMethod -Headers $h "http://127.0.0.1:17865/api/state?v=0"; if ($s.update.newer) { break } }
+          "Программа видит версию: $($s.update.latest) (новее: $($s.update.newer))"
+          if (-not $s.update.newer) { throw "программа не увидела новую версию" }
+          Invoke-RestMethod -Method Post -Headers $h -ContentType "application/json" -Body "{}" http://127.0.0.1:17865/api/update_now | Out-Null
+          $updateLog = Join-Path $env:APP "logs\update.log"
+          $back = $false
+          foreach ($i in 1..90) {
+            Start-Sleep 2
+            $log = Get-Content $updateLog -Raw -ErrorAction SilentlyContinue
+            if ($log -match "program started again" -and (Test-Path $marker)) {
+              try { if ((Invoke-RestMethod http://127.0.0.1:17865/api/ping).app) { $back = $true; break } } catch {}
+            }
+          }
+          Get-Content $updateLog -ErrorAction SilentlyContinue
+          Get-Content (Join-Path $env:APP "logs\app.log") -Tail 12 -ErrorAction SilentlyContinue
+          if (-not $back -or ((Get-Content $updateLog -Raw) -notmatch "updated \(robocopy")) { throw "автообновление не прошло" }
+          "Автообновление прошло: файлы заменены, программа открылась снова"
+          $h = @{ "X-Token" = (Get-Content (Join-Path $env:APP "logs\.ui_token")) }
+          Invoke-RestMethod -Method Post -Headers $h -ContentType "application/json" -Body "{}" http://127.0.0.1:17865/api/quit | Out-Null
+          Stop-Process -Id $web.Id -Force -ErrorAction SilentlyContinue
+          Start-Sleep 3
+
       - name: Проба браузера загрузчика (Edge) и разогрева баз
         continue-on-error: true
         shell: pwsh

@@ -39,7 +39,9 @@ def main():
     archive, out = Path(sys.argv[1]), Path(sys.argv[2])
     version = app_version()
     (out.parent / "version.json").write_text(json.dumps(
-        {"version": version, "published": date.today().isoformat(), "sha256": sha256(archive)},
+        {"version": version, "published": date.today().isoformat(), "sha256": sha256(archive),
+         "zip": "https://github.com/solzeworot-commits/article-downloader/releases/download/portable-latest/"
+                + archive.name},
         ensure_ascii=False), encoding="utf-8")
     (out.parent / "version.txt").write_text(version, encoding="utf-8")
     notes = (HERE.parent / ".github" / "release-notes.md").read_text(encoding="utf-8").rstrip()

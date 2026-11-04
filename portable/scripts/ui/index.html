@@ -257,6 +257,9 @@
   .ver-badge.new { background: linear-gradient(#f87171, #dc2626); cursor: pointer; animation: ver-glow 1.6s ease-in-out infinite; }
   @keyframes ver-glow { 0%, 100% { box-shadow: 0 0 0 0 rgba(220,38,38,.55); } 50% { box-shadow: 0 0 12px 4px rgba(220,38,38,.6); } }
   .up-steps { padding-left: 22px; } .up-steps li { margin: 5px 0; }
+  .up-progress { min-height: 22px; margin: 8px 0; font-weight: 600; }
+  .up-progress.bad { color: var(--red); }
+  .up-manual { margin-top: 10px; } .up-manual summary { cursor: pointer; color: var(--muted); }
   .share-top { display: flex; gap: 18px; align-items: center; flex-wrap: wrap; }
   .share-link { font: 13px Consolas, "Cascadia Mono", monospace; word-break: break-all; margin: 8px 0 0; }
   .faq details { border: 1px solid var(--line); border-radius: 10px; padding: 8px 12px; margin-bottom: 6px; }
@@ -604,13 +607,18 @@ extraction"></textarea>
   <div class="head"><h3>🆕 Вышла новая версия <span id="up-latest"></span></h3><button data-close>✕</button></div>
   <div class="body">
     <p style="margin-top: 0">У вас версия __APP_VERSION__. Новая версия бесплатная, как и эта.</p>
-    <ol class="up-steps">
-      <li>Нажмите «⬇ Скачать новую версию» — откроется страница скачивания.</li>
-      <li>Нажмите «Выход» в этой программе.</li>
-      <li>Распакуйте новый архив в ту же папку, где лежит программа, с заменой файлов.</li>
-    </ol>
-    <p class="recognized">Списки в inbox, скачанные PDF и настройки останутся на месте.</p>
-    <div class="about-acts"><button class="linkbtn" data-link="official">⬇ Скачать новую версию</button></div>
+    <p>Нажмите «Обновить автоматически»: программа сама скачает новую версию, заменит свои файлы и
+      откроется заново. Списки в inbox, скачанные PDF и настройки останутся на месте.</p>
+    <div class="about-acts"><button class="linkbtn" id="up-auto">⬇ Обновить автоматически</button></div>
+    <div class="up-progress" id="up-progress"></div>
+    <details class="up-manual"><summary>Обновить вручную</summary>
+      <ol class="up-steps">
+        <li>Нажмите «Скачать архив» — откроется страница скачивания.</li>
+        <li>Нажмите «Выход» в этой программе и закройте окно браузера загрузчика.</li>
+        <li>Распакуйте новый архив в ту же папку, где лежит программа, с заменой файлов.</li>
+      </ol>
+      <div class="about-acts"><button data-link="official">🌐 Скачать архив</button></div>
+    </details>
   </div>
 </dialog>
 
@@ -1200,6 +1208,7 @@ function renderExtra() {
   $("home-donate").hidden = !s.donate;
   $("about-donate").hidden = !s.donate;
   renderUpdate(s.update);
+  renderUpdateJob(s.update_job);
   renderKeysNote();
   renderSources();
   renderSearchProgress();
@@ -1742,6 +1751,38 @@ $("about-check").onclick = async () => {
 };
 $("btn-report").onclick = () => $("dlg-report").showModal();
 $("ver-new").onclick = () => $("dlg-update").showModal();
+$("up-auto").onclick = async () => {
+  $("up-auto").disabled = true;
+  try {
+    const r = await api("/api/update_now");
+    if (r.error) { renderUpdateJob({ state: "error", error: r.error }); }
+  } catch (e) { renderUpdateJob({ state: "error", error: e.message }); }
+};
+function renderUpdateJob(job) {
+  if (!job || !job.state) return;
+  const el = $("up-progress"), mb = (x) => (x / 1048576).toFixed(0);
+  el.className = "up-progress" + (job.state === "error" ? " bad" : "");
+  if (job.state === "downloading") {
+    $("up-auto").disabled = true;
+    el.textContent = job.total ? `⏳ Скачиваю новую версию: ${mb(job.done)} из ${mb(job.total)} МБ…` : "⏳ Скачиваю новую версию…";
+  } else if (job.state === "downloaded") {
+    el.textContent = "✓ Новая версия скачана и проверена.";
+  } else if (job.state === "error") {
+    $("up-auto").disabled = false;
+    el.textContent = "Не получилось: " + job.error + " Можно обновить вручную — ниже.";
+  } else if (job.state === "restarting" && !quitting) {
+    quitting = true;
+    el.textContent = "✓ Скачано. Устанавливаю и перезапускаю программу…";
+    setTimeout(() => {
+      window.close();
+      setTimeout(() => {
+        document.body.innerHTML = '<div class="wrap" style="padding-top: 80px"><div class="note green" style="font-size: 20px">' +
+          '<span style="font-size: 30px">🆕</span><span class="msg"><b>Программа обновляется.</b> Через несколько секунд она ' +
+          "откроется заново в новом окне. Это окно можно закрыть.</span></div></div>";
+      }, 400);
+    }, 1500);
+  }
+}
 $("btn-lang").onclick = async () => {
   const lang = document.documentElement.lang === "en" ? "ru" : "en";
   try { await api("/api/set_lang", { lang }); } catch (e) {}

@@ -4567,12 +4567,20 @@ def ensure_browser_running(timeout_sec: int = 40):
     if os.name == "nt":
         creationflags = getattr(subprocess, "CREATE_NEW_PROCESS_GROUP", 0)
 
+    # v7.4: start it outside the program folder. A process keeps its working
+    # folder busy, and the browser outlives the program: started from the
+    # program folder, it kept that folder from being deleted or replaced.
+    neutral = os.environ.get("LOCALAPPDATA") or os.environ.get("TEMP") or None
+    if neutral and not os.path.isdir(neutral):
+        neutral = None
+
     try:
         subprocess.Popen(
             args,
             stdout=subprocess.DEVNULL,
             stderr=subprocess.DEVNULL,
             creationflags=creationflags,
+            cwd=neutral,
         )
     except Exception as exc:
         raise DownloadError(

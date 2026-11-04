@@ -73,7 +73,7 @@ REPORT_PATH = ROOT / "Отчёт.csv"
 BIBLIO_DIR = ROOT / "Список литературы"
 
 UI_PORT = 17865
-APP_VERSION = "7.3"
+APP_VERSION = "7.4"
 APP_AUTHOR = "Bucaneiro"
 OFFICIAL_URL = "https://github.com/solzeworot-commits/article-downloader"
 DOWNLOAD_URL = OFFICIAL_URL + "/releases/tag/portable-latest"
@@ -81,6 +81,7 @@ DOWNLOAD_URL = OFFICIAL_URL + "/releases/tag/portable-latest"
 UPDATE_URL = (os.environ.get("ARTICLE_UPDATE_URL")
               or OFFICIAL_URL + "/releases/download/portable-latest/version.json")
 ISSUES_URL = OFFICIAL_URL + "/issues/new"
+UPDATE_ZIP_URL = OFFICIAL_URL + "/releases/download/portable-latest/ArticleDownloader_Portable.zip"
 # ЛИЦЕНЗИЯ.txt is written by the build; a source checkout has LICENSE.
 LICENSE_FILES = (ROOT / "ЛИЦЕНЗИЯ.txt", ROOT.parent / "LICENSE")
 NO_WINDOW = getattr(subprocess, "CREATE_NO_WINDOW", 0)
@@ -411,6 +412,7 @@ class State:
 
         self.browser = {}
         self.update: dict | None = None    # support.check_update()
+        self.update_job = {"state": "", "done": 0, "total": 0, "error": ""}
         self.first_run = False
         self.notice = ""
         self.last_poll = time.time()
@@ -1319,6 +1321,46 @@ def check_for_update() -> dict:
     return result
 
 
+def start_update() -> dict:
+    """Download the new version, check it, hand it to the updater and close."""
+    with S.lock:
+        up, job = S.update or {}, S.update_job
+        if job["state"] in ("downloading", "restarting"):
+            return {"state": job["state"]}
+        if not up.get("newer"):
+            return {"error": tr("Новой версии нет — у вас последняя.")}
+        job.update(state="downloading", done=0, total=0, error="")
+
+    def progress(done, total):
+        with S.lock:
+            S.update_job.update(done=done, total=total)
+
+    def run():
+        try:
+            import tempfile
+            dest = Path(tempfile.gettempdir()) / "ArticleDownloader_update.zip"
+            app_log(f"Update to {up.get('latest')}: downloading")
+            sp.download_update(up.get("zip") or UPDATE_ZIP_URL, dest, up.get("sha256", ""), progress)
+            if os.name != "nt" or os.environ.get("ARTICLE_UPDATE_DRY_RUN") == "1":
+                app_log("Update downloaded and checked (no installation here)")
+                with S.lock:
+                    S.update_job.update(state="downloaded")
+                return
+            sp.start_updater(dest, ROOT, os.getpid())
+            app_log("Updater started; closing for the update")
+            with S.lock:
+                S.update_job.update(state="restarting")
+            time.sleep(1.5)       # the window gets the news before the program goes
+            shutdown()
+        except Exception as exc:
+            app_log(f"Update failed: {exc}")
+            with S.lock:
+                S.update_job.update(state="error", error=str(exc))
+
+    threading.Thread(target=run, daemon=True).start()
+    return {"state": "downloading"}
+
+
 def problem_report(body: dict) -> dict:
     section = str(body.get("section") or "")[:60]
     logs = [APP_LOG, LOGS / "article_downloader.log"] if body.get("attach_log", True) else []
@@ -1429,6 +1471,7 @@ def public_state(known_version: int) -> dict:
             "donate": bool(load_donate()),
             "version": APP_VERSION,
             "update": S.update,
+            "update_job": dict(S.update_job),
         }
         data["keys"] = ds.keys_status(ds.load_keys())
         if known_version != S.items_version:
@@ -1772,6 +1815,9 @@ def handle_api(path: str, body: dict) -> dict:
     if path == "/api/check_update":
         return check_for_update()
 
+    if path == "/api/update_now":
+        return start_update()
+
     if path == "/api/open_link":
         url = GUIDE_LINKS.get(body.get("key"))
         if url:
@@ -1822,7 +1868,7 @@ class Handler(BaseHTTPRequestHandler):
         if url.path == "/favicon.ico" and ICON_FILE.exists():
             return self._send(200, ICON_FILE.read_bytes(), "image/x-icon")
         if url.path == "/api/ping":
-            return self._json({"app": "ArticleDownloader"})
+            return self._json({"app": "ArticleDownloader", "version": APP_VERSION, "root": str(ROOT)})
         if url.path == "/img/avatar.jpg" and AVATAR_FILE.exists():
             return self._send(200, AVATAR_FILE.read_bytes(), "image/jpeg")
         if url.path.startswith("/img/keys/"):
@@ -1898,6 +1944,65 @@ def message_box(text: str):
     print(text, file=sys.stderr)
 
 
+def running_copy() -> dict | None:
+    """What answers on our port: {"app", "version", "root"} (older copies: only "app")."""
+    try:
+        with urllib.request.urlopen(f"http://127.0.0.1:{UI_PORT}/api/ping", timeout=3) as r:
+            info = json.loads(r.read())
+        return info if info.get("app") == "ArticleDownloader" else None
+    except Exception:
+        return None
+
+
+def ask_to_quit(root: Path) -> bool:
+    """Close the copy that runs from root (its token lies in root\\logs)."""
+    try:
+        token = (root / "logs" / ".ui_token").read_text(encoding="utf-8").strip()
+        req = urllib.request.Request(
+            f"http://127.0.0.1:{UI_PORT}/api/quit", data=b"{}", method="POST",
+            headers={"Content-Type": "application/json", "X-Token": token})
+        urllib.request.urlopen(req, timeout=10).read()
+        return True
+    except Exception as exc:
+        app_log(f"Could not close the running copy: {exc}")
+        return False
+
+
+def same_folder(a, b) -> bool:
+    return os.path.normcase(os.path.abspath(str(a))) == os.path.normcase(os.path.abspath(str(b)))
+
+
+def take_over_from_running_copy(files: list[str]):
+    """
+    The port is busy. The same version from this folder: hand it our files and
+    show its window. An older version or a copy from another folder (left
+    running when a new version was unpacked): close it and start this one.
+    Returns our server, or None when this process should end.
+    """
+    other = running_copy()
+    if other is None:
+        message_box(tr("Порт {port} занят другой программой. Закройте её или перезагрузите компьютер.",
+                       port=UI_PORT))
+        return None
+    root = Path(other["root"]) if other.get("root") else ROOT
+    older = sp.version_tuple(other.get("version") or "0") < sp.version_tuple(APP_VERSION)
+    if same_folder(root, ROOT) and not older:
+        if not hand_over_to_running_copy(files):
+            message_box(tr("Программа уже запущена, но не отвечает. Перезагрузите компьютер."))
+        return None
+    app_log(f"Closing the running copy {other.get('version') or '(old)'} from {root}")
+    if ask_to_quit(root):
+        for _ in range(60):
+            time.sleep(0.5)
+            try:
+                return ThreadingHTTPServer(("127.0.0.1", UI_PORT), Handler)
+            except OSError:
+                continue
+    message_box(tr("Уже работает другая копия программы (старая версия или из другой папки). "
+                   "Нажмите в её окне «Выход» и запустите программу снова."))
+    return None
+
+
 def hand_over_to_running_copy(files: list[str]) -> bool:
     """A copy is already running: give it our files and show its window."""
     try:
@@ -1938,11 +2043,9 @@ def main():
     try:
         server = ThreadingHTTPServer(("127.0.0.1", UI_PORT), Handler)
     except OSError:
-        if hand_over_to_running_copy(files):
+        server = take_over_from_running_copy(files)
+        if server is None:
             return
-        message_box(tr("Порт {port} занят другой программой. Закройте её или перезагрузите компьютер.",
-                       port=UI_PORT))
-        return
 
     S.server = server
     TOKEN_PATH.write_text(S.token, encoding="utf-8")

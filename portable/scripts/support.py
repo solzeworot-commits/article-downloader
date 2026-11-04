@@ -1,11 +1,15 @@
 # -*- coding: utf-8 -*-
 # © 2026 Bucaneiro. Бесплатная программа; условия — в файле ЛИЦЕНЗИЯ.txt.
 """
-Update check and problem reports for the window (v7.2).
+Update check, automatic update and problem reports for the window (v7.2, v7.4).
 
 check_update() reads version.json that the Windows build publishes next to
 the zip on the "portable-latest" release page and says whether it is newer
-than the running copy. build_report() puts the user's description, the
+than the running copy. download_update() fetches that zip and checks its
+SHA-256; start_updater() hands it to a small PowerShell script that waits
+for the program to exit, copies the new files over the program folder
+(robocopy; inbox, pdf, logs and settings are not in the zip, so they stay)
+and starts the program again. build_report() puts the user's description, the
 system and the tail of the logs into one text with keys, tokens, e-mail
 addresses and the Windows user name masked; issue_url() turns it into a
 GitHub "new issue" link that stays under the length browsers accept.
@@ -46,9 +50,101 @@ def check_update(current: str, url: str, timeout: float = 8) -> dict:
         if not latest:
             raise ValueError("no version in version.json")
         return result | {"latest": latest, "published": str(data.get("published") or ""),
+                         "sha256": str(data.get("sha256") or "").lower(),
+                         "zip": str(data.get("zip") or ""),
                          "newer": version_tuple(latest) > version_tuple(current)}
     except Exception as exc:  # no internet, GitHub down, release being rebuilt
         return result | {"error": f"{type(exc).__name__}: {exc}"[:200]}
+
+
+# ---------------------------------------------------------------------------
+# automatic update
+# ---------------------------------------------------------------------------
+
+class UpdateError(Exception):
+    pass
+
+
+def download_update(url: str, dest: Path, sha256: str = "", progress=None, timeout: float = 30) -> Path:
+    """Download the zip to dest (progress(done, total) on the way) and check its SHA-256."""
+    import hashlib
+    digest = hashlib.sha256()
+    dest.parent.mkdir(parents=True, exist_ok=True)
+    part = dest.with_suffix(dest.suffix + ".part")
+    request = urllib.request.Request(url, headers={"User-Agent": USER_AGENT})
+    try:
+        with urllib.request.urlopen(request, timeout=timeout) as response, part.open("wb") as f:
+            total, done = int(response.headers.get("Content-Length") or 0), 0
+            while True:
+                block = response.read(1 << 20)
+                if not block:
+                    break
+                f.write(block)
+                digest.update(block)
+                done += len(block)
+                if progress:
+                    progress(done, total)
+    except OSError as exc:
+        part.unlink(missing_ok=True)
+        raise UpdateError(tr("Новая версия не скачалась: {error}", error=exc)) from None
+    if sha256 and digest.hexdigest() != sha256.lower():
+        part.unlink(missing_ok=True)
+        raise UpdateError(tr("Скачанный архив повреждён (контрольная сумма не совпала). Попробуйте ещё раз."))
+    os.replace(part, dest)
+    return dest
+
+
+# Plain ASCII on purpose: Windows PowerShell reads a script without a BOM in
+# the ANSI code page; the Cyrillic paths come in as parameters.
+UPDATER_PS1 = r"""param([int]$AppPid, [string]$Zip, [string]$Root)
+$log = Join-Path $Root 'logs\update.log'
+function Log($text) { Add-Content -LiteralPath $log -Value ("[{0}] {1}" -f (Get-Date -Format s), $text) -Encoding UTF8 }
+try {
+    Log "waiting for the program (pid $AppPid) to exit"
+    Wait-Process -Id $AppPid -Timeout 90 -ErrorAction SilentlyContinue
+    Get-Process python, pythonw -ErrorAction SilentlyContinue |
+        Where-Object { $_.Path -and $_.Path.StartsWith((Join-Path $Root 'python'), [StringComparison]::OrdinalIgnoreCase) } |
+        Stop-Process -Force -ErrorAction SilentlyContinue
+    Start-Sleep -Seconds 1
+    $tmp = Join-Path ([IO.Path]::GetTempPath()) ('ArticleDownloader_update_' + [guid]::NewGuid().ToString('N'))
+    Expand-Archive -LiteralPath $Zip -DestinationPath $tmp -Force
+    $src = Join-Path $tmp 'ArticleDownloader'
+    if (-not (Test-Path -LiteralPath (Join-Path $src 'scripts\app.py'))) { throw "no ArticleDownloader\scripts\app.py in the archive" }
+    & robocopy $src $Root /E /IS /IT /R:3 /W:1 /NFL /NDL /NJH /NJS /NP | Out-Null
+    $code = $LASTEXITCODE
+    if ($code -ge 8) { throw "robocopy exit code $code" }
+    Log "updated (robocopy $code)"
+    Remove-Item -LiteralPath $tmp -Recurse -Force -ErrorAction SilentlyContinue
+    Remove-Item -LiteralPath $Zip -Force -ErrorAction SilentlyContinue
+} catch {
+    Log ("update failed: " + $_)
+}
+$pythonw = Join-Path $Root 'python\pythonw.exe'
+$app = Join-Path $Root 'scripts\app.py'
+Start-Process -FilePath $pythonw -ArgumentList @('-E', '-s', ('"' + $app + '"')) -WorkingDirectory $Root
+Log 'program started again'
+"""
+
+
+def start_updater(zip_path: Path, root: Path, app_pid: int) -> Path:
+    """Write the updater next to the zip and start it detached from the program."""
+    import subprocess
+    script = zip_path.with_name("ArticleDownloader_updater.ps1")
+    script.write_text(UPDATER_PS1, encoding="ascii")
+    args = ["powershell", "-NoProfile", "-NonInteractive", "-ExecutionPolicy", "Bypass", "-WindowStyle", "Hidden",
+            "-File", str(script), "-AppPid", str(app_pid), "-Zip", str(zip_path), "-Root", str(root)]
+    base = getattr(subprocess, "CREATE_NO_WINDOW", 0) | getattr(subprocess, "CREATE_NEW_PROCESS_GROUP", 0)
+    breakaway = getattr(subprocess, "CREATE_BREAKAWAY_FROM_JOB", 0)
+    # Out of the program's job if allowed, so nothing ends the updater with it.
+    for flags in ((base | breakaway, base) if breakaway else (base,)):
+        try:
+            subprocess.Popen(args, cwd=str(zip_path.parent), creationflags=flags, close_fds=True,
+                             stdin=subprocess.DEVNULL, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+            return script
+        except OSError:
+            if flags == base:
+                raise
+    return script
 
 
 # ---------------------------------------------------------------------------
