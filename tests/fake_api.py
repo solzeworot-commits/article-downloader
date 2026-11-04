@@ -1,5 +1,6 @@
 """
-Fake Scopus Search API, Web of Science Starter API and OpenAlex for tests:
+Fake Scopus Search API, Web of Science Starter API, OpenAlex, Crossref, Europe PMC
+and the release's version.json for tests:
 
     python fake_api.py            (port 8001)
 
@@ -152,6 +153,10 @@ class Handler(BaseHTTPRequestHandler):
             nxt = f"c{start + per_page}" if start + per_page < OPENALEX_TOTAL else None
             return self.send_json(200, {"meta": {"count": OPENALEX_TOTAL, "next_cursor": nxt},
                                         "results": [openalex_work(i) for i in ids]})
+
+        if url.path == "/version.json":
+            # What the release page publishes next to the zip (update check).
+            return self.send_json(200, {"version": "9.9", "published": "2026-11-04"})
 
         self.send_json(404, {"message": "not found"})
 

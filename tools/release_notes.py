@@ -6,10 +6,14 @@ Release page text with the checksum of the archive:
 
 Takes .github/release-notes.md and adds the SHA-256 of the zip with a short
 way to check it in Windows, so a copy passed around can be told from the
-official one.
+official one. Next to the notes it writes version.json (published with the
+zip; the program reads it at start to offer a newer version) and
+version.txt (for the release title).
 """
 import hashlib
+import json
 import sys
+from datetime import date
 from pathlib import Path
 
 HERE = Path(__file__).resolve().parent
@@ -23,8 +27,21 @@ def sha256(path: Path) -> str:
     return digest.hexdigest()
 
 
+def app_version() -> str:
+    app = HERE.parent / "portable" / "scripts" / "app.py"
+    for line in app.read_text(encoding="utf-8").splitlines():
+        if line.startswith("APP_VERSION"):
+            return line.split('"')[1]
+    raise SystemExit("APP_VERSION not found in app.py")
+
+
 def main():
     archive, out = Path(sys.argv[1]), Path(sys.argv[2])
+    version = app_version()
+    (out.parent / "version.json").write_text(json.dumps(
+        {"version": version, "published": date.today().isoformat(), "sha256": sha256(archive)},
+        ensure_ascii=False), encoding="utf-8")
+    (out.parent / "version.txt").write_text(version, encoding="utf-8")
     notes = (HERE.parent / ".github" / "release-notes.md").read_text(encoding="utf-8").rstrip()
     notes += f"""
 
@@ -46,7 +63,7 @@ def main():
 Не совпадает — архив изменён, не запускайте его и скачайте заново с этой страницы.
 """
     out.write_text(notes + "\n", encoding="utf-8")
-    print(f"SHA-256 {archive.name}: {sha256(archive)}")
+    print(f"version {version}, SHA-256 {archive.name}: {sha256(archive)}")
 
 
 if __name__ == "__main__":

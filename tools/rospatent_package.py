@@ -24,6 +24,7 @@ FILES = [
     "scripts/app.py",
     "scripts/doi_search.py",
     "scripts/review.py",
+    "scripts/support.py",
     "scripts/article_downloader.py",
     "scripts/ui/index.html",
     "СКАЧАТЬ СТАТЬИ.bat",

@@ -45,6 +45,7 @@ import urllib.request
 
 import doi_search as ds
 import review as rv
+import support as sp
 
 
 SCRIPT_DIR = Path(__file__).resolve().parent
@@ -70,10 +71,14 @@ REPORT_PATH = ROOT / "Отчёт.csv"
 BIBLIO_DIR = ROOT / "Список литературы"
 
 UI_PORT = 17865
-APP_VERSION = "7.1"
+APP_VERSION = "7.2"
 APP_AUTHOR = "Bucaneiro"
 OFFICIAL_URL = "https://github.com/solzeworot-commits/article-downloader"
 DOWNLOAD_URL = OFFICIAL_URL + "/releases/tag/portable-latest"
+# The Windows build publishes version.json next to the zip; checked at start.
+UPDATE_URL = (os.environ.get("ARTICLE_UPDATE_URL")
+              or OFFICIAL_URL + "/releases/download/portable-latest/version.json")
+ISSUES_URL = OFFICIAL_URL + "/issues/new"
 # ЛИЦЕНЗИЯ.txt is written by the build; a source checkout has LICENSE.
 LICENSE_FILES = (ROOT / "ЛИЦЕНЗИЯ.txt", ROOT.parent / "LICENSE")
 NO_WINDOW = getattr(subprocess, "CREATE_NO_WINDOW", 0)
@@ -402,6 +407,7 @@ class State:
         self.review_jobs: dict[str, dict] = {}   # list file name -> lookup progress
 
         self.browser = {}
+        self.update: dict | None = None    # support.check_update()
         self.first_run = False
         self.notice = ""
         self.last_poll = time.time()
@@ -1278,6 +1284,46 @@ def shutdown():
 
 
 # ---------------------------------------------------------------------------
+# v7.2: new version check and problem reports (support.py)
+# ---------------------------------------------------------------------------
+
+def check_for_update() -> dict:
+    result = sp.check_update(APP_VERSION, UPDATE_URL)
+    with S.lock:
+        S.update = result
+    if result.get("newer"):
+        app_log(f"New version available: {result['latest']} (running {APP_VERSION})")
+    elif result.get("error"):
+        app_log(f"Update check failed: {result['error']}")
+    return result
+
+
+def problem_report(body: dict) -> dict:
+    section = str(body.get("section") or "")[:60]
+    logs = [APP_LOG, LOGS / "article_downloader.log"] if body.get("attach_log", True) else []
+    report = sp.build_report(APP_VERSION, section, str(body.get("text") or "")[:4000],
+                             browser=S.browser.get("title") or "", logs=logs)
+    action = body.get("action")
+    if action == "github":
+        url = sp.issue_url(ISSUES_URL, report)
+        app_log("Problem report: GitHub issue page opened")
+        if os.environ.get("ARTICLE_UI_NO_WINDOW") != "1":
+            webbrowser.open(url)
+        return {"url": url}
+    text = sp.report_text(report)
+    if action == "save":
+        path = sp.save_report(LOGS, text)
+        app_log(f"Problem report saved: {path.name}")
+        if os.environ.get("ARTICLE_UI_NO_WINDOW") != "1":
+            if os.name == "nt":
+                sp.show_in_folder(path)
+            else:
+                open_path(LOGS)
+        return {"file": str(path)}
+    return {"report": text}
+
+
+# ---------------------------------------------------------------------------
 # opening things on the desktop
 # ---------------------------------------------------------------------------
 
@@ -1360,6 +1406,8 @@ def public_state(known_version: int) -> dict:
             "exports": recent_exports(),
             "native_dialog": os.name == "nt",
             "donate": bool(load_donate()),
+            "version": APP_VERSION,
+            "update": S.update,
         }
         data["keys"] = ds.keys_status(ds.load_keys())
         if known_version != S.items_version:
@@ -1683,6 +1731,12 @@ def handle_api(path: str, body: dict) -> dict:
             S.key_checks[source] = result
         return result
 
+    if path == "/api/report":
+        return problem_report(body)
+
+    if path == "/api/check_update":
+        return check_for_update()
+
     if path == "/api/open_link":
         url = GUIDE_LINKS.get(body.get("key"))
         if url:
@@ -1867,6 +1921,7 @@ def main():
 
     threading.Thread(target=ensure_desktop_shortcut, daemon=True).start()
     threading.Thread(target=idle_exit_loop, daemon=True).start()
+    threading.Thread(target=check_for_update, daemon=True).start()
 
     # v6.1: the start screen comes first; the databases open once a list is
     # chosen (or "Продолжить" pressed). A file dropped on the icon starts at

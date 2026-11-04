@@ -51,6 +51,8 @@ jobs:
           if ($LASTEXITCODE) { throw "review_test" }
           & $py -E -s -X utf8 tests\donate_test.py (Join-Path $app "scripts")
           if ($LASTEXITCODE) { throw "donate_test: адрес или ссылка для донатов не прошли проверку" }
+          & $py -E -s -X utf8 tests\support_test.py (Join-Path $app "scripts")
+          if ($LASTEXITCODE) { throw "support_test" }
           "APP=$app" | Out-File -Append -Encoding utf8 $env:GITHUB_ENV
 
       - name: Запустить программу через «СКАЧАТЬ СТАТЬИ.bat»
@@ -107,8 +109,9 @@ jobs:
           if ($LASTEXITCODE) { throw "release_notes" }
           gh release delete $tag --yes --cleanup-tag 2>$null
           $global:LASTEXITCODE = 0
-          gh release create $tag dist\ArticleDownloader_Portable.zip `
+          $ver = Get-Content dist\version.txt
+          gh release create $tag dist\ArticleDownloader_Portable.zip dist\version.json `
             --target $env:GITHUB_SHA `
-            --title "Загрузчик статей — готовая программа для Windows" `
+            --title "Загрузчик статей $ver — готовая программа для Windows" `
             --notes-file dist\release-notes.md `
             --latest

@@ -36,8 +36,12 @@
     display: flex; align-items: center; gap: 12px; flex-wrap: wrap;
     margin-bottom: 14px;
   }
-  header h1 { font-size: 22px; margin: 0; flex: 1; display: flex; align-items: center; gap: 10px; }
+  header h1 { font-size: 22px; margin: 0; flex: 1; display: flex; align-items: center; gap: 10px; white-space: nowrap; }
   header h1 img { width: 30px; height: 30px; }
+  header button { padding: 7px 11px; font-size: 14px; flex-shrink: 0; white-space: nowrap; }
+  header { gap: 8px; flex-wrap: nowrap; }
+  header .chip { display: block; min-width: 40px; flex-shrink: 1; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  @media (max-width: 900px) { header { flex-wrap: wrap; } }
   .chip {
     display: inline-flex; align-items: center; gap: 6px;
     padding: 4px 10px; border-radius: 999px; background: var(--card);
@@ -247,6 +251,15 @@
                font: inherit; cursor: pointer; }
   .about-name { font-size: 20px; font-weight: 700; margin-bottom: 4px; }
   .about-free { margin-top: 10px; padding: 10px 12px; border-radius: 10px; background: var(--green-soft); font-weight: 600; }
+  .faq details { border: 1px solid var(--line); border-radius: 10px; padding: 8px 12px; margin-bottom: 6px; }
+  .faq summary { cursor: pointer; font-weight: 600; }
+  .faq details div { margin-top: 6px; color: var(--text); }
+  #rp-text { min-height: 110px; font-size: 15px; line-height: 1.45; font-family: inherit; border-style: solid; margin-top: 4px; }
+  .rp-check { display: flex; gap: 8px; align-items: flex-start; margin-top: 8px; font-size: 14px; }
+  .up-how { font-size: 14px; color: var(--muted); margin-top: 4px; }
+  .dn-plans { background: var(--blue-soft); border-radius: 12px; padding: 4px 16px 10px; margin-bottom: 10px; }
+  .dn-plans ul { margin: 4px 0 0; padding-left: 22px; }
+  .dn-plans li { margin: 4px 0; }
   .about-acts { display: flex; gap: 8px; flex-wrap: wrap; margin: 14px 0 4px; }
   .bcn-about ul { margin: 4px 0 0; padding-left: 22px; }
   .bcn-about li { margin: 3px 0; }
@@ -299,13 +312,22 @@
     <h1><img src="/favicon.ico" alt="">Загрузчик статей‌​‌</h1>
     <span class="chip" id="browser-chip">Браузер: …</span>
     <button id="btn-home" hidden>🏠 Главная</button>
+    <button id="btn-update" class="linkbtn" data-link="official" hidden>🆕 Обновить</button>
     <button id="btn-keys">🔑 Ключи API</button>
-    <button id="btn-settings">⚙ Настройки</button>
+    <button id="btn-settings" title="Настройки" aria-label="Настройки">⚙</button>
+    <button id="btn-report">🛟 Сообщить о проблеме</button>
     <button id="btn-quit">Выход</button>
   </header>
 
 
   <section id="view-home" class="view">
+    <div id="update-banner" class="banner blue" hidden>
+      <span class="big-icon">🆕</span>
+      <div class="msg"><b>Вышла новая версия <span id="up-latest"></span></b> (у вас __APP_VERSION__).
+        <div class="up-how">Как обновить: нажмите «Выход», скачайте архив и распакуйте его в ту же папку, где лежит
+          программа, с заменой файлов. Списки, PDF и настройки останутся.</div></div>
+      <button class="linkbtn" data-link="official">⬇ Скачать новую версию</button>
+    </div>
     <div id="home-note"></div>
     <div class="home-buttons four">
       <button class="big-choice blue" id="go-search"><span class="step-n">1</span><span class="ico">🔎</span><b>Получить список DOI</b>
@@ -591,6 +613,7 @@ extraction"></textarea>
         <div>Версия __APP_VERSION__ · автор <b>__APP_AUTHOR__</b> · © 2026</div>
         <div class="about-credit">Photo: <button class="plainlink" data-link="photo_source">Barry Skeates</button>,
           <button class="plainlink" data-link="photo_license">CC BY 2.0</button>, cropped</div>
+        <div class="about-credit" id="about-update"></div>
         <div class="about-free">Программа бесплатная. Если вам её продали, вас обманули:
           скачайте её бесплатно на официальной странице.</div>
       </div>
@@ -599,6 +622,7 @@ extraction"></textarea>
       <button class="linkbtn" data-link="official">🌐 Официальная страница</button>
       <button data-copytext="https://github.com/solzeworot-commits/article-downloader">📋 Скопировать ссылку</button>
       <button id="about-license">📄 Лицензия</button>
+      <button id="about-check">🔄 Проверить обновления</button>
       <button id="about-donate" hidden>❤ Поблагодарить автора</button>
     </div>
     <h4 class="dn-h">Можно</h4>
@@ -614,6 +638,35 @@ extraction"></textarea>
       <li>убирать имя автора, ссылку и текст лицензии.</li>
     </ul>
     <p class="recognized">Python и библиотеки в папке python распространяются по своим лицензиям, их тексты лежат рядом с ними.</p>
+  </div>
+</dialog>
+
+<dialog id="dlg-report" style="width: min(780px, calc(100vw - 32px))">
+  <div class="head"><h3>🛟 Сообщить о проблеме</h3><button data-close>✕</button></div>
+  <div class="body">
+    <h4 class="dn-h" style="margin-top: 0">Частые проблемы — попробуйте сначала</h4>
+    <div class="faq">
+    <details><summary>Окно программы не открывается</summary><div>Распакуйте архив целиком (не запускайте из zip) в короткую папку, например <b>C:\Статьи</b>. Если окно всё равно не появляется, запустите <b>scripts\debug_start.bat</b>: он покажет ошибку — её текст пришлите автору.</div></details>
+    <details><summary>«Браузер не найден»</summary><div>Нужен Яндекс.Браузер, Microsoft Edge или Google Chrome. Edge уже есть в Windows 10 и 11; если его удалили, поставьте Яндекс.Браузер (browser.yandex.ru) — он ставится без прав администратора.</div></details>
+    <details><summary>Базы не открываются или капча появляется снова и снова</summary><div>Пройдите капчу в окне браузера загрузчика сами: программа ждёт и продолжит. Если браузер завис, откройте «⚙ Настройки» → «Перезапустить браузер загрузчика».</div></details>
+    <details><summary>Статья не скачалась: «нет доступа»</summary><div>Войдите через организацию на сайте базы (кнопки входа на экране «Скачать статьи»). Если вход есть, а статьи нет, у университета может не быть подписки на этот журнал.</div></details>
+    <details><summary>Ключ Scopus или Web of Science не работает</summary><div>Откройте «🔑 Ключи API» и нажмите «Проверить». «Нет доступа» у Scopus обычно значит, что компьютер не в сети университета: подключитесь из университета или через его VPN.</div></details>
+    <details><summary>Поиск ничего не нашёл</summary><div>Уберите лишние слова, выберите «любое слово», расширьте годы. Слова нужны на английском — помогут подсказки «💡».</div></details>
+    <details><summary>«Исчерпан дневной лимит OpenAlex»</summary><div>Возьмите бесплатный ключ OpenAlex («🔑 Ключи API» → вкладка OpenAlex) или попробуйте завтра.</div></details>
+    <details><summary>У статей нет аннотаций</summary><div>Elsevier не отдаёт аннотации в открытые базы. Часть программа находит в Europe PMC, остальные откройте по DOI.</div></details>
+    <details><summary>Скачивает медленно</summary><div>Между статьями пауза 10 секунд и не больше 300 статей в день — это специально, чтобы издательства не заблокировали доступ всему университету.</div></details>
+    </div>
+    <h4 class="dn-h">Не помогло? Расскажите, что случилось</h4>
+    <div class="form-row"><label for="rp-section">Где это случилось</label><select id="rp-section"><option>Запуск программы</option><option>Получить список DOI</option><option>Отбор статей</option><option>Скачивание статей</option><option>Список литературы</option><option>Ключи API</option><option>Другое</option></select></div>
+    <textarea id="rp-text" spellcheck="true" placeholder="Что вы делали и что пошло не так. Например: выбрал список в «Скачать статьи», браузер открылся, но статьи не скачиваются."></textarea>
+    <label class="rp-check"><input type="checkbox" id="rp-log" checked> Приложить журнал работы программы (ключи, пароли и имя пользователя Windows в него не попадут)</label>
+    <div class="about-acts">
+      <button class="linkbtn" id="rp-github">🌐 Отправить автору через GitHub</button>
+      <button id="rp-copy">📋 Скопировать отчёт</button>
+      <button id="rp-save">💾 Сохранить отчёт в файл</button>
+    </div>
+    <p class="recognized" id="rp-note">Кнопка GitHub откроет страницу с готовым текстом — останется нажать «Create» / «Submit new issue»
+      (нужна бесплатная учётная запись GitHub). Нет учётной записи — скопируйте отчёт и отправьте автору любым способом.</p>
   </div>
 </dialog>
 
@@ -756,6 +809,7 @@ function render() {
   if (!br.error && br.yandex_missing && br.kind !== "yandex")
     chip += ' · <a href="https://browser.yandex.ru/" target="_blank" title="С Яндекс.Браузером капча Elsevier держится дольше">поставить Яндекс</a>';
   $("browser-chip").innerHTML = chip;
+  $("browser-chip").title = $("browser-chip").textContent;
 
   // bases
   const enabled = w.bases.filter((b) => b.enabled);
@@ -1104,6 +1158,7 @@ function renderExtra() {
   $("btn-choose").hidden = !s.native_dialog;
   $("home-donate").hidden = !s.donate;
   $("about-donate").hidden = !s.donate;
+  renderUpdate(s.update);
   renderKeysNote();
   renderSources();
   renderSearchProgress();
@@ -1605,6 +1660,10 @@ async function openDonate() {
     const r = await fetch("/api/donate", { headers: { "X-Token": TOKEN } });
     const d = await r.json();
     let html = d.message ? `<p class="dn-msg">${esc(d.message)}</p>` : "";
+    if (d.plans && d.plans.items && d.plans.items.length) {
+      html += `<div class="dn-plans"><h4 class="dn-h">${esc(d.plans.title || "")}</h4><ul>` +
+        d.plans.items.map((x) => `<li>${esc(x)}</li>`).join("") + "</ul></div>";
+    }
     if (d.sbp) {
       html += `<h4 class="dn-h">${esc(d.sbp.title || "Перевод по СБП")}</h4><div class="donate-sbp"><div class="qr">${d.sbp.qr || ""}</div>` +
         `<div><div>${esc(d.sbp.note || "")}</div><div class="acts"><button class="linkbtn" data-act="donate-link">Открыть ссылку</button>` +
@@ -1624,6 +1683,42 @@ async function openDonate() {
 }
 $("home-donate").onclick = openDonate;
 $("home-about").onclick = () => $("dlg-about").showModal();
+
+// v7.2: new version and problem reports
+function renderUpdate(up) {
+  const newer = !!(up && up.newer);
+  $("update-banner").hidden = !newer;
+  $("btn-update").hidden = !newer;
+  if (newer) {
+    $("up-latest").textContent = up.latest;
+    $("btn-update").title = "Вышла версия " + up.latest + " — скачать";
+  }
+  $("about-update").textContent = !up ? "" : newer ? `Есть новая версия ${up.latest} — кнопка «🆕» вверху.`
+    : up.error ? "Не удалось проверить обновления (нет интернета?)." : `Это последняя версия (проверено в ${up.checked}).`;
+}
+$("about-check").onclick = async () => {
+  $("about-update").textContent = "Проверяю…";
+  try { renderUpdate(await api("/api/check_update")); } catch (e) { $("about-update").textContent = "Не проверилось: " + e.message; }
+};
+$("btn-report").onclick = () => $("dlg-report").showModal();
+function reportBody(action) {
+  return { action, text: $("rp-text").value, section: $("rp-section").value, attach_log: $("rp-log").checked };
+}
+$("rp-copy").onclick = async (e) => {
+  const t = e.currentTarget;
+  try { const r = await api("/api/report", reportBody("copy")); flash(t, await copyText(r.report)); }
+  catch (err) { $("rp-note").textContent = "Не получилось: " + err.message; }
+};
+$("rp-save").onclick = async () => {
+  try { const r = await api("/api/report", reportBody("save")); $("rp-note").textContent = "Отчёт сохранён: " + r.file; }
+  catch (err) { $("rp-note").textContent = "Не получилось: " + err.message; }
+};
+$("rp-github").onclick = async () => {
+  try {
+    await api("/api/report", reportBody("github"));
+    $("rp-note").textContent = "Открыл страницу GitHub в браузере: проверьте текст и нажмите «Create» / «Submit new issue». Спасибо!";
+  } catch (err) { $("rp-note").textContent = "Не получилось: " + err.message; }
+};
 $("about-license").onclick = () => api("/api/open", { what: "license" });
 $("about-donate").onclick = () => { $("dlg-about").close(); openDonate(); };
 document.addEventListener("click", (e) => {
