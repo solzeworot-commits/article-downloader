@@ -1,17 +1,22 @@
 # -*- coding: utf-8 -*-
 """
-ArticleDownloader portable window (v6.0).
+ArticleDownloader portable window (v6.1).
 
-Serves a small page on 127.0.0.1 and opens it as an app window: paste DOIs
-or drop a file, press the big button. On launch every database is opened in
-the dedicated browser (article_downloader.py --warmup); the queue waits until
-the CAPTCHAs there are passed and then runs by itself, one article at a time.
+Serves a small page on 127.0.0.1 and opens it as an app window. The start
+screen has two buttons:
+
+- "Получить список DOI": a keyword search in Scopus / Web of Science /
+  OpenAlex (doi_search.py) or a site export, saved as a list in inbox\\;
+- "Скачать статьи": pick a list from inbox\\ (Windows file dialog or the list
+  in the window). Then every database is opened in the dedicated browser
+  (article_downloader.py --warmup); the queue waits until the CAPTCHAs there
+  are passed and runs by itself, one article at a time.
 
   python\\pythonw.exe scripts\\app.py [files with DOIs ...]
 
-Files given on the command line (dropped on the icon) are queued and started.
-Lists put into inbox\\ are picked up too. A second launch only brings the
-window back and hands its files to the running copy.
+Files given on the command line (dropped on the icon) are queued and started
+at once. A second launch only brings the window back and hands its files to
+the running copy.
 """
 
 from __future__ import annotations
@@ -34,8 +39,10 @@ from collections import Counter, deque
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from io import BytesIO
 from pathlib import Path
-from urllib.parse import parse_qs, unquote, urlparse
+from urllib.parse import parse_qs, quote, unquote, urlparse
 import urllib.request
+
+import doi_search as ds
 
 
 SCRIPT_DIR = Path(__file__).resolve().parent
@@ -43,11 +50,11 @@ ROOT = SCRIPT_DIR.parent
 DOWNLOADER = SCRIPT_DIR / "article_downloader.py"
 UI_FILE = SCRIPT_DIR / "ui" / "index.html"
 ICON_FILE = SCRIPT_DIR / "icon.ico"
+KEY_IMG_DIR = SCRIPT_DIR / "ui" / "img" / "keys"
 PYTHON_DIR = ROOT / "python"
 
 LOGS = ROOT / "logs"
 INBOX = ROOT / "inbox"
-INBOX_DONE = INBOX / "_добавлено"
 SETTINGS_PATH = ROOT / "settings.json"
 QUEUE_PATH = LOGS / "queue.json"
 TOKEN_PATH = LOGS / ".ui_token"
@@ -67,6 +74,18 @@ JOB_LOG_LINES = 600
 
 LIST_SUFFIXES = {".txt", ".csv", ".tsv", ".ris", ".bib", ".enw", ".nbib",
                  ".xlsx", ".docx"}
+EXPORT_SUFFIXES = {".csv", ".txt", ".tsv", ".ris", ".bib", ".xls", ".xlsx"}
+
+# Pages the key guide may open in the user's normal browser.
+GUIDE_LINKS = {
+    "elsevier": "https://dev.elsevier.com/",
+    "elsevier_keys": "https://dev.elsevier.com/apikey/manage",
+    "clarivate": "https://developer.clarivate.com/",
+    "wos_starter": "https://developer.clarivate.com/apis/wos-starter",
+    "openalex": "https://openalex.org/",
+}
+SCOPUS_RESULTS_URL = "https://www.scopus.com/results/results.uri?sort=plf-f&src=s&sot=a&sdt=a&s="
+WOS_ADVANCED_URL = "https://www.webofscience.com/wos/woscc/advanced-search"
 
 # key, title, start page, institution sign-in page, DOI prefixes
 BASES = [
@@ -355,6 +374,14 @@ class State:
         self.warm = self._warm_blank()
         self.warm_proc = None
 
+        self.search = {"running": False, "progress": {}, "error": "",
+                       "version": 0, "summary": None}
+        self.search_records: list[dict] = []
+        self.export_since = 0.0
+        self.key_checks: dict[str, dict] = {}
+        self.list_cache: dict[str, tuple] = {}
+        self.last_list = ""
+
         self.browser = {}
         self.first_run = False
         self.notice = ""
@@ -455,14 +482,30 @@ def refresh_browser_info():
                      "yandex_missing": True}
 
 
+def ps_quote(value) -> str:
+    """A PowerShell single-quoted string."""
+    return "'" + str(value).replace("'", "''") + "'"
+
+
+def run_powershell(script: str, timeout: int) -> str:
+    """Run a script (any Unicode in it) without a console window; its stdout."""
+    script = "[Console]::OutputEncoding = [System.Text.Encoding]::UTF8\n" + script
+    encoded = base64.b64encode(script.encode("utf-16-le")).decode("ascii")
+    result = subprocess.run(
+        ["powershell", "-NoProfile", "-NonInteractive", "-STA", "-ExecutionPolicy",
+         "Bypass", "-EncodedCommand", encoded],
+        capture_output=True, text=True, encoding="utf-8", errors="replace",
+        timeout=timeout, creationflags=NO_WINDOW,
+    )
+    return result.stdout.strip()
+
+
 def ensure_desktop_shortcut():
     pythonw = PYTHON_DIR / "pythonw.exe"
     if os.name != "nt" or not pythonw.exists() or not S.settings.get("desktop_shortcut"):
         return
 
-    def q(value) -> str:
-        return "'" + str(value).replace("'", "''") + "'"
-
+    q = ps_quote
     # -E -s: PYTHONPATH/PYTHONHOME or a user site of another Python on this
     # computer must not leak into the bundled one.
     arguments = f'-E -s "{SCRIPT_DIR / "app.py"}"'
@@ -481,15 +524,10 @@ if ($s.TargetPath -ne {q(pythonw)} -or $s.Arguments -ne {q(arguments)}) {{
     Write-Output 'shortcut updated'
 }}
 """
-    encoded = base64.b64encode(script.encode("utf-16-le")).decode("ascii")
     try:
-        result = subprocess.run(
-            ["powershell", "-NoProfile", "-NonInteractive", "-ExecutionPolicy",
-             "Bypass", "-EncodedCommand", encoded],
-            capture_output=True, text=True, timeout=60, creationflags=NO_WINDOW,
-        )
-        if result.stdout.strip():
-            app_log("Desktop shortcut: " + result.stdout.strip())
+        out = run_powershell(script, timeout=60)
+        if out:
+            app_log("Desktop shortcut: " + out)
     except Exception as exc:
         app_log(f"Desktop shortcut not created: {exc}")
 
@@ -794,33 +832,163 @@ def import_files(paths: list[str]) -> int:
     return total
 
 
-def inbox_loop():
-    while True:
+# v6.1: inbox\\ is the library of lists the user picks from; files there are
+# no longer queued by themselves.
+
+def _list_entries(path: Path) -> list[str]:
+    stat = path.stat()
+    cached = S.list_cache.get(str(path))
+    if cached and cached[:2] == (stat.st_mtime, stat.st_size):
+        return cached[2]
+    try:
+        text = file_to_text(path.name, path.read_bytes())
+        entries, _ = parse_entries(text, bool(S.settings.get("title_for_plain_lines")))
+    except Exception as exc:
+        app_log(f"List not read {path}: {exc}")
+        entries = []
+    S.list_cache[str(path)] = (stat.st_mtime, stat.st_size, entries)
+    return entries
+
+
+def inbox_lists() -> list[dict]:
+    INBOX.mkdir(parents=True, exist_ok=True)
+    with S.lock:
+        done = {i["query"].lower() for i in S.items if i["status"] == "success"}
+        queued = {i["query"].lower() for i in S.items if i["status"] in ("pending", "running")}
+    files = [p for p in INBOX.iterdir() if p.is_file() and p.suffix.lower() in LIST_SUFFIXES]
+    out = []
+    for path in sorted(files, key=lambda p: p.stat().st_mtime, reverse=True):
+        entries = _list_entries(path)
+        keys = [e.lower() for e in entries]
+        out.append({
+            "name": path.name,
+            "modified": time.strftime("%d.%m.%Y %H:%M", time.localtime(path.stat().st_mtime)),
+            "count": len(entries),
+            "done": sum(k in done for k in keys),
+            "queued": sum(k in queued for k in keys),
+        })
+    return out
+
+
+def queue_list_file(path: Path) -> dict:
+    """Queue every entry of a list file and start (databases → CAPTCHA → queue)."""
+    text = file_to_text(path.name, path.read_bytes())
+    entries, ignored = parse_entries(text, bool(S.settings.get("title_for_plain_lines")))
+    added, duplicates = S.add_entries(entries)
+    with S.lock:
+        S.last_list = path.name
+    app_log(f"List {path.name}: {added} queued, {duplicates} already there")
+    if added or S.next_pending() is not None:
+        start_queue()
+    return {"name": path.name, "added": added, "duplicates": duplicates,
+            "ignored": ignored, "total": len(entries)}
+
+
+def choose_file_dialog() -> str:
+    """The Windows "Open" dialog in inbox\\; the chosen path or ""."""
+    if os.name != "nt":
+        return ""
+    INBOX.mkdir(parents=True, exist_ok=True)
+    q = ps_quote
+    script = f"""
+Add-Type -AssemblyName System.Windows.Forms
+$owner = New-Object System.Windows.Forms.Form -Property @{{TopMost = $true; ShowInTaskbar = $false}}
+$d = New-Object System.Windows.Forms.OpenFileDialog
+$d.Title = {q('Выберите файл со списком DOI')}
+$d.InitialDirectory = {q(INBOX)}
+$d.Filter = {q('Списки DOI|*.txt;*.csv;*.tsv;*.xlsx;*.docx;*.ris;*.bib;*.enw;*.nbib|Все файлы|*.*')}
+if ($d.ShowDialog($owner) -eq [System.Windows.Forms.DialogResult]::OK) {{ Write-Output $d.FileName }}
+$owner.Dispose()
+"""
+    try:
+        out = run_powershell(script, timeout=1800)
+    except Exception as exc:
+        app_log(f"File dialog failed: {exc}")
+        return ""
+    return out.splitlines()[-1].strip() if out else ""
+
+
+def downloads_dir() -> Path:
+    override = os.environ.get("ARTICLE_DOWNLOADS_DIR")
+    return Path(override) if override else Path.home() / "Downloads"
+
+
+def recent_exports() -> list[dict]:
+    """Export files that appeared in Downloads since the browser search began."""
+    since = S.export_since
+    if not since:
+        return []
+    found = []
+    try:
+        for path in downloads_dir().iterdir():
+            if (path.is_file() and path.suffix.lower() in EXPORT_SUFFIXES
+                    and path.stat().st_mtime >= since - 5):
+                found.append(path)
+    except OSError:
+        return []
+    found.sort(key=lambda p: p.stat().st_mtime, reverse=True)
+    return [{"name": p.name, "size": p.stat().st_size,
+             "modified": time.strftime("%H:%M:%S", time.localtime(p.stat().st_mtime))}
+            for p in found[:5]]
+
+
+def _set_search_result(records: list[dict], summary: dict):
+    with S.lock:
+        S.search_records = records
+        S.search.update(running=False, error="", summary=summary,
+                        version=S.search["version"] + 1)
+
+
+def start_search(params: dict, sources: list[str]):
+    with S.lock:
+        if S.search["running"]:
+            return
+        S.search.update(running=True, error="", progress={s: {"done": 0, "of": 0} for s in sources})
+    keys = ds.load_keys()
+
+    def progress(source, done, of):
+        with S.lock:
+            S.search["progress"][source] = {"done": done, "of": of}
+
+    def run():
         try:
-            INBOX.mkdir(parents=True, exist_ok=True)
-            files = [p for p in INBOX.iterdir()
-                     if p.is_file() and p.suffix.lower() in LIST_SUFFIXES
-                     and time.time() - p.stat().st_mtime > 3]
-            for path in files:
-                added = import_files([str(path)])
-                INBOX_DONE.mkdir(parents=True, exist_ok=True)
-                target = INBOX_DONE / f"{time.strftime('%Y%m%d-%H%M%S')}_{path.name}"
-                try:
-                    path.replace(target)
-                except OSError:
-                    path.unlink(missing_ok=True)
-                if added:
-                    start_queue()
+            result = ds.run_search(params, sources, keys, progress)
+            _set_search_result(result["records"], {
+                "from": "api", "per_source": result["per_source"],
+                "no_doi": result["no_doi"], "count": len(result["records"]),
+                "queries": result["queries"], "slug": ds.query_slug(params),
+            })
+        except ds.SearchError as exc:
+            with S.lock:
+                S.search.update(running=False, error=exc.message)
         except Exception as exc:
-            app_log(f"Inbox error: {exc}")
-        time.sleep(20)
+            app_log(f"Search error: {exc}\n{traceback.format_exc()}")
+            with S.lock:
+                S.search.update(running=False, error=f"Поиск не удался: {exc}")
+
+    threading.Thread(target=run, daemon=True).start()
+
+
+def import_export(name: str, data: bytes) -> dict:
+    records, no_doi = ds.parse_export(name, data)
+    slug = re.sub(r"[^\w\-]+", "_", Path(name).stem).strip("_") or "экспорт"
+    summary = {"from": "export", "file": name, "count": len(records),
+               "no_doi": no_doi, "slug": slug}
+    _set_search_result(records, summary)
+    return summary
+
+
+def browser_search_url(source: str, query: str) -> str:
+    if source == "scopus":
+        return SCOPUS_RESULTS_URL + quote(query, safe="")
+    return WOS_ADVANCED_URL
 
 
 def idle_exit_loop():
     while True:
         time.sleep(30)
         with S.lock:
-            busy = S.running or S.warm["running"]
+            busy = S.running or S.warm["running"] or S.search["running"]
             idle = time.time() - S.last_poll > IDLE_EXIT_SEC
         if idle and not busy:
             app_log("No window for a long time and nothing to do: exiting")
@@ -915,7 +1083,13 @@ def public_state(known_version: int) -> dict:
             "items_version": S.items_version,
             "notice": S.notice,
             "pdf_dir": str(pdf_dir()),
+            "last_list": S.last_list,
+            "search": {k: v for k, v in S.search.items()},
+            "key_checks": dict(S.key_checks),
+            "exports": recent_exports(),
+            "native_dialog": os.name == "nt",
         }
+        data["keys"] = ds.keys_status(ds.load_keys())
         if known_version != S.items_version:
             data["items"] = [
                 {k: i.get(k, "") for k in ("id", "query", "status", "file",
@@ -1045,6 +1219,115 @@ def handle_api(path: str, body: dict) -> dict:
         shutdown()
         return {}
 
+    # -- lists in inbox\\ ----------------------------------------------------
+    if path == "/api/choose_file":
+        chosen = choose_file_dialog()
+        if not chosen:
+            return {"chosen": False}
+        return {"chosen": True, **queue_list_file(Path(chosen))}
+
+    if path == "/api/queue_file":
+        name = Path(str(body.get("name") or "")).name
+        target = INBOX / name
+        if not name or not target.is_file():
+            return {"error": "Файл не найден в папке inbox."}
+        return queue_list_file(target)
+
+    if path == "/api/open_inbox":
+        INBOX.mkdir(parents=True, exist_ok=True)
+        open_path(INBOX)
+        return {}
+
+    # -- DOI search ------------------------------------------------------------
+    if path == "/api/build_queries":
+        try:
+            queries = ds.build_queries(body)
+        except ds.SearchError as exc:
+            return {"error": exc.message}
+        return {"scopus": queries["scopus"], "wos": queries["wos"]}
+
+    if path == "/api/search":
+        sources = [x for x in body.get("sources") or [] if x in ds.SOURCE_TITLES]
+        if not sources:
+            return {"error": "Отметьте хотя бы один источник."}
+        try:
+            ds.build_queries(body)
+        except ds.SearchError as exc:
+            return {"error": exc.message}
+        start_search(body, sources)
+        return {}
+
+    if path == "/api/search_import":
+        if body.get("file_b64"):
+            name = body.get("file_name") or "export.txt"
+            data = base64.b64decode(body["file_b64"])
+        else:
+            name = Path(str(body.get("name") or "")).name
+            source = downloads_dir() / name
+            if not name or not source.is_file() or source.suffix.lower() not in EXPORT_SUFFIXES:
+                return {"error": "Файл экспорта не найден."}
+            data = source.read_bytes()
+        try:
+            return import_export(name, data)
+        except ds.SearchError as exc:
+            return {"error": exc.message}
+
+    if path == "/api/search_save":
+        wanted = [d.lower() for d in body.get("dois") or []]
+        with S.lock:
+            by_doi = {r["doi"]: r for r in S.search_records}
+        records = [by_doi[d] for d in wanted if d in by_doi]
+        if not records:
+            return {"error": "Не выбрано ни одной статьи."}
+        saved = ds.save_list(INBOX, str(body.get("slug") or "список"), records)
+        app_log(f"Saved list {saved.name}: {len(records)} DOI")
+        return {"name": saved.name, "count": len(records)}
+
+    if path == "/api/browser_search":
+        source = body.get("source")
+        if source not in ("scopus", "wos"):
+            return {"error": "Неизвестный источник."}
+        url = browser_search_url(source, str(body.get("query") or ""))
+        with S.lock:
+            S.export_since = time.time()
+        open_in_dedicated_browser([url])
+        return {"url": url}
+
+    if path == "/api/export_watch":
+        with S.lock:
+            S.export_since = time.time() if body.get("on") else 0.0
+        return {}
+
+    # -- API keys --------------------------------------------------------------
+    if path == "/api/keys_save":
+        ds.save_keys({k: body[k] for k in ds.KEY_FIELDS if k in body})
+        with S.lock:
+            for source in ("scopus", "wos", "openalex"):
+                if source in body or (source == "scopus" and "scopus_insttoken" in body):
+                    S.key_checks.pop(source, None)
+        return {"keys": ds.keys_status(ds.load_keys())}
+
+    if path == "/api/keys_check":
+        source = body.get("source")
+        if source not in ds.SOURCE_TITLES:
+            return {"error": "Неизвестный источник."}
+        keys = ds.load_keys()
+        for field in ds.KEY_FIELDS:
+            if str(body.get(field) or "").strip():
+                keys[field] = str(body[field]).strip()
+        result = ds.check_key(source, keys) | {"at": time.strftime("%H:%M")}
+        with S.lock:
+            S.key_checks[source] = result
+        return result
+
+    if path == "/api/open_link":
+        url = GUIDE_LINKS.get(body.get("key"))
+        if url:
+            app_log(f"Guide link: {url}")
+            if os.environ.get("ARTICLE_UI_NO_WINDOW") != "1":
+                webbrowser.open(url)
+        return {"url": url or ""}
+
     raise KeyError(path)
 
 
@@ -1087,6 +1370,13 @@ class Handler(BaseHTTPRequestHandler):
             return self._send(200, ICON_FILE.read_bytes(), "image/x-icon")
         if url.path == "/api/ping":
             return self._json({"app": "ArticleDownloader"})
+        if url.path.startswith("/img/keys/"):
+            name = url.path.rsplit("/", 1)[-1]
+            image = KEY_IMG_DIR / name
+            if re.fullmatch(r"[\w\-]+\.(png|jpg)", name) and image.is_file():
+                ctype = "image/png" if name.endswith(".png") else "image/jpeg"
+                return self._send(200, image.read_bytes(), ctype)
+            return self._send(404, b"not found", "text/plain")
         if not self._token_ok(query):
             return self._send(403, b"forbidden", "text/plain")
 
@@ -1097,6 +1387,12 @@ class Handler(BaseHTTPRequestHandler):
             except ValueError:
                 version = 0
             return self._json(public_state(version))
+        if url.path == "/api/inbox":
+            return self._json({"files": inbox_lists(), "inbox": str(INBOX)})
+        if url.path == "/api/search_results":
+            with S.lock:
+                return self._json({"version": S.search["version"],
+                                   "records": S.search_records})
         if url.path == "/api/log":
             try:
                 item_id = int((query.get("id") or ["0"])[0])
@@ -1191,18 +1487,18 @@ def main():
 
     if files:
         import_files(files)
+        S.last_list = Path(files[0]).name
 
     url = f"http://127.0.0.1:{UI_PORT}/?t={S.token}"
     open_ui_window(url)
 
     threading.Thread(target=ensure_desktop_shortcut, daemon=True).start()
-    threading.Thread(target=inbox_loop, daemon=True).start()
     threading.Thread(target=idle_exit_loop, daemon=True).start()
 
-    # Launch = open the databases; unfinished articles go on by themselves
-    # as soon as the CAPTCHAs are passed.
-    start_warmup()
-    if S.next_pending() is not None:
+    # v6.1: the start screen comes first; the databases open once a list is
+    # chosen (or "Продолжить" pressed). A file dropped on the icon starts at
+    # once, as before.
+    if files:
         start_queue()
 
     try:
