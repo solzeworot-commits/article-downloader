@@ -1154,7 +1154,6 @@ async function saveList() {
   const dois = records.filter((r) => selected.has(r.doi)).map((r) => r.doi);
   const res = await api("/api/search_save", { dois, slug: $("save-name").value });
   if (res.error) { note($("save-note"), "red", "✖", esc(res.error)); return; }
-  savedVer = searchVer;
   note($("save-note"), "green", "✅", `Сохранено: <b>inbox\\${esc(res.name)}</b> — ${res.count} DOI.`,
     `<button class="linkbtn" data-list="${esc(res.name)}">⬇ Скачать эти статьи сейчас</button><button data-act="open-inbox">📂 Открыть папку inbox</button>`);
 }
@@ -1355,7 +1354,6 @@ document.addEventListener("click", async (e) => {
 
 // ===== v6.2: new topic, list archive, keyword hints, thanks to the author =====
 const HINT_DEFAULT = "Подберёт частые ключевые слова из статей по вашей теме (бесплатно, OpenAlex).";
-let savedVer = -1;
 
 async function resetSearch() {
   $("kw").value = "";
@@ -1379,26 +1377,17 @@ async function resetSearch() {
   await api("/api/search_clear");
 }
 $("btn-new-topic").onclick = async () => {
-  if (records.length && savedVer !== searchVer &&
-      !confirm("Найденное ещё не сохранено в список. Очистить всё и начать новую тему?")) return;
   await resetSearch();
   $("kw").focus();
 };
+// One press, no questions: stops the download and the databases, then clears.
 $("home-clear").onclick = async () => {
-  if (state && state.running) {
-    alert("Сейчас идёт скачивание. Откройте «Скачать статьи» и нажмите «Остановить», потом очистите.");
-    return;
-  }
-  const c = state ? counts() : { total: 0, pending: 0 };
-  let msg = "Начать с чистого листа?\n\nБудут очищены:\n• ключевые слова и найденное в поиске\n";
-  if (c.total) {
-    msg += `• очередь скачивания: ${c.total} ${plural(c.total, "статья", "статьи", "статей")}` +
-      (c.pending ? `, из них ещё не скачано ${c.pending}` : "") + "\n";
-  }
-  if (!confirm(msg + "\nСкачанные PDF и списки в папке inbox останутся.")) return;
+  $("home-clear").disabled = true;
+  $("home-msg").textContent = "🧹 Останавливаю и очищаю…";
   await resetSearch();
-  await api("/api/clear", { what: "all" });
-  $("home-msg").textContent = "🧹 Готово: поиск и очередь очищены. PDF и списки в inbox на месте.";
+  try { await api("/api/reset_all"); } catch (e) {}
+  $("home-clear").disabled = false;
+  $("home-msg").textContent = "🧹 Готово: всё остановлено, поиск и очередь очищены. PDF и списки в inbox на месте.";
   setTimeout(() => { $("home-msg").textContent = ""; }, 8000);
 };
 

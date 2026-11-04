@@ -175,18 +175,13 @@ with sync_playwright() as p:
 
     # v6.3: one button on the start screen clears the search and the queue
     page.click("#dlg-donate [data-close]")
-    page.click("#home-clear")                     # the saved list is still downloading
-    page.wait_for_timeout(500)
-    assert dialogs and "Остановить" in dialogs[-1], dialogs[-1:]
-    print("clear while downloading: asks to stop first")
-    page.click("#go-download")
-    if page.is_visible("#stop"):
-        page.click("#stop")
-        page.wait_for_selector("#stop", state="hidden", timeout=30000)
-    page.click("#btn-home")
-    page.click("#home-clear")
-    page.wait_for_function("document.getElementById('home-msg').textContent.includes('очищены')")
+    asked = len(dialogs)
+    page.click("#home-clear")          # the saved list is still downloading: one press stops and clears
+    page.wait_for_function("document.getElementById('home-msg').textContent.includes('очищены')", timeout=30000)
     page.wait_for_timeout(2000)
+    state = json.loads(page.evaluate("fetch('/api/state?v=-1', {headers: {'X-Token': TOKEN}}).then(r => r.text())"))
+    assert not state["running"] and state["total"] == 0, (state["running"], state["total"])
+    assert len(dialogs) == asked, dialogs[asked:]      # no questions on the way
     assert page.text_content("#home-note").strip() == "", page.text_content("#home-note")
     assert (B / "ArticleDownloader/inbox/_архив").is_dir()
     print("start-screen clear:", page.text_content("#home-msg"))

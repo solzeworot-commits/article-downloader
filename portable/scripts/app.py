@@ -990,6 +990,28 @@ def clear_search():
             S.export_since = time.time()
 
 
+def reset_all():
+    """«Очистить всё»: stop everything, then empty the queue and the search."""
+    stop_queue()
+    with S.lock:
+        warm = S.warm_proc
+    kill_job_tree(warm)
+    deadline = time.time() + 15
+    while time.time() < deadline:
+        with S.lock:
+            if not S.running and not S.warm["running"]:
+                break
+        time.sleep(0.2)
+    with S.lock:
+        S.items = [i for i in S.items if i["status"] == "running"]
+        S.notice = ""
+        if S.phase == "limit":
+            S.phase = "idle"
+        S.touch_items()
+    clear_search()
+    app_log("Everything cleared")
+
+
 def archive_list(name: str) -> str:
     """Move a list (and its _подробно table) to inbox\\_архив\\; nothing is deleted."""
     source = INBOX / Path(name).name
@@ -1353,6 +1375,10 @@ def handle_api(path: str, body: dict) -> dict:
             if os.environ.get("ARTICLE_UI_NO_WINDOW") != "1":
                 webbrowser.open(url)
         return {"url": url}
+
+    if path == "/api/reset_all":
+        reset_all()
+        return {}
 
     if path == "/api/search_clear":
         clear_search()
