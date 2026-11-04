@@ -1,0 +1,3 @@
+# Windows files: keep CRLF and the BOM exactly as committed, no conversion.
+*.bat -text
+portable/*.txt -text

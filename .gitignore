@@ -218,3 +218,16 @@ __marimo__/
 
 # Streamlit
 .streamlit/secrets.toml
+
+# --- article-downloader ---
+# Build output (tools/build_portable.py) and archives
+*.zip
+# Files the program writes when run straight from portable/
+portable/python/
+portable/pdf/
+portable/logs/
+portable/inbox/
+portable/settings.json
+portable/Отчёт.csv
+# Test bench copies
+bench/
