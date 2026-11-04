@@ -51,6 +51,9 @@ DOWNLOADER = SCRIPT_DIR / "article_downloader.py"
 UI_FILE = SCRIPT_DIR / "ui" / "index.html"
 ICON_FILE = SCRIPT_DIR / "icon.ico"
 KEY_IMG_DIR = SCRIPT_DIR / "ui" / "img" / "keys"
+# The author's details for "Поблагодарить автора"; without the file the
+# button is not shown.
+DONATE_FILE = SCRIPT_DIR / "donate.json"
 PYTHON_DIR = ROOT / "python"
 
 LOGS = ROOT / "logs"
@@ -978,6 +981,66 @@ def import_export(name: str, data: bytes) -> dict:
     return summary
 
 
+def clear_search():
+    """A new topic: forget the found records and the old export files."""
+    with S.lock:
+        S.search_records = []
+        S.search.update(error="", summary=None, progress={}, version=S.search["version"] + 1)
+        if S.export_since:
+            S.export_since = time.time()
+
+
+def archive_list(name: str) -> str:
+    """Move a list (and its _подробно table) to inbox\\_архив\\; nothing is deleted."""
+    source = INBOX / Path(name).name
+    if not source.is_file():
+        return ""
+    archive = INBOX / "_архив"
+    archive.mkdir(parents=True, exist_ok=True)
+    target = archive / source.name
+    if target.exists():
+        target = archive / f"{source.stem}_{time.strftime('%Y%m%d-%H%M%S')}{source.suffix}"
+    source.replace(target)
+    detail = INBOX / "_подробно" / (source.stem + ".csv")
+    if detail.is_file():
+        detail.replace(archive / (target.stem + "_подробно.csv"))
+    app_log(f"List archived: {source.name} -> {target.name}")
+    return target.name
+
+
+def load_donate() -> dict:
+    try:
+        data = json.loads(DONATE_FILE.read_text(encoding="utf-8"))
+    except (OSError, ValueError):
+        return {}
+    data["crypto"] = [c for c in data.get("crypto") or [] if c.get("address")]
+    if not (data.get("sbp") or {}).get("url"):
+        data.pop("sbp", None)
+    return data if data.get("crypto") or data.get("sbp") else {}
+
+
+def qr_svg(text: str) -> str:
+    """QR code of the text itself, drawn here, so it always matches the text."""
+    try:
+        import qrcode
+        import qrcode.image.svg
+        image = qrcode.make(text, image_factory=qrcode.image.svg.SvgPathImage,
+                            border=2, box_size=10)
+        return image.to_string(encoding="unicode")
+    except Exception as exc:
+        app_log(f"QR not drawn: {exc}")
+        return ""
+
+
+def donate_info() -> dict:
+    data = load_donate()
+    if data.get("sbp"):
+        data["sbp"]["qr"] = qr_svg(data["sbp"]["url"])
+    for item in data.get("crypto", []):
+        item["qr"] = qr_svg(item["address"])
+    return data
+
+
 def browser_search_url(source: str, query: str) -> str:
     if source == "scopus":
         return SCOPUS_RESULTS_URL + quote(query, safe="")
@@ -1088,6 +1151,7 @@ def public_state(known_version: int) -> dict:
             "key_checks": dict(S.key_checks),
             "exports": recent_exports(),
             "native_dialog": os.name == "nt",
+            "donate": bool(load_donate()),
         }
         data["keys"] = ds.keys_status(ds.load_keys())
         if known_version != S.items_version:
@@ -1233,6 +1297,10 @@ def handle_api(path: str, body: dict) -> dict:
             return {"error": "Файл не найден в папке inbox."}
         return queue_list_file(target)
 
+    if path == "/api/archive_list":
+        moved = archive_list(str(body.get("name") or ""))
+        return {"archived": moved} if moved else {"error": "Файл не найден в папке inbox."}
+
     if path == "/api/open_inbox":
         INBOX.mkdir(parents=True, exist_ok=True)
         open_path(INBOX)
@@ -1271,6 +1339,24 @@ def handle_api(path: str, body: dict) -> dict:
             return import_export(name, data)
         except ds.SearchError as exc:
             return {"error": exc.message}
+
+    if path == "/api/suggest_keywords":
+        try:
+            return ds.suggest_keywords(body.get("keywords") or "")
+        except ds.SearchError as exc:
+            return {"error": exc.message}
+
+    if path == "/api/open_donate_link":
+        url = (load_donate().get("sbp") or {}).get("url", "")
+        if url.startswith("https://"):
+            app_log("Donate link opened")
+            if os.environ.get("ARTICLE_UI_NO_WINDOW") != "1":
+                webbrowser.open(url)
+        return {"url": url}
+
+    if path == "/api/search_clear":
+        clear_search()
+        return {}
 
     if path == "/api/search_save":
         wanted = [d.lower() for d in body.get("dois") or []]
@@ -1387,6 +1473,8 @@ class Handler(BaseHTTPRequestHandler):
             except ValueError:
                 version = 0
             return self._json(public_state(version))
+        if url.path == "/api/donate":
+            return self._json(donate_info())
         if url.path == "/api/inbox":
             return self._json({"files": inbox_lists(), "inbox": str(INBOX)})
         if url.path == "/api/search_results":

@@ -1,0 +1,15 @@
+{
+  "message": "Если программа сэкономила вам время — можно поблагодарить автора. Любая сумма помогает развивать загрузчик. Спасибо!",
+  "sbp": {
+    "title": "Перевод по СБП (рубли)",
+    "url": "https://t.tb.ru/pm_short/d8dQbglacy",
+    "note": "Наведите камеру телефона на QR-код — откроется приложение банка. С компьютера нажмите «Открыть ссылку»."
+  },
+  "crypto": [
+    {"coin": "USDT", "network": "TRON (TRC20)", "address": "TNTAFkEHiiNaxifg3dA3BZF4pQNB2xrikG"},
+    {"coin": "USDT или SOL", "network": "Solana", "address": "CCTUFRHy9our2zmknPQ43x5WS2FTDqRbcPZj3LkoU1iC"},
+    {"coin": "BTC", "network": "Bitcoin", "address": "1HXtHW8Un113c8wBe9Co2PHqtKbr5P9gcn"},
+    {"coin": "ETH", "network": "Ethereum (ERC20)", "address": "0xf83115f530427b15cb71a014e6e15ccd527a3e08"},
+    {"coin": "TON", "network": "TON", "address": "UQDB5RWkFykhPQgFGFo7TWrypUvE5OqULnyb3O_lKyISVCeb"}
+  ]
+}

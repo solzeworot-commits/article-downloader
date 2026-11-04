@@ -97,6 +97,17 @@ class Handler(BaseHTTPRequestHandler):
                                         "hits": [wos_hit(i) for i in ids]},
                                   {"X-RateLimit-Remaining-Day": "48"})
 
+        if url.path == "/openalex" and "keywords" in q.get("select", ""):
+            # Keyword hints: keywords and topics of the most relevant works.
+            pool = ["Grape pomace", "Polyphenols", "Antioxidant activity", "Extraction",
+                    "Anthocyanins", "Wine by-products", "Dietary fiber"]
+            works = []
+            for i in range(int(q.get("per-page", 25))):
+                kws = [k for j, k in enumerate(pool) if (i + j) % (j + 2) == 0]
+                topics = [{"display_name": "Phenolic compounds in plants"}] if i % 3 == 0 else []
+                works.append({"keywords": [{"display_name": k, "score": 0.5} for k in kws], "topics": topics})
+            return self.send_json(200, {"meta": {"count": 1234}, "results": works})
+
         if url.path == "/openalex":
             start = 0 if q.get("cursor", "*") == "*" else int(q["cursor"][1:])
             per_page = int(q.get("per-page", 25))

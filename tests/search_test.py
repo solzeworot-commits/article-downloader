@@ -79,6 +79,21 @@ os.environ["ARTICLE_SCOPUS_URL"] = "http://127.0.0.1:9/scopus"     # nothing lis
 assert ds.check_key("scopus", GOOD)["kind"] == "network"
 os.environ["ARTICLE_SCOPUS_URL"] = "http://127.0.0.1:8011/scopus"
 
+# --- keyword hints (OpenAlex) ---------------------------------------------------
+hints = ds.suggest_keywords("grape pomace\n", {})
+terms = [h["term"] for h in hints["terms"]]
+assert hints["papers"] == 50 and hints["total"] == 1234, hints
+assert "Grape pomace" not in terms, terms                      # already typed
+counts = [h["count"] for h in hints["terms"]]
+assert counts == sorted(counts, reverse=True) and min(counts) >= 2, counts
+topic = next(h for h in hints["terms"] if h["term"] == "Phenolic compounds in plants")
+assert topic["kind"] == "topic" and topic["count"] == 17, topic
+try:
+    ds.suggest_keywords("  \n ")
+    raise AssertionError("empty hint request accepted")
+except ds.SearchError as exc:
+    assert exc.kind == "bad_query"
+
 # --- keys file -----------------------------------------------------------------
 keys = ds.save_keys({"scopus": " abcdefgh12345678 ", "wos": "wos-key-ABCD"})
 assert keys["scopus"] == "abcdefgh12345678" and ds.keys_status(keys)["scopus"] == "••••5678"

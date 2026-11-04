@@ -31,6 +31,7 @@ import time
 import urllib.error
 import urllib.request
 import zipfile
+from collections import Counter
 from datetime import date
 from pathlib import Path
 from urllib.parse import quote
@@ -421,6 +422,48 @@ def check_key(source: str, keys: dict) -> dict:
     message = f"Ключ работает ✓ ({SOURCE_TITLES[source]} отвечает"
     message += f", осталось запросов: {result['quota']})" if result["quota"] else ")"
     return {"ok": True, "kind": "ok", "message": message}
+
+
+def suggest_keywords(keywords, keys: dict | None = None, papers: int = 50, limit: int = 30) -> dict:
+    """
+    Free keyword hints: the keywords and topics OpenAlex assigned to the most
+    relevant papers for the words typed so far, most frequent first, without
+    the words already there. {"terms": [{"term", "count", "kind"}], "papers", "total"}.
+    """
+    terms = _terms(keywords)
+    if not terms:
+        raise SearchError("bad_query", "Введите хотя бы одно слово — подсказки строятся по нему.")
+    base = os.environ.get("ARTICLE_OPENALEX_URL") or OPENALEX_URL
+    url = f"{base}?per-page={papers}&search={quote(' '.join(terms))}&select=keywords,topics"
+    key = (keys or load_keys()).get("openalex")
+    if key:
+        url += "&api_key=" + quote(key)
+    data, _ = _get_json("openalex", url, {})
+    works = data.get("results") or []
+
+    have = {t.lower() for t in terms}
+    counts, shown, kinds = Counter(), {}, {}
+    for work in works:
+        seen = set()
+        for kind, items in (("keyword", work.get("keywords")), ("topic", work.get("topics"))):
+            for item in items or []:
+                name = re.sub(r"\s+", " ", str(item.get("display_name") or "")).strip()
+                low = name.lower()
+                if not name or low in have or low in seen:
+                    continue
+                seen.add(low)
+                counts[low] += 1
+                shown.setdefault(low, name)
+                kinds.setdefault(low, kind)
+
+    ranked = [k for k, n in counts.most_common() if n >= 2]
+    if len(ranked) < 10:
+        ranked += [k for k, n in counts.most_common() if n < 2][: 10 - len(ranked)]
+    return {
+        "terms": [{"term": shown[k], "count": counts[k], "kind": kinds[k]} for k in ranked[:limit]],
+        "papers": len(works),
+        "total": int((data.get("meta") or {}).get("count") or 0),
+    }
 
 
 def merge(record_lists: list[list[dict]]) -> list[dict]:

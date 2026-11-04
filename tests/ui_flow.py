@@ -111,6 +111,57 @@ with sync_playwright() as p:
 
     page.click("#btn-home")
     shot(page, "10_home_with_queue.png")
+
+    # v6.2: keyword hints
+    page.on("dialog", lambda d: d.accept())
+    page.click("#go-search")
+    page.click("#btn-hints")
+    page.wait_for_selector("#hints [data-hint]", timeout=15000)
+    first = page.get_attribute("#hints [data-hint]", "data-hint")
+    page.click("#hints [data-hint]")
+    assert first in page.input_value("#kw"), page.input_value("#kw")
+    print("hint added:", first, "| note:", page.text_content("#hints-note")[:80])
+    shot(page, "11_hints.png", full=False)
+
+    # v6.2: new topic clears the form and the found records
+    page.click("#btn-new-topic")
+    page.wait_for_timeout(1500)
+    assert page.input_value("#kw") == "" and page.is_hidden("#results-card"), "new topic did not clear"
+    print("new topic: cleared")
+
+    # v6.2: archive a list
+    page.click("#btn-home"); page.click("#go-download")
+    page.wait_for_selector("#lists [data-archive]")
+    name = page.get_attribute("#lists [data-archive]", "data-archive")
+    page.click("#lists [data-archive]")
+    page.wait_for_function("document.getElementById('choose-note').textContent.includes('архив')")
+    archived = list((B / "ArticleDownloader/inbox/_архив").glob("*.txt"))
+    assert archived and name not in page.text_content("#lists"), (archived, name)
+    print("archived:", [a.name for a in archived])
+
+    # v6.2: thanks to the author
+    page.click("#btn-home")
+    page.click("#home-donate")
+    page.wait_for_selector("#donate-body .donate-card .qr svg")
+    page.wait_for_timeout(800)
+    page.locator("#dlg-donate").screenshot(path=str(SH / "12_donate.png"))
+    print("shot 12_donate.png")
+    donate = json.loads((B / "ArticleDownloader/scripts/donate.json").read_text(encoding="utf-8"))
+    expected = [donate["sbp"]["url"]] + [c["address"] for c in donate["crypto"]]
+    try:
+        import cv2
+    except ImportError:
+        cv2 = None
+    if cv2:
+        decoded = []
+        for i, qr in enumerate(page.locator("#donate-body .qr").all()):
+            path = SH / f"qr_{i}.png"
+            qr.screenshot(path=str(path))
+            img = cv2.imread(str(path))
+            img = cv2.resize(img, None, fx=3, fy=3, interpolation=cv2.INTER_NEAREST)
+            decoded.append(cv2.QRCodeDetector().detectAndDecode(img)[0])
+        assert decoded == expected, (decoded, expected)
+        print("QR codes read back:", len(decoded), "match donate.json")
     assert not errors, errors
     br.close()
     print("ui flow: OK")

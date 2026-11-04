@@ -221,6 +221,23 @@
   .note.blue { background: var(--blue-soft); border-color: #93c5fd; }
   .note.red { background: var(--red-soft); border-color: #fca5a5; }
 
+  /* v6.2: keyword hints, thanks to the author */
+  .hints { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 8px; }
+  .hint { padding: 4px 11px; border-radius: 99px; font-size: 13px; background: var(--grey-soft); }
+  .hint small { color: var(--muted); }
+  .hint.on { background: var(--green-soft); border-color: #86efac; }
+  .hint.on::before { content: "✓ "; color: var(--green); }
+  .dn-msg { margin-top: 0; font-size: 16px; }
+  .dn-h { margin: 16px 0 8px; font-size: 16px; }
+  .donate-sbp { display: flex; gap: 18px; align-items: center; flex-wrap: wrap; }
+  .qr svg { width: 170px; height: 170px; display: block; background: #fff; }
+  .donate-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(230px, 1fr)); gap: 12px; }
+  .donate-card { border: 1px solid var(--line); border-radius: 12px; padding: 12px; display: flex; flex-direction: column; align-items: center; gap: 6px; text-align: center; }
+  .donate-card .coin { font-weight: 700; font-size: 16px; }
+  .donate-card .net { color: var(--amber); font-size: 13px; font-weight: 600; }
+  .donate-card .addr { font: 12px Consolas, "Cascadia Mono", monospace; word-break: break-all; }
+  #home-donate { color: #be123c; }
+
   @media (max-width: 640px) {
     .home-buttons { grid-template-columns: 1fr; }
     .big-choice { min-height: 180px; }
@@ -255,6 +272,7 @@
       <button id="home-keys">🔑 Ключи API для Scopus и Web of Science</button>
       <button id="home-inbox">📂 Папка inbox</button>
       <button id="home-pdf">📂 Папка с PDF</button>
+      <button id="home-donate" hidden>❤ Поблагодарить автора</button>
     </div>
   </section>
 
@@ -335,11 +353,15 @@ https://link.springer.com/article/10.1007/s12393-026-09447-8
   <section id="view-search" class="view" hidden>
     <div id="keys-note"></div>
     <div class="card">
-      <h2><span>1. Ключевые слова</span><small>каждое слово или фраза — с новой строки; лучше по-английски</small></h2>
+      <h2><span>1. Ключевые слова</span><small>каждое слово или фраза — с новой строки; лучше по-английски</small>
+        <span class="grow"></span><button id="btn-new-topic" title="Очистить слова, запросы и найденное">🧹 Новая тема</button></h2>
       <textarea id="kw" spellcheck="false" style="min-height: 110px" placeholder="Например:
 grape pomace
 polyphenols
 extraction"></textarea>
+      <div class="acts"><button id="btn-hints">💡 Подсказать слова</button>
+        <span class="recognized" id="hints-note">Подберёт частые ключевые слова из статей по вашей теме (бесплатно, OpenAlex).</span></div>
+      <div class="hints" id="hints"></div>
       <div class="form-grid">
         <label class="f">Как сочетать слова
           <select id="f-match"><option value="all">все слова сразу (И)</option><option value="any">любое из слов (ИЛИ)</option></select></label>
@@ -431,6 +453,11 @@ extraction"></textarea>
 <dialog id="dlg-log">
   <div class="head"><h3 id="log-title">Журнал</h3><button data-close>✕</button></div>
   <div class="body"><pre id="log-text"></pre></div>
+</dialog>
+
+<dialog id="dlg-donate" style="width: min(940px, calc(100vw - 32px))">
+  <div class="head"><h3>❤ Поблагодарить автора</h3><button data-close>✕</button></div>
+  <div class="body" id="donate-body"></div>
 </dialog>
 
 <dialog id="dlg-settings">
@@ -617,7 +644,7 @@ function render() {
   } else if (c.total && !c.pending && !c.running) {
     let msg = `<b>Готово.</b> Скачано ${c.success} из ${c.total}.`;
     if (c.no_access) msg += ` Нет доступа: ${c.no_access}. Возможно, нужно войти через организацию (кнопка «🏛 Вход через организацию»), потом нажмите «Повторить неудачные».`;
-    setBanner("green", "✅", msg);
+    setBanner("green", "✅", msg, s.donate && c.success ? '<button data-act="donate">❤ Поблагодарить автора</button>' : "");
   } else if (c.pending && !s.running) {
     setBanner("grey", "⏸", `В очереди ${c.pending} ${plural(c.pending, "статья", "статьи", "статей")}. Нажмите «Скачать статьи», чтобы продолжить.`);
   } else {
@@ -903,6 +930,7 @@ function renderExtra() {
     home.innerHTML = "";
   }
   $("btn-choose").hidden = !s.native_dialog;
+  $("home-donate").hidden = !s.donate;
   renderKeysNote();
   renderSources();
   renderSearchProgress();
@@ -931,7 +959,8 @@ function renderLists(files) {
     let status = [f.done ? `скачано ${f.done} из ${f.count}` : "", f.queued ? `в очереди ${f.queued}` : ""].filter(Boolean).join(" · ");
     if (f.count && f.done >= f.count) status = "✅ всё скачано";
     return `<tr><td class="query"><b>${esc(f.name)}</b></td><td>${esc(f.modified)}</td><td>${f.count} DOI</td>` +
-      `<td>${status || "ещё не скачивался"}</td><td class="act"><button class="linkbtn" data-list="${esc(f.name)}" ${f.count ? "" : "disabled"}>⬇ Скачать</button></td></tr>`;
+      `<td>${status || "ещё не скачивался"}</td><td class="act"><button class="linkbtn" data-list="${esc(f.name)}" ${f.count ? "" : "disabled"}>⬇ Скачать</button> ` +
+      `<button data-archive="${esc(f.name)}" title="Убрать список в архив (inbox\\_архив)">🗑</button></td></tr>`;
   });
   $("lists").innerHTML = `<table><thead><tr><th>Файл</th><th>Изменён</th><th>Сколько</th><th>Состояние</th><th></th></tr></thead><tbody>${rows.join("")}</tbody></table>`;
 }
@@ -1113,6 +1142,7 @@ async function saveList() {
   const dois = records.filter((r) => selected.has(r.doi)).map((r) => r.doi);
   const res = await api("/api/search_save", { dois, slug: $("save-name").value });
   if (res.error) { note($("save-note"), "red", "✖", esc(res.error)); return; }
+  savedVer = searchVer;
   note($("save-note"), "green", "✅", `Сохранено: <b>inbox\\${esc(res.name)}</b> — ${res.count} DOI.`,
     `<button class="linkbtn" data-list="${esc(res.name)}">⬇ Скачать эти статьи сейчас</button><button data-act="open-inbox">📂 Открыть папку inbox</button>`);
 }
@@ -1310,6 +1340,113 @@ document.addEventListener("click", async (e) => {
   }
   show(location.hash.slice(1) || "home");
 })();
+
+// ===== v6.2: new topic, list archive, keyword hints, thanks to the author =====
+const HINT_DEFAULT = "Подберёт частые ключевые слова из статей по вашей теме (бесплатно, OpenAlex).";
+let savedVer = -1;
+
+$("btn-new-topic").onclick = async () => {
+  if (records.length && savedVer !== searchVer &&
+      !confirm("Найденное ещё не сохранено в список. Очистить всё и начать новую тему?")) return;
+  $("kw").value = "";
+  $("f-match").value = "all";
+  $("f-field").value = "tak";
+  $("f-from").value = "";
+  $("f-to").value = "";
+  $("f-type").value = "both";
+  $("f-max").value = 200;
+  try { localStorage.removeItem("ad_search"); } catch (e) {}
+  qDirty = { scopus: false, wos: false };
+  $("q-scopus").value = "";
+  $("q-wos").value = "";
+  searchMsg = "";
+  records = [];
+  selected = new Set();
+  for (const id of ["save-note", "b-note", "search-progress", "hints"]) $(id).innerHTML = "";
+  $("hints-note").textContent = HINT_DEFAULT;
+  delete $("save-name").dataset.touched;
+  $("results-card").hidden = true;
+  await api("/api/search_clear");
+  $("kw").focus();
+};
+
+async function archiveList(name) {
+  if (!confirm(`Убрать список «${name}» в архив (папка inbox\\_архив)?\nФайл не удаляется, его можно вернуть.`)) return;
+  const res = await api("/api/archive_list", { name });
+  $("choose-note").innerHTML = res.error ? `<span style="color: var(--red)">${esc(res.error)}</span>`
+    : `🗑 Список <b>${esc(name)}</b> убран в архив <b>inbox\\_архив</b>.`;
+  loadLists();
+}
+
+function kwLines() { return $("kw").value.split("\n").map((x) => x.trim()).filter(Boolean); }
+function markHints() {
+  const have = new Set(kwLines().map((x) => x.toLowerCase()));
+  document.querySelectorAll("#hints [data-hint]").forEach((b) => b.classList.toggle("on", have.has(b.dataset.hint.toLowerCase())));
+}
+function toggleHint(term) {
+  const lines = kwLines(), i = lines.findIndex((x) => x.toLowerCase() === term.toLowerCase());
+  if (i >= 0) lines.splice(i, 1); else lines.push(term);
+  $("kw").value = lines.join("\n") + "\n";
+  $("kw").dispatchEvent(new Event("input"));
+}
+$("kw").addEventListener("input", markHints);
+$("btn-hints").onclick = async () => {
+  if (!$("kw").value.trim()) { $("hints-note").textContent = "Сначала впишите хотя бы одно слово темы (лучше по-английски)."; return; }
+  $("btn-hints").disabled = true;
+  $("hints").innerHTML = "";
+  $("hints-note").textContent = "Смотрю самые подходящие статьи в OpenAlex…";
+  try {
+    const res = await api("/api/suggest_keywords", { keywords: $("kw").value });
+    if (res.error) {
+      $("hints-note").innerHTML = `<span style="color: var(--red)">${esc(res.error)}</span>`;
+    } else if (!res.terms.length) {
+      $("hints-note").textContent = "Подсказок не нашлось — попробуйте другие слова.";
+    } else {
+      $("hints-note").textContent = `Частые ключевые слова в ${res.papers} самых подходящих статьях (всего по теме ${res.total}). ` +
+        "Нажмите на слово, чтобы добавить или убрать его. Добавляете синонимы — выберите «любое из слов (ИЛИ)».";
+      $("hints").innerHTML = res.terms.map((h) => `<button class="hint" data-hint="${esc(h.term)}" ` +
+        `title="${h.kind === "topic" ? "тема" : "ключевое слово"} — встречается в ${h.count} статьях">${esc(h.term)} <small>${h.count}</small></button>`).join("");
+      markHints();
+    }
+  } catch (e) {
+    $("hints-note").textContent = "Подсказки не загрузились: " + e.message;
+  }
+  $("btn-hints").disabled = false;
+};
+
+async function openDonate() {
+  $("donate-body").textContent = "Загружаю…";
+  $("dlg-donate").showModal();
+  try {
+    const r = await fetch("/api/donate", { headers: { "X-Token": TOKEN } });
+    const d = await r.json();
+    let html = d.message ? `<p class="dn-msg">${esc(d.message)}</p>` : "";
+    if (d.sbp) {
+      html += `<h4 class="dn-h">${esc(d.sbp.title || "Перевод по СБП")}</h4><div class="donate-sbp"><div class="qr">${d.sbp.qr || ""}</div>` +
+        `<div><div>${esc(d.sbp.note || "")}</div><div class="acts"><button class="linkbtn" data-act="donate-link">Открыть ссылку</button>` +
+        `<button data-copytext="${esc(d.sbp.url)}">📋 Скопировать ссылку</button></div></div></div>`;
+    }
+    if (d.crypto && d.crypto.length) {
+      html += '<h4 class="dn-h">Криптовалюта</h4><div class="recognized" style="margin-bottom: 10px">⚠ Отправляйте монету только в указанной сети: ' +
+        "перевод в другой сети пропадёт.</div><div class=\"donate-grid\">" +
+        d.crypto.map((c) => `<div class="donate-card"><div class="coin">${esc(c.coin)}</div><div class="net">сеть ${esc(c.network)}</div>` +
+          `<div class="qr">${c.qr || ""}</div><div class="addr">${esc(c.address)}</div>` +
+          `<button data-copytext="${esc(c.address)}">📋 Скопировать адрес</button></div>`).join("") + "</div>";
+    }
+    $("donate-body").innerHTML = html || "Реквизиты не настроены.";
+  } catch (e) {
+    $("donate-body").textContent = "Не загрузилось: " + e.message;
+  }
+}
+$("home-donate").onclick = openDonate;
+document.addEventListener("click", (e) => {
+  const t = e.target.closest("button");
+  if (!t) return;
+  if (t.dataset.archive) archiveList(t.dataset.archive);
+  if (t.dataset.hint) toggleHint(t.dataset.hint);
+  if (t.dataset.act === "donate") openDonate();
+  if (t.dataset.act === "donate-link") api("/api/open_donate_link");
+});
 
 fetch("/api/state?v=0", { headers: { "X-Token": TOKEN } }).then((r) => r.json()).then((s) => {
   $("title-mode").checked = !!s.settings.title_for_plain_lines;

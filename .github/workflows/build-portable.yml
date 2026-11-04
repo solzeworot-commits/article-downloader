@@ -45,6 +45,8 @@ jobs:
           if ($LASTEXITCODE) { throw "parse_test" }
           & $py -E -s -X utf8 tests\search_test.py (Join-Path $app "scripts")
           if ($LASTEXITCODE) { throw "search_test" }
+          & $py -E -s -X utf8 tests\donate_test.py (Join-Path $app "scripts")
+          if ($LASTEXITCODE) { throw "donate_test: адрес или ссылка для донатов не прошли проверку" }
           "APP=$app" | Out-File -Append -Encoding utf8 $env:GITHUB_ENV
 
       - name: Запустить программу через «СКАЧАТЬ СТАТЬИ.bat»
