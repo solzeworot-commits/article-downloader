@@ -85,6 +85,49 @@ with sync_playwright() as p:
     print("saved:", page.text_content("#save-note"))
     shot(page, "6_saved.png", full=False)
 
+    # v7.0: screening by abstracts, straight from the saved list
+    page.click("#save-note button[data-review]")
+    page.wait_for_selector("#rv-body .rv-abstract")
+    page.wait_for_function("!document.querySelector('#rv-body .rv-abstract').textContent.includes('Загружаю')", timeout=30000)
+    assert "<mark>" in page.inner_html("#rv-body .rv-abstract"), "search words are not highlighted"
+    for key in ("1", "1", "3"):
+        page.keyboard.press(key)
+        page.wait_for_timeout(300)
+    page.click("[data-reason='не по теме']")
+    page.wait_for_timeout(300)
+    page.keyboard.press("2")
+    page.wait_for_timeout(600)
+    counts = page.text_content("#rv-counts")
+    assert ("отобрано 5" in counts and "подходит: 2" in counts and "под вопросом: 1" in counts
+            and "не подходит: 2" in counts), counts
+    print("screening:", counts)
+    shot(page, "14_review.png", full=False)
+    page.click("#rv-save")
+    page.wait_for_selector("#rv-saved .note.green")
+    print("selected list:", page.text_content("#rv-saved")[:80])
+
+    # v7.0: reference list and PRISMA for the selected articles
+    page.click("#rv-saved button[data-biblio]")
+    page.wait_for_selector("#bb-entries li")
+    page.wait_for_timeout(800)
+    assert page.locator("#bb-entries li").count() == 2, page.text_content("#bb-entries")
+    print("GOST:", page.locator("#bb-entries li").first.text_content()[:120])
+    prisma = page.text_content("#prisma")
+    assert "Найдено записей: 130" in prisma and "повторы — 8" in prisma and "Включено в обзор: 2" in prisma, prisma
+    for button in ("#bb-save-txt", "#bb-save-ris", "#bb-save-bib"):
+        page.click(button)
+        page.wait_for_timeout(500)
+    files = sorted(x.name for x in (B / "ArticleDownloader/Список литературы").iterdir())
+    assert len(files) == 3, files
+    print("reference files:", files)
+    shot(page, "15_biblio.png")
+    with page.expect_download() as download:
+        page.click("#pr-png")
+    download.value.save_as(str(SH / "16_prisma.png"))
+    print("PRISMA picture:", download.value.suggested_filename, (SH / "16_prisma.png").stat().st_size, "bytes")
+    page.click("#btn-home")
+    page.click("#go-search")
+
     # Straight to downloading that list
     page.click("#save-note button[data-list]")
     page.wait_for_selector("#lists table")

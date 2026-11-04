@@ -97,6 +97,32 @@ class Handler(BaseHTTPRequestHandler):
                                         "hits": [wos_hit(i) for i in ids]},
                                   {"X-RateLimit-Remaining-Day": "48"})
 
+        if url.path == "/openalex" and "abstract_inverted_index" in q.get("select", ""):
+            # Lookup by DOI for screening: every DOI ending in ".7" is unknown.
+            dois = q.get("filter", "")[len("doi:"):].split("|")
+            works = []
+            for doi in dois:
+                if doi.endswith(".7"):
+                    continue
+                words = f"This study examines {doi} grape pomace polyphenols extraction yield".split()
+                works.append({
+                    "doi": "https://doi.org/" + doi, "display_name": f"Paper about {doi}",
+                    "publication_year": 2021, "language": "en",
+                    "authorships": [{"author": {"display_name": n}} for n in ("Anna Petrova", "John Smith")],
+                    "biblio": {"volume": "12", "issue": "3", "first_page": "45", "last_page": "56"},
+                    "primary_location": {"source": {"display_name": "Food Chemistry"}},
+                    "abstract_inverted_index": {w: [i] for i, w in enumerate(words)},
+                })
+            return self.send_json(200, {"meta": {"count": len(works)}, "results": works})
+
+        if url.path == "/crossref":
+            dois = [f[len("doi:"):] for f in q.get("filter", "").split(",") if f.startswith("doi:")]
+            items = [{"DOI": d.upper(), "title": [f"Paper about {d}"], "container-title": ["Food Chemistry"],
+                      "volume": "12", "issue": "3", "page": "45-56", "issued": {"date-parts": [[2021, 5]]},
+                      "author": [{"family": "Petrova", "given": "Anna"}, {"family": "Smith", "given": "John A."}]}
+                     for d in dois if not d.endswith(".7")]
+            return self.send_json(200, {"status": "ok", "message": {"items": items}})
+
         if url.path == "/openalex" and "keywords" in q.get("select", ""):
             # Keyword hints: keywords and topics of the most relevant works.
             pool = ["Grape pomace", "Polyphenols", "Antioxidant activity", "Extraction",

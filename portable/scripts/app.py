@@ -43,6 +43,7 @@ from urllib.parse import parse_qs, quote, unquote, urlparse
 import urllib.request
 
 import doi_search as ds
+import review as rv
 
 
 SCRIPT_DIR = Path(__file__).resolve().parent
@@ -63,6 +64,7 @@ QUEUE_PATH = LOGS / "queue.json"
 TOKEN_PATH = LOGS / ".ui_token"
 APP_LOG = LOGS / "app.log"
 REPORT_PATH = ROOT / "Отчёт.csv"
+BIBLIO_DIR = ROOT / "Список литературы"
 
 UI_PORT = 17865
 NO_WINDOW = getattr(subprocess, "CREATE_NO_WINDOW", 0)
@@ -384,6 +386,8 @@ class State:
         self.key_checks: dict[str, dict] = {}
         self.list_cache: dict[str, tuple] = {}
         self.last_list = ""
+        self.reviews: dict[str, dict] = {}       # list file name -> review (rv)
+        self.review_jobs: dict[str, dict] = {}   # list file name -> lookup progress
 
         self.browser = {}
         self.first_run = False
@@ -1023,9 +1027,13 @@ def archive_list(name: str) -> str:
     if target.exists():
         target = archive / f"{source.stem}_{time.strftime('%Y%m%d-%H%M%S')}{source.suffix}"
     source.replace(target)
-    detail = INBOX / "_подробно" / (source.stem + ".csv")
-    if detail.is_file():
-        detail.replace(archive / (target.stem + "_подробно.csv"))
+    for extra, suffix in ((INBOX / "_подробно" / (source.stem + ".csv"), "_подробно.csv"),
+                          (rv.meta_path(INBOX, source.name), "_подробно.meta.json"),
+                          (rv.review_path(INBOX, source.name), "_отбор.json")):
+        if extra.is_file():
+            extra.replace(archive / (target.stem + suffix))
+    with S.lock:
+        S.reviews.pop(source.name, None)
     app_log(f"List archived: {source.name} -> {target.name}")
     return target.name
 
@@ -1061,6 +1069,172 @@ def donate_info() -> dict:
     for item in data.get("crypto", []):
         item["qr"] = qr_svg(item["address"])
     return data
+
+
+# ---------------------------------------------------------------------------
+# literature review: screening, reference list, PRISMA (review.py)
+# ---------------------------------------------------------------------------
+
+def list_dois(path: Path) -> list[str]:
+    seen, out = set(), []
+    for entry in _list_entries(path):
+        doi = ds.normalize_doi(entry)
+        if doi and doi not in seen:
+            seen.add(doi)
+            out.append(doi)
+    return out
+
+
+def get_review(list_name: str) -> dict:
+    name = Path(str(list_name or "")).name
+    path = INBOX / name
+    with S.lock:
+        data = S.reviews.get(name)
+        if data is None:
+            if not name or not path.is_file():
+                raise FileNotFoundError(name)
+            data = rv.load_review(INBOX, name, list_dois(path))
+            S.reviews[name] = data
+        return data
+
+
+def start_lookup(list_name: str):
+    """Fetch abstracts and bibliographic data for the DOIs that have none yet."""
+    data = get_review(list_name)
+    name = data["list"]
+    with S.lock:
+        job = S.review_jobs.get(name)
+        if job and job["running"]:
+            return
+        todo = [d for d in data["order"] if data["records"][d].get("found") is None]
+        job = {"running": bool(todo), "done": len(data["order"]) - len(todo),
+               "total": len(data["order"]), "error": ""}
+        S.review_jobs[name] = job
+    if not todo:
+        return
+
+    def run():
+        keys = ds.load_keys()
+        try:
+            for chunk in rv._chunks(todo, 50):
+                meta, error = rv.enrich(chunk, keys)
+                with S.lock:
+                    for doi, found in meta.items():
+                        # A service that did not answer is asked again next time.
+                        if found["found"] or not error:
+                            data["records"][doi].update(found)
+                    job["done"] += len(chunk)
+                    job["error"] = error
+                    rv.save_review(INBOX, data)
+        except Exception as exc:
+            app_log(f"Lookup error: {exc}\n{traceback.format_exc()}")
+            with S.lock:
+                job["error"] = f"Данные о статьях не загрузились: {exc}"
+        finally:
+            with S.lock:
+                job["running"] = False
+
+    threading.Thread(target=run, daemon=True).start()
+
+
+def review_prisma(name: str) -> dict:
+    """PRISMA numbers; a list of selected articles counts from its parent list."""
+    meta = rv.load_meta(INBOX, name)
+    parent = meta.get("parent")
+    if parent and (INBOX / parent).is_file():
+        name, meta = parent, rv.load_meta(INBOX, parent)
+    data = get_review(name)
+    with S.lock:
+        downloaded = {i["query"].lower() for i in S.items if i["status"] == "success"}
+        return rv.prisma(data, meta, downloaded) | {"list": name}
+
+
+def review_state(name: str) -> dict:
+    data = get_review(name)
+    meta = rv.load_meta(INBOX, data["list"])
+    prisma = review_prisma(data["list"])
+    with S.lock:
+        return {
+            "list": data["list"],
+            "records": [data["records"][d] for d in data["order"]],
+            "job": dict(S.review_jobs.get(data["list"]) or {}),
+            "prisma": prisma,
+            "keywords": meta.get("keywords") or [],
+        }
+
+
+def save_selected(name: str, with_maybe: bool) -> dict:
+    data = get_review(name)
+    keep = ("include", "maybe") if with_maybe else ("include",)
+    with S.lock:
+        dois = [d for d in data["order"] if data["records"][d].get("decision") in keep]
+        records = [{"doi": d, "title": data["records"][d].get("title", ""),
+                    "year": data["records"][d].get("year", ""),
+                    "journal": data["records"][d].get("journal", ""), "sources": []} for d in dois]
+    if not dois:
+        return {"error": "Пока ни одна статья не отмечена «✓ Подходит»."}
+    stem = Path(name).stem
+    saved = ds.save_list(INBOX, f"{stem}_отобранные", records, dated=False)
+    # The new list keeps the found data and the decisions, and counts PRISMA
+    # from the original list.
+    child = rv.load_review(INBOX, saved.name, dois)
+    with S.lock:
+        for d in dois:
+            child["records"][d] = dict(data["records"][d])
+    rv.save_review(INBOX, child)
+    rv.save_meta(INBOX, saved.name, {"parent": name, "created": time.strftime("%Y-%m-%d %H:%M")})
+    app_log(f"Selected list {saved.name}: {len(dois)} DOI from {name}")
+    return {"name": saved.name, "count": len(dois)}
+
+
+BIBLIO_SCOPES = {"included": ("include",), "included_maybe": ("include", "maybe"), "all": None}
+
+
+def biblio_records(name: str, scope: str) -> list[dict]:
+    data = get_review(name)
+    keep = BIBLIO_SCOPES.get(scope, ("include",))
+    with S.lock:
+        return [dict(data["records"][d]) for d in data["order"]
+                if keep is None or data["records"][d].get("decision") in keep]
+
+
+def save_biblio(name: str, scope: str, alphabetical: bool, fmt: str) -> Path:
+    records = biblio_records(name, scope)
+    BIBLIO_DIR.mkdir(parents=True, exist_ok=True)
+    suffix = {"included": "", "included_maybe": "_с_вопросами", "all": "_все"}.get(scope, "")
+    stem = Path(name).stem + suffix
+    if fmt == "ris":
+        path = BIBLIO_DIR / f"{stem}.ris"
+        path.write_text(rv.to_ris(records), encoding="utf-8")
+    elif fmt == "bib":
+        path = BIBLIO_DIR / f"{stem}.bib"
+        path.write_text(rv.to_bibtex(records), encoding="utf-8")
+    else:
+        path = BIBLIO_DIR / f"{stem} (ГОСТ).txt"
+        entries = rv.gost_list(records, alphabetical)
+        text = "\r\n".join(f"{n}. {e}" for n, e in enumerate(entries, 1)) + "\r\n"
+        path.write_bytes(b"\xef\xbb\xbf" + text.encode("utf-8"))
+    app_log(f"Reference list saved: {path.name}")
+    return path
+
+
+def search_meta(body: dict, saved: list[dict]) -> dict:
+    """What the PRISMA scheme needs to know about where a saved list came from."""
+    with S.lock:
+        summary = dict(S.search.get("summary") or {})
+        unique = len(S.search_records)
+    meta = {"created": time.strftime("%Y-%m-%d %H:%M"),
+            "keywords": [k.strip() for k in str(body.get("keywords") or "").splitlines() if k.strip()],
+            "unique": unique, "saved": len(saved), "deselected": max(0, unique - len(saved))}
+    if summary.get("from") == "api":
+        ok = {k: v for k, v in (summary.get("per_source") or {}).items() if v.get("ok")}
+        meta["per_source"] = {ds.SOURCE_TITLES.get(k, k): v["taken"] for k, v in ok.items()}
+        meta["no_doi"] = int(summary.get("no_doi") or 0)
+        meta["duplicates"] = max(0, sum(v["with_doi"] for v in ok.values()) - unique)
+    elif summary.get("from") == "export":
+        meta["per_source"] = {"Экспорт с сайта": int(summary.get("count") or 0) + int(summary.get("no_doi") or 0)}
+        meta["no_doi"] = int(summary.get("no_doi") or 0)
+    return meta
 
 
 def browser_search_url(source: str, query: str) -> str:
@@ -1275,6 +1449,9 @@ def handle_api(path: str, body: dict) -> dict:
             open_path(pdf_dir())
         elif what == "report" and REPORT_PATH.exists():
             open_path(REPORT_PATH)
+        elif what == "biblio_dir":
+            BIBLIO_DIR.mkdir(parents=True, exist_ok=True)
+            open_path(BIBLIO_DIR)
         elif what == "file":
             item = S.item(body.get("id"))
             if item and item.get("file") and Path(item["file"]).exists():
@@ -1318,6 +1495,63 @@ def handle_api(path: str, body: dict) -> dict:
         if not name or not target.is_file():
             return {"error": "Файл не найден в папке inbox."}
         return queue_list_file(target)
+
+    # -- literature review ----------------------------------------------------
+    if path == "/api/review_open":
+        try:
+            start_lookup(body.get("list"))
+        except FileNotFoundError:
+            return {"error": "Список не найден в папке inbox."}
+        return {}
+
+    if path == "/api/review_decide":
+        try:
+            data = get_review(body.get("list"))
+        except FileNotFoundError:
+            return {"error": "Список не найден в папке inbox."}
+        decision = body.get("decision") or ""
+        if decision not in rv.DECISIONS + ("",):
+            return {"error": "Неизвестное решение."}
+        with S.lock:
+            rec = data["records"].get(ds.normalize_doi(body.get("doi")))
+            if rec is None:
+                return {"error": "Статьи нет в списке."}
+            rec["decision"] = decision
+            rec["reason"] = str(body.get("reason") or "")[:120] if decision == "exclude" else ""
+            rv.save_review(INBOX, data)
+        return {}
+
+    if path == "/api/review_save_selected":
+        try:
+            return save_selected(body.get("list"), bool(body.get("with_maybe")))
+        except FileNotFoundError:
+            return {"error": "Список не найден в папке inbox."}
+
+    if path == "/api/biblio":
+        try:
+            records = biblio_records(body.get("list"), body.get("scope") or "included")
+        except FileNotFoundError:
+            return {"error": "Список не найден в папке inbox."}
+        return {"entries": rv.gost_list(records, body.get("order") != "list"),
+                "count": len(records),
+                "missing": sum(1 for r in records if not r.get("found"))}
+
+    if path == "/api/biblio_save":
+        try:
+            saved = save_biblio(body.get("list"), body.get("scope") or "included",
+                                body.get("order") != "list", body.get("format") or "txt")
+        except FileNotFoundError:
+            return {"error": "Список не найден в папке inbox."}
+        return {"name": saved.name, "folder": str(BIBLIO_DIR)}
+
+    if path == "/api/open_doi":
+        doi = ds.normalize_doi(body.get("doi"))
+        if doi:
+            url = "https://doi.org/" + quote(doi, safe="/:;()[]<>")
+            if os.environ.get("ARTICLE_UI_NO_WINDOW") != "1":
+                webbrowser.open(url)
+            return {"url": url}
+        return {"error": "Это не DOI."}
 
     if path == "/api/archive_list":
         moved = archive_list(str(body.get("name") or ""))
@@ -1392,6 +1626,7 @@ def handle_api(path: str, body: dict) -> dict:
         if not records:
             return {"error": "Не выбрано ни одной статьи."}
         saved = ds.save_list(INBOX, str(body.get("slug") or "список"), records)
+        rv.save_meta(INBOX, saved.name, search_meta(body, records))
         app_log(f"Saved list {saved.name}: {len(records)} DOI")
         return {"name": saved.name, "count": len(records)}
 
@@ -1501,6 +1736,11 @@ class Handler(BaseHTTPRequestHandler):
             return self._json(public_state(version))
         if url.path == "/api/donate":
             return self._json(donate_info())
+        if url.path == "/api/review":
+            try:
+                return self._json(review_state((query.get("list") or [""])[0]))
+            except FileNotFoundError:
+                return self._json({"error": "Список не найден в папке inbox."})
         if url.path == "/api/inbox":
             return self._json({"files": inbox_lists(), "inbox": str(INBOX)})
         if url.path == "/api/search_results":

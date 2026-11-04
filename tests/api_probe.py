@@ -16,3 +16,9 @@ result = ds.run_search({"keywords": "grape pomace\npolyphenols", "max_results": 
 print("OpenAlex:", result["per_source"], [r["doi"] for r in result["records"]])
 hints = ds.suggest_keywords("grape pomace\npolyphenols", {})
 print("OpenAlex hints:", hints["papers"], "papers,", [(h["term"], h["count"]) for h in hints["terms"][:10]])
+
+import review as rv  # noqa: E402
+meta, error = rv.enrich(["10.3390/foods9111627", "10.1016/s0308-8146(98)00245-3"], {})
+print("Lookup error:", error or "-")
+for doi, m in meta.items():
+    print("GOST:", rv.gost(dict(m, doi=doi)), "| abstract:", len(m["abstract"]), "chars")
