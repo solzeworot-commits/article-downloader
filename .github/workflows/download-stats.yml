@@ -1,0 +1,27 @@
+# Every hour: the download counters of the "portable-latest" release go into
+# the "download-stats" release page, where they add up across rebuilds
+# (tools/download_stats.py). A few seconds on Linux, no build.
+name: Статистика скачиваний
+
+on:
+  schedule:
+    - cron: "17 * * * *"
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+concurrency:
+  group: download-stats
+
+jobs:
+  stats:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          sparse-checkout: tools
+      - name: Обновить страницу статистики
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: python3 tools/download_stats.py

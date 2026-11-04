@@ -61,12 +61,16 @@ jobs:
           if ($LASTEXITCODE) { throw "support_test" }
           & $py -E -s -X utf8 tests\i18n_test.py (Join-Path $app "scripts")
           if ($LASTEXITCODE) { throw "i18n_test: на английской странице остался русский текст" }
+          & $py -E -s -X utf8 tests\download_stats_test.py
+          if ($LASTEXITCODE) { throw "download_stats_test" }
           "APP=$app" | Out-File -Append -Encoding utf8 $env:GITHUB_ENV
 
       - name: Запустить программу через «СКАЧАТЬ СТАТЬИ.bat»
         shell: pwsh
         run: |
           $env:ARTICLE_UI_NO_WINDOW = "1"
+          # Not the real version.json: a test start must not count as a launch.
+          $env:ARTICLE_UPDATE_URL = "http://127.0.0.1:9/version.json"
           $bat = Join-Path $env:APP "СКАЧАТЬ СТАТЬИ.bat"
           Start-Process -FilePath "cmd.exe" -ArgumentList "/c", "`"$bat`""
           $ok = $false
@@ -156,6 +160,10 @@ jobs:
           $tag = "portable-latest"
           python tools/release_notes.py dist\ArticleDownloader_Portable.zip dist\release-notes.md
           if ($LASTEXITCODE) { throw "release_notes" }
+          # The counters of the release about to be deleted go into the
+          # "download-stats" page first (statistics never stop the release).
+          python tools/download_stats.py
+          $global:LASTEXITCODE = 0
           gh release delete $tag --yes --cleanup-tag 2>$null
           $global:LASTEXITCODE = 0
           $ver = Get-Content dist\version.txt
@@ -164,3 +172,6 @@ jobs:
             --title "Загрузчик статей $ver — готовая программа для Windows" `
             --notes-file dist\release-notes.md `
             --latest
+          if ($LASTEXITCODE) { throw "release" }
+          python tools/download_stats.py
+          $global:LASTEXITCODE = 0
