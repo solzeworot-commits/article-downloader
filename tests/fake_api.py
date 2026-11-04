@@ -111,12 +111,23 @@ class Handler(BaseHTTPRequestHandler):
                     "authorships": [{"author": {"display_name": n}} for n in ("Anna Petrova", "John Smith")],
                     "biblio": {"volume": "12", "issue": "3", "first_page": "45", "last_page": "56"},
                     "primary_location": {"source": {"display_name": "Food Chemistry"}},
-                    "abstract_inverted_index": {w: [i] for i, w in enumerate(words)},
+                    # "*.6": no abstract here (as with Elsevier); Europe PMC has it
+                    "abstract_inverted_index": None if doi.endswith(".6") else {w: [i] for i, w in enumerate(words)},
                 })
             return self.send_json(200, {"meta": {"count": len(works)}, "results": works})
 
+        if url.path == "/europepmc":
+            import re as _re
+            dois = _re.findall(r'DOI:"([^"]+)"', q.get("query", ""))
+            result = [{"doi": d, "abstractText": f"<p>Europe PMC abstract of {d} on grape pomace.</p>"}
+                      for d in dois if d.endswith(".6")]
+            return self.send_json(200, {"hitCount": len(result), "resultList": {"result": result}})
+
         if url.path == "/crossref":
             dois = [f[len("doi:"):] for f in q.get("filter", "").split(",") if f.startswith("doi:")]
+            if "language" in q.get("select", ""):   # as the real Crossref answers
+                return self.send_json(400, {"status": "failed", "message-type": "validation-failure",
+                                            "message": [{"type": "select-not-available", "value": "language"}]})
             items = [{"DOI": d.upper(), "title": [f"Paper about {d}"], "container-title": ["Food Chemistry"],
                       "volume": "12", "issue": "3", "page": "45-56", "issued": {"date-parts": [[2021, 5]]},
                       "author": [{"family": "Petrova", "given": "Anna"}, {"family": "Smith", "given": "John A."}]}

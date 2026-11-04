@@ -5,7 +5,9 @@ reference list by GOST R 7.0.100-2018, RIS / BibTeX export, PRISMA numbers.
 
 Metadata is free: OpenAlex gives the abstract, year, journal and pages,
 Crossref the authors split into family and given names, journal, volume,
-issue and pages; both are asked by DOI in batches. A review is kept per list
+issue and pages; both are asked by DOI in batches. Elsevier keeps its
+abstracts out of OpenAlex and Crossref, so a missing abstract is also looked
+for in Europe PMC (articles indexed in PubMed, Food Chemistry among them). A review is kept per list
 file in inbox\\_отбор\\<list>.json, the decisions are "include", "maybe" and
 "exclude". ARTICLE_OPENALEX_URL / ARTICLE_CROSSREF_URL point the lookups at
 test servers.
@@ -24,6 +26,7 @@ from urllib.parse import quote
 import doi_search as ds
 
 CROSSREF_URL = "https://api.crossref.org/works"
+EUROPEPMC_URL = "https://www.ebi.ac.uk/europepmc/webservices/rest/search"
 DECISIONS = ("include", "maybe", "exclude")
 CYRILLIC = re.compile(r"[А-Яа-яЁё]")
 PARTICLES = {"van", "von", "de", "da", "del", "der", "den", "di", "du", "la", "le", "dos", "das", "ten", "ter"}
@@ -153,7 +156,7 @@ def fetch_crossref(dois: list[str]) -> dict:
     for chunk in _chunks([d for d in dois if "," not in d], 20):
         url = (f"{base}?rows={len(chunk)}&filter="
                + quote(",".join("doi:" + d for d in chunk), safe=":,/")
-               + "&select=DOI,author,title,container-title,volume,issue,page,issued,abstract,language")
+               + "&select=DOI,author,title,container-title,volume,issue,page,issued,abstract")
         data, _ = ds._get_json("crossref", url, {})
         for item in (data.get("message") or {}).get("items") or []:
             doi = ds.normalize_doi(item.get("DOI"))
@@ -168,10 +171,25 @@ def fetch_crossref(dois: list[str]) -> dict:
                 "issue": str(item.get("issue") or ""),
                 "pages": str(item.get("page") or ""),
                 "abstract": _clean(item.get("abstract")),
-                "language": item.get("language") or "",
                 "authors": [{"family": a.get("family") or a.get("name") or "", "given": a.get("given") or ""}
                             for a in item.get("author") or [] if a.get("family") or a.get("name")],
             }
+    return out
+
+
+def fetch_europepmc_abstracts(dois: list[str]) -> dict:
+    """Abstracts from Europe PMC (PubMed-indexed articles), by DOI in batches."""
+    base = os.environ.get("ARTICLE_EUROPEPMC_URL") or EUROPEPMC_URL
+    out = {}
+    for chunk in _chunks([d for d in dois if '"' not in d], 20):
+        query = " OR ".join(f'DOI:"{d}"' for d in chunk)
+        url = f"{base}?query={quote(query)}&resultType=core&format=json&pageSize=50"
+        data, _ = ds._get_json("europepmc", url, {})
+        for item in (data.get("resultList") or {}).get("result") or []:
+            doi = ds.normalize_doi(item.get("doi"))
+            text = _clean(item.get("abstractText"))
+            if doi and text:
+                out[doi] = text
     return out
 
 
@@ -200,7 +218,17 @@ def enrich(dois: list[str], keys: dict | None = None) -> tuple[dict, str]:
         cr = fetch_crossref(dois)
     except ds.SearchError as exc:
         cr, errors = {}, errors + [exc.message]
-    return {d: merge_meta(oa.get(d), cr.get(d)) for d in dois}, " ".join(errors)
+    merged = {d: merge_meta(oa.get(d), cr.get(d)) for d in dois}
+    missing = [d for d, m in merged.items() if not m["abstract"]]
+    if missing:
+        try:
+            for doi, text in fetch_europepmc_abstracts(missing).items():
+                if doi in merged:
+                    merged[doi]["abstract"] = text
+                    merged[doi]["found"] = True
+        except ds.SearchError:
+            pass  # only abstracts are missing then; the rest is there
+    return merged, " ".join(errors)
 
 
 # ---------------------------------------------------------------------------

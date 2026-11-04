@@ -46,7 +46,7 @@ OPENALEX_URL = "https://api.openalex.org/works"
 KEY_FIELDS = ("scopus", "scopus_insttoken", "wos", "openalex")
 SOURCE_TITLES = {"scopus": "Scopus", "wos": "Web of Science", "openalex": "OpenAlex"}
 # Services the review module also asks (names for error messages only).
-SERVICE_TITLES = {**SOURCE_TITLES, "crossref": "Crossref"}
+SERVICE_TITLES = {**SOURCE_TITLES, "crossref": "Crossref", "europepmc": "Europe PMC"}
 MAX_RESULTS_CAP = 2000
 
 DOI_RE = re.compile(r"10\.\d{4,9}/[^\s\"<>{}|\\^`;,]+", re.I)

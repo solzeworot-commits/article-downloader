@@ -30,4 +30,5 @@ probe("Scopus, invalid key:", lambda: ds.check_key("scopus", {"scopus": "0" * 32
 probe("WoS, invalid key:", lambda: ds.check_key("wos", {"wos": "0" * 40}))
 probe("OpenAlex search:", lambda: ds.run_search({"keywords": "grape pomace\npolyphenols", "max_results": 5}, ["openalex"], {})["per_source"])
 probe("OpenAlex hints:", lambda: [(h["term"], h["count"]) for h in ds.suggest_keywords("grape pomace\npolyphenols", {})["terms"][:8]])
+probe("Europe PMC abstracts:", lambda: {d: len(t) for d, t in rv.fetch_europepmc_abstracts(DOIS).items()})
 probe("OpenAlex lookup:", lambda: {d: (m["year"], len(m["abstract"])) for d, m in rv.fetch_openalex(DOIS, {}).items()})

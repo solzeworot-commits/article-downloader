@@ -9,6 +9,7 @@ TMP = Path(tempfile.mkdtemp(prefix="ad_review_"))
 os.environ.update(
     ARTICLE_OPENALEX_URL="http://127.0.0.1:8012/openalex",
     ARTICLE_CROSSREF_URL="http://127.0.0.1:8012/crossref",
+    ARTICLE_EUROPEPMC_URL="http://127.0.0.1:8012/europepmc",
     NO_PROXY="127.0.0.1,localhost",
 )
 sys.path.insert(0, sys.argv[1])
@@ -42,13 +43,15 @@ bib = rv.to_bibtex([two, two])
 assert "@article{smith2020grape," in bib and "@article{smith2020grapea," in bib and "author = {Smith, John A. and Brown, Ann}" in bib, bib
 
 # --- lookup by DOI (fake OpenAlex + Crossref) --------------------------------------------
-dois = [f"10.9999/scopus.{i}" for i in range(10, 17)] + ["10.9999/scopus.7"]   # the fake knows no "*.7"
+# The fake knows no "*.7"; for "*.6" OpenAlex has no abstract and Europe PMC has.
+dois = [f"10.9999/scopus.{i}" for i in range(10, 16)] + ["10.9999/scopus.6", "10.9999/scopus.7"]
 meta, error = rv.enrich(dois, {})
 assert not error, error
 assert meta["10.9999/scopus.10"]["found"] and not meta["10.9999/scopus.7"]["found"]
 m = meta["10.9999/scopus.10"]
 assert m["authors"] == [{"family": "Petrova", "given": "Anna"}, {"family": "Smith", "given": "John A."}], m["authors"]
 assert m["abstract"].startswith("This study examines 10.9999/scopus.10") and m["pages"] == "45-56" and m["year"] == "2021", m
+assert meta["10.9999/scopus.6"]["abstract"] == "Europe PMC abstract of 10.9999/scopus.6 on grape pomace.", meta["10.9999/scopus.6"]
 
 # --- review file and PRISMA ---------------------------------------------------------------
 inbox = TMP / "inbox"
