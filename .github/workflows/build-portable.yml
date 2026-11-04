@@ -1,0 +1,108 @@
+# Builds the portable program on a real Windows machine, checks it there and
+# publishes the zip as the "portable-latest" release, so the user downloads it
+# from GitHub with one link instead of passing a 54 MB file around.
+name: Портативная сборка для Windows
+
+on:
+  push:
+    branches: [main, "claude/**"]
+    paths:
+      - "portable/**"
+      - "tools/**"
+      - "tests/**"
+      - ".github/workflows/build-portable.yml"
+      - ".github/release-notes.md"
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  build:
+    runs-on: windows-latest
+    env:
+      PYTHONUTF8: "1"
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.13"
+
+      - name: Собрать программу
+        run: python tools/build_portable.py --out dist
+
+      - name: Распаковать zip в папку с русским именем и проверить встроенный Python
+        shell: pwsh
+        run: |
+          $dest = Join-Path $env:USERPROFILE "Downloads\Проверка распаковки"
+          Expand-Archive dist\ArticleDownloader_Portable.zip -DestinationPath $dest -Force
+          $app = Join-Path $dest "ArticleDownloader"
+          $py = Join-Path $app "python\python.exe"
+          & $py -E -s -X utf8 -c "import playwright, psutil, pypdf, greenlet, ssl, sqlite3; print('встроенный Python: всё на месте')"
+          if ($LASTEXITCODE) { throw "встроенный Python не запустился" }
+          & $py -E -s -X utf8 tests\parse_test.py (Join-Path $app "scripts")
+          if ($LASTEXITCODE) { throw "parse_test" }
+          & $py -E -s -X utf8 tests\search_test.py (Join-Path $app "scripts")
+          if ($LASTEXITCODE) { throw "search_test" }
+          & $py -E -s -X utf8 tests\donate_test.py (Join-Path $app "scripts")
+          if ($LASTEXITCODE) { throw "donate_test: адрес или ссылка для донатов не прошли проверку" }
+          "APP=$app" | Out-File -Append -Encoding utf8 $env:GITHUB_ENV
+
+      - name: Запустить программу через «СКАЧАТЬ СТАТЬИ.bat»
+        shell: pwsh
+        run: |
+          $env:ARTICLE_UI_NO_WINDOW = "1"
+          $bat = Join-Path $env:APP "СКАЧАТЬ СТАТЬИ.bat"
+          Start-Process -FilePath "cmd.exe" -ArgumentList "/c", "`"$bat`""
+          $ok = $false
+          foreach ($i in 1..30) {
+            Start-Sleep 2
+            try { $ping = Invoke-RestMethod http://127.0.0.1:17865/api/ping; $ok = $ping.app -eq "ArticleDownloader"; if ($ok) { break } } catch {}
+          }
+          if (-not $ok) { Get-Content (Join-Path $env:APP "logs\app.log") -ErrorAction SilentlyContinue; throw "окно программы не ответило" }
+          $tok = Get-Content (Join-Path $env:APP "logs\.ui_token")
+          $state = Invoke-RestMethod -Headers @{ "X-Token" = $tok } "http://127.0.0.1:17865/api/state?v=0"
+          "Программа отвечает. Браузер: $($state.browser.title) $($state.browser.error)"
+          $inbox = Invoke-RestMethod -Headers @{ "X-Token" = $tok } "http://127.0.0.1:17865/api/inbox"
+          "Папка inbox: $($inbox.inbox)"
+          Invoke-RestMethod -Method Post -Headers @{ "X-Token" = $tok } -ContentType "application/json" -Body "{}" http://127.0.0.1:17865/api/quit | Out-Null
+
+      - name: Проба браузера загрузчика (Edge) и разогрева баз
+        continue-on-error: true
+        shell: pwsh
+        run: |
+          $py = Join-Path $env:APP "python\python.exe"
+          $dl = Join-Path $env:APP "scripts\article_downloader.py"
+          $env:ARTICLE_BROWSER = "edge"
+          $env:ARTICLE_PROFILE_DIR = Join-Path $env:RUNNER_TEMP "edge-profile"
+          & $py -E -s -X utf8 $dl --open "https://example.com/"
+          (Invoke-RestMethod http://127.0.0.1:9223/json/version).Browser
+          $bases = '[{"key":"elsevier","url":"https://www.sciencedirect.com/"},{"key":"mdpi","url":"https://www.mdpi.com/"},{"key":"springer","url":"https://link.springer.com/"}]'
+          $file = Join-Path $env:RUNNER_TEMP "bases.json"
+          Set-Content -Path $file -Value $bases -Encoding utf8
+          $env:ARTICLE_JOB_DEADLINE = [string]([DateTimeOffset]::UtcNow.ToUnixTimeSeconds() + 90)
+          & $py -E -s -X utf8 $dl --warmup $file
+          "warm-up exit code: $LASTEXITCODE (0 = базы открылись без капчи, 10 = капча осталась)"
+          & $py -E -s -X utf8 $dl --restart-browser
+
+      - name: Проба настоящих API (неверный ключ Scopus / WoS, поиск OpenAlex)
+        continue-on-error: true
+        shell: pwsh
+        run: |
+          $py = Join-Path $env:APP "python\python.exe"
+          & $py -E -s -X utf8 tests\api_probe.py (Join-Path $env:APP "scripts")
+
+      - name: Выложить zip на страницу Releases
+        shell: pwsh
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          $tag = "portable-latest"
+          gh release delete $tag --yes --cleanup-tag 2>$null
+          $global:LASTEXITCODE = 0
+          gh release create $tag dist\ArticleDownloader_Portable.zip `
+            --target $env:GITHUB_SHA `
+            --title "Загрузчик статей — готовая программа для Windows" `
+            --notes-file .github\release-notes.md `
+            --latest

@@ -6,7 +6,7 @@ Build the portable Windows folder and its zip from ../portable:
 
 Runs on Windows or Linux (needs internet and pip). Takes the NuGet "python"
 package (a complete CPython for Windows x64 that needs no installer), adds the
-win_amd64 wheels of playwright, psutil and pypdf unpacked into
+win_amd64 wheels of playwright, psutil, pypdf and qrcode unpacked into
 python/Lib/site-packages, copies ../portable next to it and zips the result:
 
     dist/ArticleDownloader/            ready folder
@@ -28,7 +28,8 @@ from pathlib import Path
 
 HERE = Path(__file__).resolve().parent
 SOURCE = HERE.parent / "portable"
-PACKAGES = ["playwright", "psutil", "pypdf"]
+# qrcode draws the QR codes of the "Поблагодарить автора" window (SVG, no Pillow).
+PACKAGES = ["playwright", "psutil", "pypdf", "qrcode"]
 
 
 def download(url: str, dest: Path):

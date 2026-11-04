@@ -157,7 +157,91 @@
   .foot { display: flex; gap: 8px; justify-content: flex-end; padding: 12px 18px; border-top: 1px solid var(--line); }
   .primary { background: var(--blue); color: #fff; border-color: var(--blue); }
 
+  /* v6.1: start screen, DOI search, key guide */
+  .view[hidden] { display: none !important; }
+  .home-buttons { display: grid; grid-template-columns: 1fr 1fr; gap: 18px; margin: 8px 0 16px; }
+  .big-choice {
+    display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 10px;
+    min-height: 240px; border: none; border-radius: 22px; color: #fff; padding: 24px; text-align: center;
+    box-shadow: 0 6px 0 rgba(15, 23, 42, .25); transition: transform .05s;
+  }
+  .big-choice:hover { border: none; filter: brightness(1.06); }
+  .big-choice:active { transform: translateY(3px); box-shadow: 0 3px 0 rgba(15, 23, 42, .25); }
+  .big-choice .ico { font-size: 58px; line-height: 1; }
+  .big-choice b { font-size: 29px; letter-spacing: .3px; }
+  .big-choice .sub2 { font-size: 15px; opacity: .93; max-width: 360px; }
+  .big-choice.blue { background: var(--blue); }
+  .big-choice.green { background: var(--green); }
+  .home-small { display: flex; gap: 10px; justify-content: center; flex-wrap: wrap; }
+  .form-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(230px, 1fr)); gap: 10px 16px; margin-top: 12px; }
+  .form-grid label.f { display: flex; flex-direction: column; gap: 4px; font-size: 14px; color: var(--muted); }
+  .form-grid input, .form-grid select { padding: 7px 9px; border-radius: 8px; border: 1px solid var(--line); font: inherit; color: var(--text); background: var(--card); }
+  .seg { display: inline-flex; border: 1px solid var(--line); border-radius: 10px; overflow: hidden; flex-wrap: wrap; }
+  .seg button { border: none; border-radius: 0; padding: 10px 15px; background: var(--card); }
+  .seg button.on { background: var(--blue); color: #fff; }
+  .q-row { display: grid; grid-template-columns: 170px 1fr; gap: 8px; align-items: center; margin: 6px 0; font-size: 14px; }
+  .q-row input { font: 13px Consolas, "Cascadia Mono", monospace; padding: 7px 9px; border-radius: 8px; border: 1px solid var(--line); width: 100%; }
+  .big-action { width: 100%; padding: 16px; border: none; border-radius: 14px; font-size: 22px; font-weight: 700; color: #fff; background: var(--blue); margin-top: 12px; }
+  .big-action:hover:not(:disabled) { border: none; filter: brightness(1.08); }
+  .big-action.green { background: var(--green); }
+  .big-action:disabled { background: #94a3b8; }
+  .src-line { display: flex; flex-wrap: wrap; gap: 8px 18px; font-size: 14px; margin: 4px 0 12px; }
+  .src-badge { font-size: 11px; padding: 1px 6px; border-radius: 99px; background: var(--grey-soft); color: var(--muted); margin-right: 3px; white-space: nowrap; }
+  .results-wrap { max-height: 520px; overflow: auto; border: 1px solid var(--line); border-radius: 10px; }
+  .results-wrap th { position: sticky; top: 0; background: var(--card); z-index: 1; }
+  .save-row { display: flex; gap: 10px; align-items: center; flex-wrap: wrap; margin-top: 12px; }
+  .save-row input { flex: 1; min-width: 220px; padding: 9px 10px; border-radius: 8px; border: 1px solid var(--line); font: inherit; }
+  .howto { padding-left: 22px; margin: 12px 0 0; }
+  .howto li { margin: 0 0 14px; }
+  .acts { display: flex; gap: 8px; flex-wrap: wrap; margin-top: 8px; align-items: center; }
+  .tabs { display: flex; gap: 6px; margin-bottom: 12px; flex-wrap: wrap; }
+  .tabs button { padding: 10px 18px; font-weight: 600; }
+  .tabs button.on { background: var(--blue); color: #fff; border-color: var(--blue); }
+  .step { display: grid; grid-template-columns: 46px 1fr; gap: 12px; padding: 14px 0; border-bottom: 1px solid var(--grey-soft); }
+  .step:last-child { border-bottom: none; }
+  .step .n { width: 38px; height: 38px; border-radius: 50%; background: var(--blue-soft); color: var(--blue); display: flex; align-items: center; justify-content: center; font-weight: 700; font-size: 16px; }
+  .step.done .n { background: var(--green-soft); color: var(--green); }
+  .step.final .n { background: var(--amber-soft); color: var(--amber); }
+  .step .t { font-size: 15px; }
+  .step img { display: block; max-width: 100%; margin-top: 10px; border: 1px solid var(--line); border-radius: 8px; }
+  .step label.done-mark { font-size: 13px; color: var(--muted); }
+  .linkbtn { background: var(--blue); color: #fff; border-color: var(--blue); font-weight: 600; }
+  .linkbtn:hover { border-color: #1e40af; filter: brightness(1.08); }
+  .keybox { display: flex; gap: 8px; flex-wrap: wrap; margin-top: 8px; }
+  .keybox input { flex: 1; min-width: 260px; padding: 10px 11px; border-radius: 8px; border: 2px solid var(--blue); font: 14px Consolas, "Cascadia Mono", monospace; }
+  .check-res { margin-top: 10px; font-size: 15px; }
+  .check-res.ok { color: var(--green); font-weight: 600; }
+  .check-res.bad { color: var(--red); }
+  .letter { white-space: pre-wrap; background: var(--grey-soft); border-radius: 8px; padding: 10px 12px; font-size: 14px; margin-top: 8px; }
+  kbd { background: var(--grey-soft); border: 1px solid var(--line); border-bottom-width: 2px; border-radius: 5px; padding: 0 5px; font: 13px Consolas, monospace; }
+  .note { border-radius: 12px; padding: 12px 16px; margin-bottom: 14px; display: flex; gap: 12px; align-items: center; flex-wrap: wrap; font-size: 16px; border: 1px solid var(--line); background: var(--card); }
+  .note .msg { flex: 1; min-width: 240px; }
+  .note.amber { background: var(--amber-soft); border-color: #fcd34d; }
+  .note.green { background: var(--green-soft); border-color: #86efac; }
+  .note.blue { background: var(--blue-soft); border-color: #93c5fd; }
+  .note.red { background: var(--red-soft); border-color: #fca5a5; }
+
+  /* v6.2: keyword hints, thanks to the author */
+  .hints { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 8px; }
+  .hint { padding: 4px 11px; border-radius: 99px; font-size: 13px; background: var(--grey-soft); }
+  .hint small { color: var(--muted); }
+  .hint.on { background: var(--green-soft); border-color: #86efac; }
+  .hint.on::before { content: "✓ "; color: var(--green); }
+  .dn-msg { margin-top: 0; font-size: 16px; }
+  .dn-h { margin: 16px 0 8px; font-size: 16px; }
+  .donate-sbp { display: flex; gap: 18px; align-items: center; flex-wrap: wrap; }
+  .qr svg { width: 170px; height: 170px; display: block; background: #fff; }
+  .donate-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(230px, 1fr)); gap: 12px; }
+  .donate-card { border: 1px solid var(--line); border-radius: 12px; padding: 12px; display: flex; flex-direction: column; align-items: center; gap: 6px; text-align: center; }
+  .donate-card .coin { font-weight: 700; font-size: 16px; }
+  .donate-card .net { color: var(--amber); font-size: 13px; font-weight: 600; }
+  .donate-card .addr { font: 12px Consolas, "Cascadia Mono", monospace; word-break: break-all; }
+  #home-donate { color: #be123c; }
+
   @media (max-width: 640px) {
+    .home-buttons { grid-template-columns: 1fr; }
+    .big-choice { min-height: 180px; }
+    .q-row { grid-template-columns: 1fr; }
     .form-row { grid-template-columns: 1fr; }
     .form-row .hint { grid-column: 1; }
     #start { font-size: 21px; }
@@ -169,10 +253,30 @@
   <header>
     <h1><img src="/favicon.ico" alt="">Загрузчик статей</h1>
     <span class="chip" id="browser-chip">Браузер: …</span>
+    <button id="btn-home" hidden>🏠 Главная</button>
+    <button id="btn-keys">🔑 Ключи API</button>
     <button id="btn-settings">⚙ Настройки</button>
     <button id="btn-quit">Выход</button>
   </header>
 
+
+  <section id="view-home" class="view">
+    <div id="home-note"></div>
+    <div class="home-buttons">
+      <button class="big-choice blue" id="go-search"><span class="ico">🔎</span><b>Получить список DOI</b>
+        <span class="sub2">Поиск статей по ключевым словам в Scopus и Web of Science. Список сохранится в папку inbox.</span></button>
+      <button class="big-choice green" id="go-download"><span class="ico">⬇</span><b>Скачать статьи</b>
+        <span class="sub2">Выберите список DOI из папки inbox — программа откроет базы и скачает PDF.</span></button>
+    </div>
+    <div class="home-small">
+      <button id="home-keys">🔑 Ключи API для Scopus и Web of Science</button>
+      <button id="home-inbox">📂 Папка inbox</button>
+      <button id="home-pdf">📂 Папка с PDF</button>
+      <button id="home-donate" hidden>❤ Поблагодарить автора</button>
+    </div>
+  </section>
+
+  <section id="view-download" class="view" hidden>
   <div id="banner" class="banner grey"><span class="msg">Подключаюсь…</span></div>
 
   <div class="card" id="first-run" hidden>
@@ -183,24 +287,15 @@
   </div>
 
   <div class="card">
-    <h2>
-      <span>1. Базы</span>
-      <small id="warm-summary"></small>
-      <span class="grow"></span>
-      <button id="btn-warm">↻ Открыть базы заново</button>
-      <button id="btn-login-toggle">🏛 Вход через организацию</button>
-    </h2>
-    <div class="bases" id="bases"></div>
-    <div class="login-panel" id="login-panel" hidden>
-      <p>Нажмите на базу. В окне браузера загрузчика откроется вход через организацию: выберите свой
-        университет и войдите. Делается один раз на компьютере (иногда сайты просят войти снова через
-        несколько недель).</p>
-      <div class="login-buttons" id="login-buttons"></div>
-    </div>
+    <h2><span>1. Выберите список</span><small>файлы со списками DOI в папке inbox</small><span class="grow"></span>
+      <button id="btn-choose" class="linkbtn">📂 Выбрать файл…</button>
+      <button id="btn-open-inbox">Открыть папку inbox</button></h2>
+    <div id="choose-note" class="recognized"></div>
+    <div id="lists"></div>
   </div>
 
   <div class="card">
-    <h2><span>2. Какие статьи скачать</span><small>DOI, ссылки на статьи или строки <code>title: Название</code>, по одной на строку</small></h2>
+    <h2><span>…или вставьте DOI вручную</span><small>DOI, ссылки на статьи или строки <code>title: Название</code>, по одной на строку</small></h2>
     <textarea id="input" spellcheck="false" placeholder="Вставьте сюда DOI, например:
 10.1016/j.foodchem.2020.127316
 10.3390/molecules27010246
@@ -224,6 +319,23 @@ https://link.springer.com/article/10.1007/s12393-026-09447-8
   </div>
 
   <div class="card">
+    <h2>
+      <span>2. Базы</span>
+      <small id="warm-summary"></small>
+      <span class="grow"></span>
+      <button id="btn-warm">↻ Открыть базы заново</button>
+      <button id="btn-login-toggle">🏛 Вход через организацию</button>
+    </h2>
+    <div class="bases" id="bases"></div>
+    <div class="login-panel" id="login-panel" hidden>
+      <p>Нажмите на базу. В окне браузера загрузчика откроется вход через организацию: выберите свой
+        университет и войдите. Делается один раз на компьютере (иногда сайты просят войти снова через
+        несколько недель).</p>
+      <div class="login-buttons" id="login-buttons"></div>
+    </div>
+  </div>
+
+  <div class="card">
     <h2><span>3. Очередь</span><small id="queue-summary"></small></h2>
     <div class="progress"><div id="bar"></div></div>
     <div class="counts" id="counts"></div>
@@ -236,11 +348,116 @@ https://link.springer.com/article/10.1007/s12393-026-09447-8
     </div>
     <div id="items"></div>
   </div>
+  </section>
+
+  <section id="view-search" class="view" hidden>
+    <div id="keys-note"></div>
+    <div class="card">
+      <h2><span>1. Ключевые слова</span><small>каждое слово или фраза — с новой строки; лучше по-английски</small>
+        <span class="grow"></span><button id="btn-new-topic" title="Очистить слова, запросы и найденное">🧹 Новая тема</button></h2>
+      <textarea id="kw" spellcheck="false" style="min-height: 110px" placeholder="Например:
+grape pomace
+polyphenols
+extraction"></textarea>
+      <div class="acts"><button id="btn-hints">💡 Подсказать слова</button>
+        <span class="recognized" id="hints-note">Подберёт частые ключевые слова из статей по вашей теме (бесплатно, OpenAlex).</span></div>
+      <div class="hints" id="hints"></div>
+      <div class="form-grid">
+        <label class="f">Как сочетать слова
+          <select id="f-match"><option value="all">все слова сразу (И)</option><option value="any">любое из слов (ИЛИ)</option></select></label>
+        <label class="f">Где искать в статье
+          <select id="f-field"><option value="tak">название, аннотация, ключ. слова</option><option value="title">только в названии</option></select></label>
+        <label class="f">Годы: с
+          <input type="number" id="f-from" min="1900" max="2100" placeholder="любой"></label>
+        <label class="f">по
+          <input type="number" id="f-to" min="1900" max="2100" placeholder="любой"></label>
+        <label class="f">Тип публикаций
+          <select id="f-type"><option value="both">статьи и обзоры</option><option value="article">только статьи</option><option value="review">только обзоры</option><option value="all">все типы</option></select></label>
+        <label class="f">Сколько взять из каждой базы (до 2000)
+          <input type="number" id="f-max" min="1" max="2000" value="200"></label>
+      </div>
+    </div>
+
+    <div class="card">
+      <h2><span>2. Где и как искать</span></h2>
+      <div class="src-line">
+        <label><input type="checkbox" id="src-scopus" checked> Scopus <small id="src-scopus-note"></small></label>
+        <label><input type="checkbox" id="src-wos" checked> Web of Science <small id="src-wos-note"></small></label>
+        <label id="src-openalex-l"><input type="checkbox" id="src-openalex"> OpenAlex <small>(бесплатно, без ключа)</small></label>
+      </div>
+      <div class="seg" id="mode-seg">
+        <button data-mode="api" class="on">⚡ Автоматически (по ключам API)</button>
+        <button data-mode="browser">🌐 Через браузер (вы нажимаете «Экспорт»)</button>
+      </div>
+      <div class="q-row" style="margin-top: 14px"><span>Запрос для Scopus</span><input id="q-scopus" spellcheck="false"></div>
+      <div class="q-row"><span>Запрос для Web of Science</span><input id="q-wos" spellcheck="false"></div>
+      <div class="recognized" id="q-hint">Запросы собираются сами из ключевых слов, их можно поправить. <button class="link" id="q-reset">↺ собрать заново</button></div>
+
+      <div id="mode-api">
+        <button class="big-action" id="btn-search">🔎 НАЙТИ СТАТЬИ</button>
+        <div id="search-progress" class="recognized" style="margin-top: 8px"></div>
+      </div>
+
+      <div id="mode-browser" hidden>
+        <ol class="howto">
+          <li>Нажмите кнопку: сайт откроется в браузере загрузчика (там вы вошли через университет), а запрос
+            скопируется сам.
+            <div class="acts"><button class="linkbtn" id="b-scopus">👉 Открыть Scopus с запросом</button>
+              <button class="linkbtn" id="b-wos">👉 Открыть Web of Science</button></div>
+            <div class="recognized" id="b-note"></div></li>
+          <li>Если поле поиска на сайте пустое — щёлкните в него, нажмите <kbd>Ctrl</kbd>+<kbd>V</kbd> и «Search».</li>
+          <li>Нажмите на сайте <b>«Export»</b> («Экспорт»). В Scopus выберите формат <b>CSV</b> или <b>RIS</b>, в Web of
+            Science — <b>«Plain text file»</b> или <b>«Tab delimited file»</b>.</li>
+          <li>Программа сама найдёт скачанный файл в папке «Загрузки»:
+            <div id="exports-found" class="recognized">Жду файл экспорта…</div>
+            <div class="acts"><button id="b-upload">Выбрать файл экспорта вручную…</button>
+              <input type="file" id="export-file" hidden accept=".csv,.txt,.tsv,.ris,.bib,.xlsx,.xls"></div></li>
+        </ol>
+      </div>
+    </div>
+
+    <div class="card" id="results-card" hidden>
+      <h2><span>3. Найдено</span><small id="res-summary"></small></h2>
+      <div id="res-sources" class="src-line"></div>
+      <div class="tools"><button id="sel-all">Выбрать все</button><button id="sel-none">Снять все</button>
+        <span class="recognized" id="sel-count"></span></div>
+      <div class="results-wrap"><div id="results"></div></div>
+      <div class="save-row"><span>Имя списка:</span><input id="save-name" spellcheck="false">
+        <button class="big-action green" style="width: auto; margin: 0; font-size: 18px; padding: 12px 18px" id="btn-save-list">💾 Сохранить список в inbox</button></div>
+      <div id="save-note" style="margin-top: 10px"></div>
+    </div>
+  </section>
+
+  <section id="view-keys" class="view" hidden>
+    <div class="card">
+      <h2><span>🔑 Ключи API</span><small>вводятся один раз и хранятся только на этом компьютере</small></h2>
+      <div>Ключ — это длинный «пароль» из букв и цифр, по которому Scopus и Web of Science пускают программу.
+        Выберите базу и пройдите шаги по порядку: кнопки <b>«👉 Открыть страницу»</b> сами откроют нужный сайт.
+        <b>Никому не показывайте ключ.</b> Без ключей можно искать «Через браузер».</div>
+      <details style="margin-top: 10px"><summary><b>Шаг 0: что спросить в библиотеке</b> (5 минут, сэкономит часы)</summary>
+        <div class="letter" id="lib-text">Здравствуйте! Есть ли у университета доступ к Scopus и Web of Science? Я хочу искать литературу через их API (Scopus Search API, Web of Science Starter API). Нужен ли для этого institutional token (insttoken) от Elsevier и можете ли вы его запросить?</div>
+        <div class="acts"><button data-copy="lib-text">📋 Скопировать текст</button></div>
+        <div class="recognized" style="margin-top: 6px">Если подписки на Scopus нет, ключ Scopus почти ничего не даст: ищите в Web of Science
+          (есть бесплатный план) или OpenAlex (без ключа).</div>
+      </details>
+    </div>
+    <div class="tabs" id="key-tabs">
+      <button data-ktab="scopus" class="on">Scopus <span id="kt-scopus"></span></button>
+      <button data-ktab="wos">Web of Science <span id="kt-wos"></span></button>
+      <button data-ktab="openalex">OpenAlex <span id="kt-openalex"></span></button>
+    </div>
+    <div class="card" id="key-steps"></div>
+  </section>
 </div>
 
 <dialog id="dlg-log">
   <div class="head"><h3 id="log-title">Журнал</h3><button data-close>✕</button></div>
   <div class="body"><pre id="log-text"></pre></div>
+</dialog>
+
+<dialog id="dlg-donate" style="width: min(940px, calc(100vw - 32px))">
+  <div class="head"><h3>❤ Поблагодарить автора</h3><button data-close>✕</button></div>
+  <div class="body" id="donate-body"></div>
 </dialog>
 
 <dialog id="dlg-settings">
@@ -285,7 +502,8 @@ https://link.springer.com/article/10.1007/s12393-026-09447-8
     </div>
     <div style="margin: 14px 0 6px; font-weight: 600;">Какие базы открывать при запуске</div>
     <div class="checks" id="s-bases"></div>
-    <div style="margin-top: 16px;">
+    <div style="margin-top: 16px; display: flex; gap: 8px; flex-wrap: wrap;">
+      <button id="btn-settings-keys" class="linkbtn">🔑 Ключи API (Scopus, Web of Science)</button>
       <button id="btn-restart-browser">Перезапустить браузер загрузчика</button>
     </div>
   </div>
@@ -344,6 +562,7 @@ async function poll() {
     state = s;
     if (s.items) { items = s.items; ver = s.items_version; renderItems(); }
     render();
+    renderExtra();
   } catch (e) {
     online = false;
     renderOffline();
@@ -425,11 +644,12 @@ function render() {
   } else if (c.total && !c.pending && !c.running) {
     let msg = `<b>Готово.</b> Скачано ${c.success} из ${c.total}.`;
     if (c.no_access) msg += ` Нет доступа: ${c.no_access}. Возможно, нужно войти через организацию (кнопка «🏛 Вход через организацию»), потом нажмите «Повторить неудачные».`;
-    setBanner("green", "✅", msg);
+    setBanner("green", "✅", msg, s.donate && c.success ? '<button data-act="donate">❤ Поблагодарить автора</button>' : "");
   } else if (c.pending && !s.running) {
     setBanner("grey", "⏸", `В очереди ${c.pending} ${plural(c.pending, "статья", "статьи", "статей")}. Нажмите «Скачать статьи», чтобы продолжить.`);
   } else {
-    setBanner("grey", "👉", "Базы открыты. Вставьте DOI или перетащите файл со списком и нажмите большую зелёную кнопку.");
+    setBanner("grey", "👉", w.done ? "Базы открыты. Выберите список или вставьте DOI." :
+      "Выберите список ниже — после этого программа откроет базы в браузере, и останется пройти капчу.");
   }
   const skip = $("btn-skip");
   if (skip) skip.onclick = () => api("/api/skip_warmup");
@@ -555,9 +775,17 @@ let dragDepth = 0;
 document.addEventListener("dragenter", (e) => { e.preventDefault(); dragDepth++; document.body.classList.add("dragging"); });
 document.addEventListener("dragleave", () => { if (--dragDepth <= 0) { dragDepth = 0; document.body.classList.remove("dragging"); } });
 document.addEventListener("dragover", (e) => e.preventDefault());
-document.addEventListener("drop", (e) => {
+document.addEventListener("drop", async (e) => {
   e.preventDefault(); dragDepth = 0; document.body.classList.remove("dragging");
-  if (e.dataTransfer.files.length) addFiles([...e.dataTransfer.files]);
+  const files = [...e.dataTransfer.files];
+  if (!files.length) return;
+  if (view === "search") {
+    // A Scopus / WoS export dropped on the search screen.
+    for (const f of files) await importExport({ file_name: f.name, file_b64: toBase64(await f.arrayBuffer()) });
+    return;
+  }
+  if (view !== "download") show("download");
+  addFiles(files);
 });
 
 // ---- buttons ---------------------------------------------------------------
@@ -634,6 +862,591 @@ $("btn-save").onclick = async () => {
   $("dlg-settings").close();
 };
 $("btn-restart-browser").onclick = () => api("/api/restart_browser");
+
+// ===== v6.1: screens, lists in inbox, DOI search, key guide ===================
+const SRC = { scopus: "Scopus", wos: "Web of Science", openalex: "OpenAlex", export: "экспорт" };
+let view = "home", searchVer = 0, records = [], selected = new Set(), qDirty = { scopus: false, wos: false };
+let searchMode = null, keyTab = "scopus", listsAt = 0, chooseBusy = false, loadingResults = false, searchMsg = "";
+
+function store(key, value) { try { localStorage.setItem(key, JSON.stringify(value)); } catch (e) {} }
+function recall(key, fallback) {
+  try { const v = localStorage.getItem(key); return v === null ? fallback : JSON.parse(v); } catch (e) { return fallback; }
+}
+function note(el, kind, icon, html, buttons) {
+  el.innerHTML = html ? `<div class="note ${kind}"><span style="font-size: 24px">${icon}</span>` +
+    `<span class="msg">${html}</span>${buttons || ""}</div>` : "";
+}
+async function copyText(text) {
+  try { await navigator.clipboard.writeText(text); return true; } catch (e) {
+    const ta = document.createElement("textarea");
+    ta.value = text; document.body.appendChild(ta); ta.select();
+    let ok = false;
+    try { ok = document.execCommand("copy"); } catch (e2) {}
+    ta.remove();
+    return ok;
+  }
+}
+function flash(button, ok) {
+  const old = button.textContent;
+  button.textContent = ok ? "✓ Скопировано" : "Не скопировалось — выделите и нажмите Ctrl+C";
+  setTimeout(() => { button.textContent = old; }, 1600);
+}
+
+function show(v) {
+  if (!["home", "download", "search", "keys"].includes(v)) v = "home";
+  view = v;
+  document.querySelectorAll(".view").forEach((el) => { el.hidden = el.id !== "view-" + v; });
+  $("btn-home").hidden = v === "home";
+  $("btn-keys").hidden = v === "keys";
+  try { history.replaceState(null, "", "#" + v); } catch (e) {}
+  window.scrollTo(0, 0);
+  if (v === "download") loadLists();
+  if (v === "keys") renderKeySteps();
+  if (v === "search") buildQueriesSoon();
+  if (state) renderExtra();
+}
+
+function hasKey(src) { return !!(state && state.keys && state.keys[src]); }
+function keyLine(src) {
+  const k = state.keys[src], chk = state.key_checks[src];
+  if (!k) return "нет ключа";
+  return (chk ? (chk.ok ? "✓ " : "⚠ ") : "") + k;
+}
+
+function renderExtra() {
+  const s = state, c = counts();
+  const home = $("home-note");
+  if (s.browser && s.browser.error) {
+    note(home, "red", "⛔", "<b>Не найден браузер для скачивания.</b> Нужен Яндекс.Браузер (browser.yandex.ru, ставится без прав администратора), Microsoft Edge или Google Chrome.");
+  } else if (s.running) {
+    note(home, "green", "⬇", `<b>Идёт скачивание:</b> готово ${c.total - c.pending - c.running} из ${c.total}.`, '<button data-go="download">Открыть</button>');
+  } else if (c.pending) {
+    note(home, "amber", "⏸", `Есть незаконченный список: <b>${c.pending}</b> ${plural(c.pending, "статья ждёт", "статьи ждут", "статей ждут")} скачивания.`,
+      '<button class="linkbtn" id="home-resume">▶ Продолжить</button>');
+    $("home-resume").onclick = () => api("/api/start", { text: "" }).then(() => show("download"));
+  } else if (s.search.running) {
+    note(home, "blue", "🔎", "Идёт поиск DOI…", '<button data-go="search">Открыть</button>');
+  } else {
+    home.innerHTML = "";
+  }
+  $("btn-choose").hidden = !s.native_dialog;
+  $("home-donate").hidden = !s.donate;
+  renderKeysNote();
+  renderSources();
+  renderSearchProgress();
+  renderExports();
+  if (s.search.version !== searchVer) loadResults();
+  if (view === "keys") renderKeyStatus();
+  if (view === "download" && Date.now() - listsAt > 5000) loadLists();
+}
+
+// ---- lists in inbox ----------------------------------------------------------
+async function loadLists() {
+  listsAt = Date.now();
+  try {
+    const r = await fetch("/api/inbox", { headers: { "X-Token": TOKEN } });
+    renderLists((await r.json()).files);
+  } catch (e) {}
+}
+function renderLists(files) {
+  $("btn-choose").hidden = !(state && state.native_dialog);
+  if (!files.length) {
+    $("lists").innerHTML = '<div class="empty">Папка inbox пока пуста. Сделайте список кнопкой «🔎 Получить список DOI» на главной ' +
+      "или положите туда файл с DOI (txt, csv, xlsx, docx, ris, bib).</div>";
+    return;
+  }
+  const rows = files.map((f) => {
+    let status = [f.done ? `скачано ${f.done} из ${f.count}` : "", f.queued ? `в очереди ${f.queued}` : ""].filter(Boolean).join(" · ");
+    if (f.count && f.done >= f.count) status = "✅ всё скачано";
+    return `<tr><td class="query"><b>${esc(f.name)}</b></td><td>${esc(f.modified)}</td><td>${f.count} DOI</td>` +
+      `<td>${status || "ещё не скачивался"}</td><td class="act"><button class="linkbtn" data-list="${esc(f.name)}" ${f.count ? "" : "disabled"}>⬇ Скачать</button> ` +
+      `<button data-archive="${esc(f.name)}" title="Убрать список в архив (inbox\\_архив)">🗑</button></td></tr>`;
+  });
+  $("lists").innerHTML = `<table><thead><tr><th>Файл</th><th>Изменён</th><th>Сколько</th><th>Состояние</th><th></th></tr></thead><tbody>${rows.join("")}</tbody></table>`;
+}
+function listResultText(res) {
+  if (!res.total) return `📄 <b>${esc(res.name)}</b>: в файле не нашлось ни одного DOI.`;
+  let t = `📄 <b>${esc(res.name)}</b>: в очередь добавлено <b>${res.added}</b>`;
+  if (res.duplicates) t += `, уже были скачаны или в очереди: ${res.duplicates}`;
+  return t + ".";
+}
+async function queueList(name) {
+  const res = await api("/api/queue_file", { name });
+  show("download");
+  $("choose-note").innerHTML = res.error ? `<span style="color: var(--red)">${esc(res.error)}</span>` : listResultText(res);
+  loadLists();
+}
+async function chooseFile() {
+  if (!state || !state.native_dialog || chooseBusy) return;
+  chooseBusy = true;
+  $("choose-note").innerHTML = "📂 Открылось окно выбора файла (папка inbox). Выберите список и нажмите «Открыть».";
+  try {
+    const res = await api("/api/choose_file");
+    $("choose-note").innerHTML = res.chosen ? listResultText(res) : "Файл не выбран. Можно выбрать список в таблице ниже.";
+  } catch (e) {
+    $("choose-note").textContent = "Окно выбора файла не открылось: " + e.message;
+  }
+  chooseBusy = false;
+  loadLists();
+}
+
+// ---- DOI search --------------------------------------------------------------
+const FORM_IDS = ["kw", "f-match", "f-field", "f-from", "f-to", "f-type", "f-max"];
+function searchParams() {
+  return { keywords: $("kw").value, match: $("f-match").value, field: $("f-field").value,
+    year_from: $("f-from").value, year_to: $("f-to").value, doc_type: $("f-type").value, max_results: $("f-max").value };
+}
+let qTimer = null;
+function buildQueriesSoon() { clearTimeout(qTimer); qTimer = setTimeout(buildQueries, 300); }
+async function buildQueries() {
+  if (!$("kw").value.trim()) {
+    if (!qDirty.scopus) $("q-scopus").value = "";
+    if (!qDirty.wos) $("q-wos").value = "";
+    return;
+  }
+  try {
+    const q = await api("/api/build_queries", searchParams());
+    if (q.error) return;
+    if (!qDirty.scopus) $("q-scopus").value = q.scopus;
+    if (!qDirty.wos) $("q-wos").value = q.wos;
+  } catch (e) {}
+}
+function currentMode() {
+  // Until the user picks a mode, keys decide: with a key the API is easier.
+  return searchMode || recall("ad_mode", null) || (hasKey("scopus") || hasKey("wos") ? "api" : "browser");
+}
+function setMode(m) {
+  searchMode = m;
+  store("ad_mode", m);
+  if (m === "browser") api("/api/export_watch", { on: true });
+  if (view !== "search") show("search");
+  if (state) { renderSources(); renderExports(); }
+}
+function renderKeysNote() {
+  const el = $("keys-note");
+  if (!hasKey("scopus") && !hasKey("wos")) {
+    note(el, "amber", "🔑", "Чтобы искать автоматически, нужны ключи <b>Scopus</b> и <b>Web of Science</b> — бесплатно, один раз. " +
+      "Или выберите режим «🌐 Через браузер»: он работает без ключей.", '<button class="linkbtn" data-go="keys">Получить ключи по шагам</button>');
+  } else {
+    note(el, "", "🔑", `Scopus: <b>${esc(keyLine("scopus"))}</b> · Web of Science: <b>${esc(keyLine("wos"))}</b>`,
+      '<button data-go="keys">Ключи API</button>');
+  }
+}
+function renderSources() {
+  const apiMode = currentMode() === "api";
+  for (const src of ["scopus", "wos"]) {
+    const box = $("src-" + src), missing = apiMode && !hasKey(src);
+    if (missing) box.checked = false;
+    else if (box.disabled) box.checked = true;
+    box.disabled = missing;
+    $("src-" + src + "-note").textContent = missing ? "(нет ключа)" : "";
+  }
+  $("src-openalex-l").hidden = !apiMode;
+  document.querySelectorAll("#mode-seg button").forEach((b) => b.classList.toggle("on", b.dataset.mode === currentMode()));
+  $("mode-api").hidden = !apiMode;
+  $("mode-browser").hidden = apiMode;
+}
+function renderSearchProgress() {
+  const sr = state.search, el = $("search-progress");
+  $("btn-search").disabled = sr.running;
+  if (sr.running) {
+    el.innerHTML = "⏳ Ищу… " + Object.entries(sr.progress).map(([k, p]) => `${SRC[k]}: ${p.done}${p.of ? " из " + p.of : ""}`).join(" · ");
+  } else if (sr.error || searchMsg) {
+    el.innerHTML = `<span style="color: var(--red)">${esc(sr.error || searchMsg)}</span>`;
+  } else {
+    el.innerHTML = "";
+  }
+}
+async function loadResults() {
+  if (loadingResults) return;
+  loadingResults = true;
+  try {
+    const r = await fetch("/api/search_results", { headers: { "X-Token": TOKEN } });
+    const data = await r.json();
+    searchVer = data.version;
+    records = data.records;
+    selected = new Set(records.map((x) => x.doi));
+    delete $("save-name").dataset.touched;
+    $("save-note").innerHTML = "";
+    renderResults();
+    if (records.length || (state.search.summary && state.search.summary.from === "export")) $("results-card").scrollIntoView({ behavior: "smooth" });
+  } catch (e) {}
+  loadingResults = false;
+}
+function renderResults() {
+  const sm = state && state.search.summary;
+  $("results-card").hidden = !sm;
+  if (!sm) return;
+  if (sm.from === "api") {
+    $("res-sources").innerHTML = Object.entries(sm.per_source).map(([k, v]) => v.ok
+      ? `<span>✅ ${SRC[k]}: найдено ${v.total}, взято ${v.taken}${v.no_doi ? `, из них без DOI ${v.no_doi}` : ""}${v.quota ? ` · осталось запросов: ${esc(v.quota)}` : ""}</span>`
+      : `<span style="color: var(--red)">✖ ${SRC[k]}: ${esc(v.message)}` +
+        (["no_key", "bad_key", "no_access", "pending"].includes(v.kind) ? ' <button class="link" data-go="keys">ключи</button>' : "") +
+        (v.kind === "no_access" ? ' <button class="link" data-mode="browser">искать через браузер</button>' : "") + "</span>").join("");
+  } else {
+    $("res-sources").innerHTML = `<span>📄 Из файла «${esc(sm.file)}»: DOI — ${sm.count}${sm.no_doi ? `, записей без DOI — ${sm.no_doi}` : ""}</span>`;
+  }
+  $("res-summary").textContent = `уникальных DOI: ${records.length}`;
+  if (!$("save-name").dataset.touched) $("save-name").value = sm.slug || "список";
+  const rows = records.map((r) => `<tr><td><input type="checkbox" data-sel="${esc(r.doi)}" ${selected.has(r.doi) ? "checked" : ""}></td>` +
+    `<td>${r.title ? esc(r.title) : '<span class="empty">без названия</span>'}</td><td>${esc(r.year)}</td><td>${esc(r.journal)}</td>` +
+    `<td class="query">${esc(r.doi)}</td><td>${r.sources.map((x) => `<span class="src-badge">${SRC[x] || x}</span>`).join("")}</td></tr>`);
+  $("results").innerHTML = records.length
+    ? `<table><thead><tr><th></th><th>Название</th><th>Год</th><th>Журнал</th><th>DOI</th><th>Где найдено</th></tr></thead><tbody>${rows.join("")}</tbody></table>`
+    : '<div class="empty" style="padding: 16px">Статей с DOI не нашлось. Попробуйте другие слова, «любое из слов» или больше лет.</div>';
+  updateSelCount();
+}
+function updateSelCount() {
+  $("sel-count").textContent = records.length ? `выбрано ${selected.size} из ${records.length}` : "";
+  $("btn-save-list").disabled = !selected.size;
+}
+async function runSearch() {
+  const sources = ["scopus", "wos", "openalex"].filter((x) => $("src-" + x).checked && !$("src-" + x).disabled && !$("src-" + x).closest("[hidden]"));
+  const body = { ...searchParams(), sources };
+  if (qDirty.scopus) body.scopus_query = $("q-scopus").value;
+  if (qDirty.wos) body.wos_query = $("q-wos").value;
+  searchMsg = "";
+  try {
+    const res = await api("/api/search", body);
+    if (res.error) searchMsg = res.error;
+  } catch (e) {
+    searchMsg = "Поиск не запустился: " + e.message;
+  }
+  if (state) renderSearchProgress();
+}
+async function browserSearch(source) {
+  const query = $(source === "scopus" ? "q-scopus" : "q-wos").value.trim();
+  if (!query) { $("b-note").textContent = "Сначала введите ключевые слова в пункте 1."; return; }
+  const copied = await copyText(query);
+  await api("/api/browser_search", { source, query });
+  $("b-note").innerHTML = (copied ? "📋 Запрос скопирован. " : "") + (source === "scopus"
+    ? "Scopus открывается в браузере загрузчика, запрос уже подставлен."
+    : "Web of Science открывается в браузере загрузчика: щёлкните в поле расширенного поиска, нажмите <kbd>Ctrl</kbd>+<kbd>V</kbd> и «Search».");
+}
+function renderExports() {
+  if (currentMode() !== "browser") return;
+  const ex = state.exports || [];
+  $("exports-found").innerHTML = ex.length
+    ? ex.map((f) => `📄 <b>${esc(f.name)}</b> (${esc(f.modified)}) <button class="linkbtn" data-export="${esc(f.name)}">Взять DOI из этого файла</button>`).join("<br>")
+    : "Жду файл экспорта… (сначала нажмите одну из кнопок в пункте 1)";
+}
+async function importExport(body) {
+  try {
+    const res = await api("/api/search_import", body);
+    if (res.error) alert(res.error);
+  } catch (e) {
+    alert("Файл не прочитался: " + e.message);
+  }
+}
+async function saveList() {
+  const dois = records.filter((r) => selected.has(r.doi)).map((r) => r.doi);
+  const res = await api("/api/search_save", { dois, slug: $("save-name").value });
+  if (res.error) { note($("save-note"), "red", "✖", esc(res.error)); return; }
+  savedVer = searchVer;
+  note($("save-note"), "green", "✅", `Сохранено: <b>inbox\\${esc(res.name)}</b> — ${res.count} DOI.`,
+    `<button class="linkbtn" data-list="${esc(res.name)}">⬇ Скачать эти статьи сейчас</button><button data-act="open-inbox">📂 Открыть папку inbox</button>`);
+}
+
+// ---- key guide ----------------------------------------------------------------
+const IMG = (name) => `<img src="/img/keys/${name}" alt="" onerror="this.remove()">`;
+const GUIDE = {
+  scopus: { field: "scopus", letter: true, steps: [
+    { t: "Откройте сайт Elsevier для разработчиков.", link: ["elsevier", "👉 Открыть dev.elsevier.com"] },
+    { t: "Нажмите кнопку <b>«I want an API key»</b> («Мне нужен ключ API»).", img: ["scopus_01_glavnaya.png"] },
+    { t: "Войдите: <b>«Sign in»</b>. Если вы входили в ScienceDirect, Scopus или Mendeley — это тот же аккаунт Elsevier. " +
+        "Если аккаунта нет, нажмите <b>«Create account»</b>, введите университетскую почту, имя и пароль, потом откройте почту и нажмите ссылку в письме от Elsevier. " +
+        "Если сайт предлагает войти через университет («Sign in via your organization») — выберите свой университет.", img: ["scopus_02_vhod.png"] },
+    { t: "Откроется страница <b>«My API Key»</b>. Нажмите <b>«Create API Key»</b> («Создать ключ API»). Если страница не открылась сама — кнопка ниже.",
+      link: ["elsevier_keys", "👉 Открыть «My API Key»"], img: ["scopus_03_create.png"] },
+    { t: "Заполните форму: <b>Label</b> (название) — латиницей без пробелов, например <code>ArticleDownloader</code>; " +
+        "<b>Website URL</b> можно оставить пустым (если не даёт — адрес сайта университета).", copy: "ArticleDownloader", img: ["scopus_04_forma.png"] },
+    { t: "Поставьте галочки согласия (<b>API Service Agreement</b>, <b>Text and Data Mining</b> — если есть) и нажмите <b>«Submit»</b>. " +
+        "Бесплатный ключ — для некоммерческого использования, наука подходит." },
+    { t: "Появится ключ — строка примерно из 32 латинских букв и цифр. Выделите её целиком мышкой и нажмите <kbd>Ctrl</kbd>+<kbd>C</kbd>.", img: ["scopus_05_kluch.png"] },
+  ] },
+  wos: { field: "wos", steps: [
+    { t: "Откройте сайт Clarivate для разработчиков. <b>Одобрение может занять от нескольких дней до нескольких недель</b> — начните заранее.",
+      link: ["clarivate", "👉 Открыть developer.clarivate.com"] },
+    { t: "Нажмите <b>«Sign in»</b>. Аккаунт общий с Web of Science и EndNote — если у вас есть личный вход в Web of Science, попробуйте его. " +
+        "Если нет — <b>«Register»</b>: почта, пароль, затем подтвердите письмо.", img: ["wos_01_vhod.png"] },
+    { t: "Создайте «приложение»: в верхнем меню <b>«Applications»</b> → <b>«Register new application»</b>. <b>Name</b>: <code>ArticleDownloader</code>; " +
+        "<b>Description</b> (если просят): <code>Personal literature search for research</code>. Нажмите <b>«Submit»</b> / <b>«Register»</b>.",
+      copy: "ArticleDownloader", img: ["wos_02_applications.png", "wos_03_new_app.png"] },
+    { t: "Откройте страницу <b>Web of Science Starter API</b> и выберите план: <b>Free Trial</b> (бесплатный, до 50 запросов в день — это до 2500 статей) " +
+        "или институциональный, если университет подписан на Web of Science. Нажмите <b>«Subscribe»</b> и выберите своё приложение <code>ArticleDownloader</code>.",
+      link: ["wos_starter", "👉 Открыть Web of Science Starter API"], img: ["wos_04_starter_api.png", "wos_05_subscribe.png"] },
+    { t: "Снова <b>«Applications»</b> → ваше приложение → <b>API Key</b> (часто скрыт — нажмите <b>«Show»</b>). Выделите ключ и нажмите <kbd>Ctrl</kbd>+<kbd>C</kbd>. " +
+        "Если подписка ждёт одобрения (pending) — дождитесь письма от Clarivate.", img: ["wos_06_kluch.png"] },
+  ] },
+  openalex: { field: "openalex", steps: [
+    { t: "OpenAlex — бесплатная база научных статей, <b>ключ не нужен</b>: просто отметьте OpenAlex в окне поиска. " +
+        "Для частого поиска можно взять бесплатный ключ на сайте OpenAlex (необязательно).", link: ["openalex", "👉 Открыть openalex.org"] },
+  ] },
+};
+function renderKeySteps() {
+  const g = GUIDE[keyTab], done = recall("ad_steps", {});
+  document.querySelectorAll("#key-tabs button").forEach((b) => b.classList.toggle("on", b.dataset.ktab === keyTab));
+  let html = g.steps.map((st, i) => {
+    const id = `${keyTab}-${i}`, acts = [];
+    if (st.link) acts.push(`<button class="linkbtn" data-link="${st.link[0]}">${st.link[1]}</button>`);
+    if (st.copy) acts.push(`<button data-copytext="${esc(st.copy)}">📋 Скопировать «${esc(st.copy)}»</button>`);
+    acts.push(`<label class="done-mark"><input type="checkbox" data-step="${id}" ${done[id] ? "checked" : ""}> сделано</label>`);
+    return `<div class="step ${done[id] ? "done" : ""}"><div class="n">${i + 1}</div><div><div class="t">${st.t}</div>` +
+      `<div class="acts">${acts.join("")}</div>${(st.img || []).map(IMG).join("")}</div></div>`;
+  }).join("");
+  html += `<div class="step final"><div class="n">${g.steps.length + 1}</div><div>
+    <div class="t"><b>Вставьте ключ сюда:</b> щёлкните в поле, нажмите <kbd>Ctrl</kbd>+<kbd>V</kbd>, затем «Проверить ключ».</div>
+    <div class="keybox"><input id="key-input" type="password" autocomplete="off" spellcheck="false" placeholder="ключ ${SRC[keyTab]}">
+      <button id="key-eye" title="Показать или скрыть">👁</button></div>
+    ${keyTab === "scopus" ? '<div class="keybox"><input id="key-inst" type="password" autocomplete="off" spellcheck="false" placeholder="insttoken — необязательно, если его дала библиотека"></div>' : ""}
+    <div class="acts"><button class="linkbtn" id="key-check">✔ Проверить ключ</button><button id="key-save">Сохранить без проверки</button>
+      <span id="key-saved" class="recognized"></span></div>
+    <div class="check-res" id="key-res"></div></div></div>`;
+  if (g.letter) {
+    html += `<details style="margin-top: 6px"><summary><b>Ключ «принят, но нет доступа»? Письмо для insttoken</b></summary>
+      <div class="letter" id="inst-letter">Здравствуйте! Я [ФИО, должность], [университет]. Для поиска литературы через Scopus Search API прошу выдать institutional token (insttoken) для моего ключа API. Ключ: [вставьте ключ — только в этом письме]. Работаю из дома, поэтому нужен доступ вне сети университета. Спасибо!</div>
+      <div class="acts"><button data-copy="inst-letter">📋 Скопировать письмо</button>
+        <span class="recognized">Отправьте в библиотеку; если она не поможет — в поддержку Elsevier (dev.elsevier.com → «Support»).</span></div></details>`;
+  }
+  $("key-steps").innerHTML = html;
+  $("key-eye").onclick = () => {
+    for (const id of ["key-input", "key-inst"]) { const el = $(id); if (el) el.type = el.type === "password" ? "text" : "password"; }
+  };
+  $("key-check").onclick = checkKey;
+  $("key-save").onclick = saveKey;
+  if (state) renderKeyStatus();
+}
+function keyBody() {
+  const body = {}, value = $("key-input").value.trim(), inst = $("key-inst");
+  if (value) body[GUIDE[keyTab].field] = value;
+  if (inst && inst.value.trim()) body.scopus_insttoken = inst.value.trim();
+  return body;
+}
+function showKeyRes(ok, text) {
+  const el = $("key-res");
+  el.className = "check-res " + (ok === true ? "ok" : ok === false ? "bad" : "");
+  el.textContent = text;
+}
+function clearKeyInputs() {
+  $("key-input").value = "";
+  if ($("key-inst")) $("key-inst").value = "";
+}
+async function checkKey() {
+  const body = keyBody();
+  if (!Object.keys(body).length && !hasKey(keyTab) && keyTab !== "openalex") { showKeyRes(false, "Сначала вставьте ключ в поле (Ctrl+V)."); return; }
+  showKeyRes(null, "Проверяю… (до полуминуты)");
+  try {
+    const res = await api("/api/keys_check", { source: keyTab, ...body });
+    if (res.ok && Object.keys(body).length) {
+      await api("/api/keys_save", body);
+      clearKeyInputs();
+      showKeyRes(true, res.message + " Ключ сохранён.");
+    } else {
+      showKeyRes(res.ok, res.message);
+    }
+  } catch (e) {
+    showKeyRes(false, "Проверка не удалась: " + e.message);
+  }
+}
+async function saveKey() {
+  const body = keyBody();
+  if (!Object.keys(body).length) { showKeyRes(false, "Поле пустое — вставьте ключ (Ctrl+V)."); return; }
+  await api("/api/keys_save", body);
+  clearKeyInputs();
+  showKeyRes(true, "Ключ сохранён (не проверен).");
+}
+async function deleteKey() {
+  const body = { [GUIDE[keyTab].field]: null };
+  if (keyTab === "scopus") body.scopus_insttoken = null;
+  await api("/api/keys_save", body);
+  showKeyRes(null, "Ключ удалён.");
+}
+function renderKeyStatus() {
+  for (const src of ["scopus", "wos", "openalex"]) {
+    const chk = state.key_checks[src];
+    $("kt-" + src).textContent = state.keys[src] ? (chk && !chk.ok ? "⚠" : "✓") : "";
+  }
+  const el = $("key-saved");
+  if (!el) return;
+  const k = state.keys[GUIDE[keyTab].field];
+  el.innerHTML = k ? `Сохранён: <b>${esc(k)}</b>${keyTab === "scopus" && state.keys.scopus_insttoken ? " + insttoken" : ""} <button class="link" id="key-del">удалить</button>`
+    : (keyTab === "openalex" ? "Ключ необязателен." : "Ключ ещё не сохранён.");
+  if ($("key-del")) $("key-del").onclick = deleteKey;
+}
+
+// ---- wiring ---------------------------------------------------------------------
+$("go-search").onclick = () => show("search");
+$("go-download").onclick = () => { show("download"); chooseFile(); };
+$("home-keys").onclick = () => show("keys");
+$("home-inbox").onclick = () => api("/api/open_inbox");
+$("home-pdf").onclick = () => api("/api/open", { what: "pdf_dir" });
+$("btn-home").onclick = () => show("home");
+$("btn-keys").onclick = () => show("keys");
+$("btn-settings-keys").onclick = () => { $("dlg-settings").close(); show("keys"); };
+$("btn-choose").onclick = chooseFile;
+$("btn-open-inbox").onclick = () => api("/api/open_inbox");
+$("btn-search").onclick = runSearch;
+$("q-scopus").addEventListener("input", () => { qDirty.scopus = true; });
+$("q-wos").addEventListener("input", () => { qDirty.wos = true; });
+$("q-reset").onclick = () => { qDirty = { scopus: false, wos: false }; buildQueries(); };
+$("b-scopus").onclick = () => browserSearch("scopus");
+$("b-wos").onclick = () => browserSearch("wos");
+$("b-upload").onclick = () => $("export-file").click();
+$("export-file").onchange = async (e) => {
+  for (const f of e.target.files) await importExport({ file_name: f.name, file_b64: toBase64(await f.arrayBuffer()) });
+  e.target.value = "";
+};
+$("sel-all").onclick = () => { selected = new Set(records.map((r) => r.doi)); renderResults(); };
+$("sel-none").onclick = () => { selected = new Set(); renderResults(); };
+$("save-name").addEventListener("input", () => { $("save-name").dataset.touched = "1"; });
+$("btn-save-list").onclick = saveList;
+for (const id of FORM_IDS) {
+  $(id).addEventListener("input", () => { buildQueriesSoon(); store("ad_search", searchParams()); });
+  $(id).addEventListener("change", () => { buildQueriesSoon(); store("ad_search", searchParams()); });
+}
+document.addEventListener("change", (e) => {
+  const t = e.target;
+  if (t.dataset.sel) { if (t.checked) selected.add(t.dataset.sel); else selected.delete(t.dataset.sel); updateSelCount(); }
+  if (t.dataset.step) {
+    const done = recall("ad_steps", {});
+    done[t.dataset.step] = t.checked;
+    store("ad_steps", done);
+    t.closest(".step").classList.toggle("done", t.checked);
+  }
+});
+document.addEventListener("click", async (e) => {
+  const t = e.target.closest("button");
+  if (!t) return;
+  if (t.dataset.go) show(t.dataset.go);
+  if (t.dataset.list) queueList(t.dataset.list);
+  if (t.dataset.export) importExport({ name: t.dataset.export });
+  if (t.dataset.link) api("/api/open_link", { key: t.dataset.link });
+  if (t.dataset.copy) flash(t, await copyText($(t.dataset.copy).textContent));
+  if (t.dataset.copytext) flash(t, await copyText(t.dataset.copytext));
+  if (t.dataset.ktab) { keyTab = t.dataset.ktab; renderKeySteps(); }
+  if (t.dataset.mode) setMode(t.dataset.mode);
+  if (t.dataset.act === "open-inbox") api("/api/open_inbox");
+});
+(() => {
+  const saved = recall("ad_search", null);
+  if (saved) {
+    $("kw").value = saved.keywords || "";
+    $("f-match").value = saved.match || "all";
+    $("f-field").value = saved.field || "tak";
+    $("f-from").value = saved.year_from || "";
+    $("f-to").value = saved.year_to || "";
+    $("f-type").value = saved.doc_type || "both";
+    $("f-max").value = saved.max_results || 200;
+  }
+  show(location.hash.slice(1) || "home");
+})();
+
+// ===== v6.2: new topic, list archive, keyword hints, thanks to the author =====
+const HINT_DEFAULT = "Подберёт частые ключевые слова из статей по вашей теме (бесплатно, OpenAlex).";
+let savedVer = -1;
+
+$("btn-new-topic").onclick = async () => {
+  if (records.length && savedVer !== searchVer &&
+      !confirm("Найденное ещё не сохранено в список. Очистить всё и начать новую тему?")) return;
+  $("kw").value = "";
+  $("f-match").value = "all";
+  $("f-field").value = "tak";
+  $("f-from").value = "";
+  $("f-to").value = "";
+  $("f-type").value = "both";
+  $("f-max").value = 200;
+  try { localStorage.removeItem("ad_search"); } catch (e) {}
+  qDirty = { scopus: false, wos: false };
+  $("q-scopus").value = "";
+  $("q-wos").value = "";
+  searchMsg = "";
+  records = [];
+  selected = new Set();
+  for (const id of ["save-note", "b-note", "search-progress", "hints"]) $(id).innerHTML = "";
+  $("hints-note").textContent = HINT_DEFAULT;
+  delete $("save-name").dataset.touched;
+  $("results-card").hidden = true;
+  await api("/api/search_clear");
+  $("kw").focus();
+};
+
+async function archiveList(name) {
+  if (!confirm(`Убрать список «${name}» в архив (папка inbox\\_архив)?\nФайл не удаляется, его можно вернуть.`)) return;
+  const res = await api("/api/archive_list", { name });
+  $("choose-note").innerHTML = res.error ? `<span style="color: var(--red)">${esc(res.error)}</span>`
+    : `🗑 Список <b>${esc(name)}</b> убран в архив <b>inbox\\_архив</b>.`;
+  loadLists();
+}
+
+function kwLines() { return $("kw").value.split("\n").map((x) => x.trim()).filter(Boolean); }
+function markHints() {
+  const have = new Set(kwLines().map((x) => x.toLowerCase()));
+  document.querySelectorAll("#hints [data-hint]").forEach((b) => b.classList.toggle("on", have.has(b.dataset.hint.toLowerCase())));
+}
+function toggleHint(term) {
+  const lines = kwLines(), i = lines.findIndex((x) => x.toLowerCase() === term.toLowerCase());
+  if (i >= 0) lines.splice(i, 1); else lines.push(term);
+  $("kw").value = lines.join("\n") + "\n";
+  $("kw").dispatchEvent(new Event("input"));
+}
+$("kw").addEventListener("input", markHints);
+$("btn-hints").onclick = async () => {
+  if (!$("kw").value.trim()) { $("hints-note").textContent = "Сначала впишите хотя бы одно слово темы (лучше по-английски)."; return; }
+  $("btn-hints").disabled = true;
+  $("hints").innerHTML = "";
+  $("hints-note").textContent = "Смотрю самые подходящие статьи в OpenAlex…";
+  try {
+    const res = await api("/api/suggest_keywords", { keywords: $("kw").value });
+    if (res.error) {
+      $("hints-note").innerHTML = `<span style="color: var(--red)">${esc(res.error)}</span>`;
+    } else if (!res.terms.length) {
+      $("hints-note").textContent = "Подсказок не нашлось — попробуйте другие слова.";
+    } else {
+      $("hints-note").textContent = `Частые ключевые слова в ${res.papers} самых подходящих статьях (всего по теме ${res.total}). ` +
+        "Нажмите на слово, чтобы добавить или убрать его. Добавляете синонимы — выберите «любое из слов (ИЛИ)».";
+      $("hints").innerHTML = res.terms.map((h) => `<button class="hint" data-hint="${esc(h.term)}" ` +
+        `title="${h.kind === "topic" ? "тема" : "ключевое слово"} — встречается в ${h.count} статьях">${esc(h.term)} <small>${h.count}</small></button>`).join("");
+      markHints();
+    }
+  } catch (e) {
+    $("hints-note").textContent = "Подсказки не загрузились: " + e.message;
+  }
+  $("btn-hints").disabled = false;
+};
+
+async function openDonate() {
+  $("donate-body").textContent = "Загружаю…";
+  $("dlg-donate").showModal();
+  try {
+    const r = await fetch("/api/donate", { headers: { "X-Token": TOKEN } });
+    const d = await r.json();
+    let html = d.message ? `<p class="dn-msg">${esc(d.message)}</p>` : "";
+    if (d.sbp) {
+      html += `<h4 class="dn-h">${esc(d.sbp.title || "Перевод по СБП")}</h4><div class="donate-sbp"><div class="qr">${d.sbp.qr || ""}</div>` +
+        `<div><div>${esc(d.sbp.note || "")}</div><div class="acts"><button class="linkbtn" data-act="donate-link">Открыть ссылку</button>` +
+        `<button data-copytext="${esc(d.sbp.url)}">📋 Скопировать ссылку</button></div></div></div>`;
+    }
+    if (d.crypto && d.crypto.length) {
+      html += '<h4 class="dn-h">Криптовалюта</h4><div class="recognized" style="margin-bottom: 10px">⚠ Отправляйте монету только в указанной сети: ' +
+        "перевод в другой сети пропадёт.</div><div class=\"donate-grid\">" +
+        d.crypto.map((c) => `<div class="donate-card"><div class="coin">${esc(c.coin)}</div><div class="net">сеть ${esc(c.network)}</div>` +
+          `<div class="qr">${c.qr || ""}</div><div class="addr">${esc(c.address)}</div>` +
+          `<button data-copytext="${esc(c.address)}">📋 Скопировать адрес</button></div>`).join("") + "</div>";
+    }
+    $("donate-body").innerHTML = html || "Реквизиты не настроены.";
+  } catch (e) {
+    $("donate-body").textContent = "Не загрузилось: " + e.message;
+  }
+}
+$("home-donate").onclick = openDonate;
+document.addEventListener("click", (e) => {
+  const t = e.target.closest("button");
+  if (!t) return;
+  if (t.dataset.archive) archiveList(t.dataset.archive);
+  if (t.dataset.hint) toggleHint(t.dataset.hint);
+  if (t.dataset.act === "donate") openDonate();
+  if (t.dataset.act === "donate-link") api("/api/open_donate_link");
+});
 
 fetch("/api/state?v=0", { headers: { "X-Token": TOKEN } }).then((r) => r.json()).then((s) => {
   $("title-mode").checked = !!s.settings.title_for_plain_lines;
