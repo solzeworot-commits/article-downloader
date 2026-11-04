@@ -1,0 +1,15 @@
+# Dependabot keeps the GitHub Actions of .github/workflows up to date
+# (actions/checkout, actions/setup-python): once a month it opens a pull
+# request, the Windows build checks it (see build-portable.yml), and it is
+# merged by hand. The program's Python libraries are not pinned anywhere:
+# tools/build_portable.py takes their newest versions at every build, so
+# there is nothing for Dependabot to update there.
+version: 2
+updates:
+  - package-ecosystem: "github-actions"
+    directory: "/"
+    schedule:
+      interval: "monthly"
+    commit-message:
+      prefix: "CI"
+    labels: []

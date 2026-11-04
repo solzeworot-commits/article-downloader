@@ -13,6 +13,11 @@ on:
       - ".github/workflows/build-portable.yml"
       - ".github/release-notes.md"
       - "LICENSE"
+  # Dependabot's pull requests (newer actions) are built and checked before
+  # they are merged; nothing is published from a pull request.
+  pull_request:
+    paths:
+      - ".github/workflows/build-portable.yml"
   workflow_dispatch:
 
 permissions:
@@ -20,6 +25,7 @@ permissions:
 
 jobs:
   build:
+    if: github.event_name != 'pull_request' || github.actor == 'dependabot[bot]'
     runs-on: windows-latest
     env:
       PYTHONUTF8: "1"
@@ -142,6 +148,7 @@ jobs:
           & $py -E -s -X utf8 tests\api_probe.py (Join-Path $env:APP "scripts")
 
       - name: Выложить zip на страницу Releases
+        if: github.event_name != 'pull_request'
         shell: pwsh
         env:
           GH_TOKEN: ${{ github.token }}
