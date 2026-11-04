@@ -1,0 +1,852 @@
+--- original_v5.24/scripts/article_downloader.py	2026-11-04 06:17:40.547778710 +0000
++++ portable/scripts/article_downloader.py	2026-11-04 06:17:40.278594347 +0000
+@@ -1,6 +1,11 @@
+ # -*- coding: utf-8 -*-
+ """
+-ArticleDownloader FINAL v5.24 STABLE CDP + JOB DEADLINE + TITLE SEARCH
++ArticleDownloader PORTABLE v6.0 (v5.24 STABLE CDP + JOB DEADLINE + TITLE SEARCH)
++v6.0:  portable build driven by app.py (window with the queue). The dedicated
++       browser is Yandex Browser, Edge or Chrome (ARTICLE_BROWSER, "auto"
++       prefers Yandex). --warmup opens every database first so CAPTCHAs are
++       passed before the queue starts; --open URL opens a tab in the
++       dedicated browser (institution sign-in); --restart-browser.
+ v5.24: "title: <title> || <year> || <journal> || #<no>" searches the open web
+        by title (CyberLeninka, OpenAlex, Europe PMC, Crossref, Bing);
+        a DOI found that way goes through the normal publisher routes.
+@@ -41,7 +46,7 @@
+   - Generic DOI fallback for other publishers after doi.org resolution
+ 
+ Browser routes:
+-  - all supported browser routes -> dedicated Yandex Browser, CDP port 9223
++  - all supported browser routes -> dedicated browser, CDP port 9223
+ 
+ No CAPTCHA solving/bypass is used. If a supported site asks for human
+ verification, the real browser is brought to the foreground and the script
+@@ -81,7 +86,7 @@
+ LOG_DIR.mkdir(parents=True, exist_ok=True)
+ 
+ EDGE_CDP_URL = "http://127.0.0.1:9223"
+-YANDEX_CDP_URL = "http://127.0.0.1:9223"
++BROWSER_CDP_URL = "http://127.0.0.1:9223"
+ 
+ EXIT_SUCCESS = 0
+ EXIT_FAILURE = 1
+@@ -280,7 +285,7 @@
+     )
+     print("", flush=True)
+     print("=" * 70, flush=True)
+-    print(f"{source}: НУЖНО ВРУЧНУЮ ПРОЙТИ ПРОВЕРКУ В YANDEX BROWSER", flush=True)
++    print(f"{source}: НУЖНО ВРУЧНУЮ ПРОЙТИ ПРОВЕРКУ В ОКНЕ БРАУЗЕРА ЗАГРУЗЧИКА", flush=True)
+     print(
+         f"Скрипт НЕ ОСТАНОВЛЕН. Он ждёт до {timeout_sec} секунд "
+         "и продолжит автоматически после прохождения проверки.",
+@@ -363,7 +368,7 @@
+             session.detach()
+         except Exception:
+             pass
+-        urllib.request.urlopen(f"{YANDEX_CDP_URL}/json/close/{target_id}", timeout=5).read()
++        urllib.request.urlopen(f"{BROWSER_CDP_URL}/json/close/{target_id}", timeout=5).read()
+     except Exception:
+         pass
+     try:
+@@ -2171,7 +2176,7 @@
+     """One disposable CDP session. Parent terminates it on post-write marker."""
+     try:
+         with sync_playwright() as p:
+-            browser = p.chromium.connect_over_cdp(YANDEX_CDP_URL, timeout=12000)
++            browser = p.chromium.connect_over_cdp(BROWSER_CDP_URL, timeout=12000)
+             if not browser.contexts:
+                 raise DownloadError("Yandex context missing in direct PDF worker")
+             context = browser.contexts[0]
+@@ -2447,7 +2452,7 @@
+         "Waiting for manual login in Edge."
+     )
+     safe_console_print("=" * 70)
+-    safe_console_print("eLIBRARY: ВОЙДИТЕ В АККАУНТ В ОТКРЫТОМ YANDEX BROWSER. Скрипт ждёт.")
++    safe_console_print("eLIBRARY: ВОЙДИТЕ В АККАУНТ В ОКНЕ БРАУЗЕРА ЗАГРУЗЧИКА. Скрипт ждёт.")
+     safe_console_print("=" * 70)
+ 
+     deadline = time.time() + job_bounded_wait(timeout_sec)
+@@ -4340,8 +4345,8 @@
+     return cdp_alive(EDGE_CDP_URL, timeout)
+ 
+ 
+-def yandex_cdp_alive(timeout: float = 2.0) -> bool:
+-    return cdp_alive(YANDEX_CDP_URL, timeout)
++def browser_cdp_alive(timeout: float = 2.0) -> bool:
++    return cdp_alive(BROWSER_CDP_URL, timeout)
+ 
+ 
+ # v5.21: Playwright connect_over_cdp attaches to EVERY open tab before it
+@@ -4397,11 +4402,100 @@
+     return closed
+ 
+ 
+-def yandex_profile_dir() -> Path:
++# v6.0 portable: the dedicated browser is chosen by ARTICLE_BROWSER
++# (auto | yandex | edge | chrome, or the path to a browser .exe). "auto"
++# prefers Yandex Browser: its dedicated profile keeps the Elsevier check
++# passed far longer than Edge did. ARTICLE_BROWSER_ARGS adds extra switches.
++#
++# The profile stays in %LOCALAPPDATA%, not in the portable folder: Windows
++# encrypts cookies per user and computer, so a copied profile loses its
++# logins anyway, and the folder that is copied around or synced through
++# OneDrive carries no sign-ins. The Yandex profile is the one v5 used.
++BROWSER_KINDS = ("yandex", "edge", "chrome")
++BROWSER_TITLES = {
++    "yandex": "Яндекс.Браузер",
++    "edge": "Microsoft Edge",
++    "chrome": "Google Chrome",
++    "custom": "браузер",
++}
++BROWSER_PROFILE_NAMES = {
++    "yandex": "YandexProfile",
++    "edge": "EdgeProfile",
++    "chrome": "ChromeProfile",
++    "custom": "BrowserProfile",
++}
++BROWSER_EXE_NAMES = {
++    "browser.exe": "yandex",
++    "msedge.exe": "edge",
++    "chrome.exe": "chrome",
++}
++
++
++def find_browser_exe(kind: str) -> str | None:
++    local = os.environ.get("LOCALAPPDATA")
++    pf = os.environ.get("ProgramFiles")
++    pf86 = os.environ.get("ProgramFiles(x86)")
++
++    if kind == "yandex":
++        bases = (local, pf, pf86)
++        rel = ("Yandex", "YandexBrowser", "Application", "browser.exe")
++    elif kind == "edge":
++        bases = (pf86, pf, local)
++        rel = ("Microsoft", "Edge", "Application", "msedge.exe")
++    elif kind == "chrome":
++        bases = (pf, pf86, local)
++        rel = ("Google", "Chrome", "Application", "chrome.exe")
++    else:
++        return None
++
++    for base in bases:
++        if base:
++            candidate = Path(base, *rel)
++            if candidate.exists():
++                return str(candidate)
++
++    return None
++
++
++def find_edge_exe() -> str | None:
++    return find_browser_exe("edge")
++
++
++def find_yandex_exe() -> str | None:
++    return find_browser_exe("yandex")
++
++
++def dedicated_browser() -> tuple[str, str]:
++    """(kind, executable) of the dedicated browser for ARTICLE_BROWSER."""
++    choice = (os.environ.get("ARTICLE_BROWSER") or "auto").strip().strip('"')
++
++    if choice.lower() not in ("auto",) + BROWSER_KINDS:
++        exe = Path(choice)
++        if not exe.is_file():
++            raise DownloadError(f"Browser executable not found: {choice}")
++        return BROWSER_EXE_NAMES.get(exe.name.lower(), "custom"), str(exe)
++
++    kinds = BROWSER_KINDS if choice.lower() == "auto" else (choice.lower(),)
++    for kind in kinds:
++        exe = find_browser_exe(kind)
++        if exe:
++            return kind, exe
++
++    wanted = ", ".join(BROWSER_TITLES[k] for k in kinds)
++    raise DownloadError(f"Browser not found: {wanted}")
++
++
++def browser_profile_dir(kind: str | None = None) -> Path:
++    override = os.environ.get("ARTICLE_PROFILE_DIR")
++    if override:
++        return Path(override)
++
++    if kind is None:
++        kind = dedicated_browser()[0]
++
+     local = os.environ.get("LOCALAPPDATA")
+-    if not local:
+-        raise DownloadError("LOCALAPPDATA is not available")
+-    return Path(local) / "ArticleDownloader" / "YandexProfile"
++    base = Path(local) / "ArticleDownloader" if local else ROOT / "profile"
++    return base / BROWSER_PROFILE_NAMES.get(kind, "BrowserProfile")
+ 
+ 
+ def clear_session_restore(profile: Path):
+@@ -4431,95 +4525,42 @@
+         log_line(f"Cleared {removed} session-restore file(s) in {profile}")
+ 
+ 
+-def find_edge_exe() -> str | None:
+-    candidates = []
+-
+-    pf86 = os.environ.get("ProgramFiles(x86)")
+-    pf = os.environ.get("ProgramFiles")
+-    local = os.environ.get("LOCALAPPDATA")
+-
+-    if pf86:
+-        candidates.append(
+-            Path(pf86) / "Microsoft" / "Edge" / "Application" / "msedge.exe"
+-        )
+-    if pf:
+-        candidates.append(
+-            Path(pf) / "Microsoft" / "Edge" / "Application" / "msedge.exe"
+-        )
+-    if local:
+-        candidates.append(
+-            Path(local) / "Microsoft" / "Edge" / "Application" / "msedge.exe"
+-        )
+-
+-    for candidate in candidates:
+-        if candidate.exists():
+-            return str(candidate)
+-
+-    return None
+-
+-
+-def find_yandex_exe() -> str | None:
+-    candidates = []
+-
+-    local = os.environ.get("LOCALAPPDATA")
+-    pf = os.environ.get("ProgramFiles")
+-    pf86 = os.environ.get("ProgramFiles(x86)")
+-
+-    if local:
+-        candidates.append(
+-            Path(local) / "Yandex" / "YandexBrowser" / "Application" / "browser.exe"
+-        )
+-    if pf:
+-        candidates.append(
+-            Path(pf) / "Yandex" / "YandexBrowser" / "Application" / "browser.exe"
+-        )
+-    if pf86:
+-        candidates.append(
+-            Path(pf86) / "Yandex" / "YandexBrowser" / "Application" / "browser.exe"
+-        )
+-
+-    for candidate in candidates:
+-        if candidate.exists():
+-            return str(candidate)
+-
+-    return None
+-
+-
+ def ensure_edge_running(timeout_sec: int = 40):
+-    # v5.13 compatibility route: legacy Edge requests go to Yandex/9223.
+-    return ensure_yandex_running(timeout_sec)
++    # v5.13 compatibility route: legacy Edge requests go to the browser/9223.
++    return ensure_browser_running(timeout_sec)
+ 
+ 
+-def ensure_yandex_running(timeout_sec: int = 40):
++def ensure_browser_running(timeout_sec: int = 40):
+     """
+-    Elsevier uses the dedicated persistent Yandex Browser profile on port 9223.
+-    If it is not running, restart the same profile so its cookies/session survive
+-    normal browser restarts.
++    All routes use the dedicated persistent browser profile on port 9223.
++    If it is not running, restart the same profile so its cookies/session
++    survive normal browser restarts.
+     """
+-    if yandex_cdp_alive():
++    if browser_cdp_alive():
+         return
+ 
+-    yandex = find_yandex_exe()
++    kind, exe = dedicated_browser()
++    title = BROWSER_TITLES.get(kind, kind)
+ 
+-    if not yandex:
+-        raise DownloadError("Yandex Browser executable not found")
+-
+-    profile = yandex_profile_dir()
++    profile = browser_profile_dir(kind)
+     profile.mkdir(parents=True, exist_ok=True)
+ 
+     log_line(
+-        "Dedicated Yandex Browser is not reachable on port 9223; restarting it."
++        f"Dedicated browser ({title}) is not reachable on port 9223; starting it."
+     )
+ 
+     args = [
+-        yandex,
++        exe,
+         "--remote-debugging-port=9223",
+         f"--user-data-dir={profile}",
+         "--no-first-run",
+         "--no-default-browser-check",
+         "--disable-background-mode",
+-        "about:blank",
+     ]
++    extra = os.environ.get("ARTICLE_BROWSER_ARGS", "").strip()
++    if extra:
++        args.extend(extra.split())
++    args.append("about:blank")
+ 
+     creationflags = 0
+     if os.name == "nt":
+@@ -4534,91 +4575,116 @@
+         )
+     except Exception as exc:
+         raise DownloadError(
+-            f"Cannot start dedicated Yandex Browser: {exc}"
++            f"Cannot start dedicated browser ({title}): {exc}"
+         ) from exc
+ 
+     deadline = time.time() + timeout_sec
+ 
+     while time.time() < deadline:
+-        if yandex_cdp_alive():
+-            log_line("Dedicated Yandex Browser is ready on port 9223.")
++        if browser_cdp_alive():
++            log_line(f"Dedicated browser ({title}) is ready on port 9223.")
+             time.sleep(2)
+             return
+         time.sleep(1)
+ 
+     raise DownloadError(
+-        "Dedicated Yandex Browser was started but CDP port 9223 "
++        f"Dedicated browser ({title}) was started but CDP port 9223 "
+         "did not become ready"
+     )
+ 
+ 
+-def stop_dedicated_yandex():
++def _is_dedicated_browser_cmdline(cmdline: list[str], profile: Path) -> bool:
++    joined = " ".join(cmdline).lower()
++    return (
++        "--remote-debugging-port=9223" in joined
++        or str(profile).lower() in joined
++    )
++
++
++def stop_dedicated_browser():
+     """
+-    Stop ONLY the ArticleDownloader Yandex instance.
+-    Normal Yandex Browser windows/profiles are not targeted.
++    Stop ONLY the ArticleDownloader browser instance (port 9223 / its
++    profile). Normal browser windows and profiles are not targeted.
+     """
+-    if os.name != "nt":
+-        return
++    try:
++        profile = browser_profile_dir()
++    except Exception:
++        profile = Path("ArticleDownloader") / "BrowserProfile"
+ 
+-    ps = r"""
+-$items = Get-CimInstance Win32_Process -Filter "Name='browser.exe'" |
++    try:
++        import psutil
++    except ImportError:
++        psutil = None
++
++    if psutil is None:
++        if os.name != "nt":
++            return
++        ps = r"""
++$items = Get-CimInstance Win32_Process |
+     Where-Object {
+-        $_.CommandLine -like '*--remote-debugging-port=9223*' -or
+-        $_.CommandLine -like '*ArticleDownloader*YandexProfile*'
++        @('browser.exe','msedge.exe','chrome.exe') -contains $_.Name -and (
++            $_.CommandLine -like '*--remote-debugging-port=9223*' -or
++            $_.CommandLine -like '*ArticleDownloader*Profile*')
+     }
+-
+ foreach($p in $items) {
+     try {
+         Stop-Process -Id $p.ProcessId -Force -ErrorAction Stop
+-        Write-Output ("Stopped dedicated Yandex PID " + $p.ProcessId)
++        Write-Output ("Stopped dedicated browser PID " + $p.ProcessId)
+     } catch {}
+ }
+ """
+-
+-    try:
+-        result = subprocess.run(
+-            [
+-                "powershell",
+-                "-NoProfile",
+-                "-ExecutionPolicy",
+-                "Bypass",
+-                "-Command",
+-                ps,
+-            ],
+-            text=True,
+-            capture_output=True,
+-            encoding="utf-8",
+-            errors="replace",
+-            timeout=20,
+-        )
+-
+-        if result.stdout.strip():
++        try:
++            result = subprocess.run(
++                ["powershell", "-NoProfile", "-ExecutionPolicy", "Bypass", "-Command", ps],
++                text=True,
++                capture_output=True,
++                encoding="utf-8",
++                errors="replace",
++                timeout=20,
++                creationflags=getattr(subprocess, "CREATE_NO_WINDOW", 0),
++            )
+             for line in result.stdout.splitlines():
+-                log_line(line)
++                if line.strip():
++                    log_line(line)
++        except Exception as exc:
++            log_line(f"Could not stop dedicated browser cleanly: {exc}")
++        return
+ 
+-    except Exception as exc:
+-        log_line(f"Could not stop dedicated Yandex cleanly: {exc}")
++    names = {"browser.exe", "msedge.exe", "chrome.exe", "browser", "msedge",
++             "chrome", "chromium", "chrome-wrapper"}
++    for proc in psutil.process_iter(["pid", "name", "cmdline"]):
++        try:
++            name = (proc.info.get("name") or "").lower()
++            cmdline = proc.info.get("cmdline") or []
++            if name not in names and not any("chrom" in c.lower() for c in cmdline[:1]):
++                continue
++            if not _is_dedicated_browser_cmdline(cmdline, profile):
++                continue
++            proc.kill()
++            log_line(f"Stopped dedicated browser PID {proc.pid}")
++        except (psutil.Error, OSError):
++            pass
+ 
+ 
+-def restart_yandex_running(timeout_sec: int = 45):
++def restart_browser_running(timeout_sec: int = 45):
+     """
+-    Recover from a stale Yandex CDP context.
++    Recover from a stale browser CDP context.
+     """
+     log_line(
+-        "Restarting dedicated Yandex Browser because its CDP context is stale."
++        "Restarting dedicated browser because its CDP context is stale."
+     )
+ 
+-    stop_dedicated_yandex()
++    stop_dedicated_browser()
+ 
+     deadline = time.time() + 12
+     while time.time() < deadline:
+-        if not yandex_cdp_alive():
++        if not browser_cdp_alive():
+             break
+         time.sleep(0.5)
+ 
+-    if yandex_cdp_alive():
++    if browser_cdp_alive():
+         raise DownloadError(
+-            "Dedicated Yandex Browser could not be stopped; "
++            "Dedicated browser could not be stopped; "
+             "port 9223 is still occupied"
+         )
+ 
+@@ -4626,11 +4692,11 @@
+     # connect_over_cdp hangs exactly like before the restart.
+     time.sleep(1)
+     try:
+-        clear_session_restore(yandex_profile_dir())
++        clear_session_restore(browser_profile_dir())
+     except Exception as exc:
+         log_line(f"Session restore cleanup skipped: {exc}")
+ 
+-    ensure_yandex_running(timeout_sec)
++    ensure_browser_running(timeout_sec)
+ 
+ 
+ def connect_cdp_browser(playwright, cdp_url: str, ensure_func, label: str):
+@@ -4696,15 +4762,15 @@
+                 close_cdp_tabs(cdp_url, label)
+                 continue
+ 
+-            # In the current all-Yandex configuration EDGE_CDP_URL and
+-            # YANDEX_CDP_URL both point to 9223. A simple ensure_* call is not
+-            # sufficient because yandex_cdp_alive() may still return True for
++            # In the current single-browser configuration EDGE_CDP_URL and
++            # BROWSER_CDP_URL both point to 9223. A simple ensure_* call is not
++            # sufficient because browser_cdp_alive() may still return True for
+             # a wedged websocket. Force-restart ONLY the dedicated profile.
+             try:
+                 log_line(
+-                    f"{label}: forcing dedicated Yandex restart before retry."
++                    f"{label}: forcing dedicated browser restart before retry."
+                 )
+-                restart_yandex_running(45)
++                restart_browser_running(45)
+             except Exception as restart_exc:
+                 log_line(
+                     f"{label}: restart failed: "
+@@ -4718,6 +4784,174 @@
+     )
+ 
+ 
++
++# ---------------------------------------------------------------------------
++# WARM-UP: open every database before the queue starts (v6.0)
++# ---------------------------------------------------------------------------
++
++# Wider than looks_like_captcha(): a false hit here only keeps the queue
++# waiting, while there it would stop a download.
++WARMUP_CHECK_WORDS = (
++    "verify you are human",
++    "verifying you are human",
++    "checking your browser",
++    "security verification",
++    "cloudflare",
++    "are you a robot",
++    "just a moment",
++    "один момент",
++    "подтвердите, что вы не робот",
++    "安全验证",
++    "拖动下方拼图",
++)
++WARMUP_ACCESS_RE = re.compile(
++    r"(?:access provided by|доступ предоставлен)\s*:?\s*([^\n]{3,80})", re.I
++)
++WARMUP_LOAD_LIMIT_SEC = 90
++
++
++def _warmup_state(page) -> tuple[str, str]:
++    try:
++        url, text = page.evaluate(
++            "() => [location.href, (document.title || '') + '\\n' + "
++            "(document.body ? document.body.innerText.slice(0, 8000) : '')]"
++        )
++    except Exception as exc:
++        return ("closed", "") if _target_closed_error(exc) else ("loading", "")
++
++    low = (text or "").lower()
++    if url in ("", "about:blank"):
++        return "loading", ""
++    # The browser's own "site can't be reached" page.
++    if url.startswith("chrome-error:") or re.search(r"\bERR_[A-Z_]{4,}\b", text or ""):
++        return "error", ""
++    if any(word in low for word in WARMUP_CHECK_WORDS):
++        return "captcha", ""
++    if len(low.strip()) < 20:
++        return "loading", ""
++    m = WARMUP_ACCESS_RE.search(text)
++    return "ok", (m.group(1).strip() if m else "")
++
++
++def run_warmup(bases_file: Path) -> int:
++    """
++    Open one tab per database ([{"key", "url"}, ...] in bases_file) and wait
++    until none of them shows a human-verification page. Progress goes to
++    stdout as WARMUP|<key>|<state>|<detail>; states: loading, captcha, ok,
++    error (did not load), closed (tab closed by the user). The tab with a
++    CAPTCHA is brought to the front, one after another.
++    """
++    bases = json.loads(bases_file.read_text(encoding="utf-8"))
++    wait_sec = job_bounded_wait(1800, margin_sec=5)
++
++    with sync_playwright() as p:
++        browser = connect_cdp_browser(
++            p, BROWSER_CDP_URL, ensure_browser_running, "Dedicated browser"
++        )
++        context = browser.contexts[0]
++        tabs = []
++
++        for base in bases:
++            page = context.new_page()
++            safe_console_print(f"WARMUP|{base['key']}|loading|")
++            try:
++                page.goto(base["url"], wait_until="commit", timeout=30000)
++            except Exception as exc:
++                log_line(f"Warm-up {base['key']}: {type(exc).__name__}: {exc}")
++            tabs.append({"key": base["key"], "page": page,
++                         "state": "loading", "opened": time.time()})
++
++        log_line(f"Warm-up: {len(tabs)} database tab(s) opened")
++        deadline = time.time() + wait_sec
++        front = None
++        clear_rounds = 0
++
++        while time.time() < deadline:
++            first_captcha = None
++            blocking = 0
++
++            for tab in tabs:
++                if tab["state"] == "closed":
++                    continue
++                state, detail = _warmup_state(tab["page"])
++                if (state == "loading"
++                        and time.time() - tab["opened"] > WARMUP_LOAD_LIMIT_SEC):
++                    state = "error"
++                if state != tab["state"] or (state == "ok" and detail):
++                    if state != tab["state"]:
++                        log_line(f"Warm-up {tab['key']}: {state} {detail}".rstrip())
++                    safe_console_print(f"WARMUP|{tab['key']}|{state}|{detail}")
++                    tab["state"] = state
++                if state in ("loading", "captcha"):
++                    blocking += 1
++                if state == "captcha" and first_captcha is None:
++                    first_captcha = tab["page"]
++
++            if first_captcha is not None and first_captcha is not front:
++                try:
++                    first_captcha.bring_to_front()
++                except Exception:
++                    pass
++                front = first_captcha
++
++            # Two clean rounds: a check page reloads itself right after it
++            # is passed and may briefly look finished before that.
++            clear_rounds = clear_rounds + 1 if blocking == 0 else 0
++            if clear_rounds >= 2:
++                break
++            time.sleep(2)
++
++        cleared = clear_rounds >= 2
++
++        # The cookies stay in the profile; the open tabs would only slow down
++        # every later CDP attach. Keep one tab so the window stays open.
++        try:
++            context.new_page()
++        except Exception:
++            pass
++        for tab in tabs:
++            close_page_safely(tab["page"])
++
++    if cleared:
++        log_line("Warm-up: all databases are ready")
++        emit("SUCCESS", "warm-up complete")
++        return EXIT_SUCCESS
++
++    left = [t["key"] for t in tabs if t["state"] in ("loading", "captcha")]
++    log_line(f"Warm-up: time is up, still waiting: {', '.join(left)}")
++    emit("CAPTCHA_REQUIRED", ", ".join(left))
++    return EXIT_CAPTCHA
++
++
++def open_in_dedicated_browser(urls: list[str]) -> int:
++    """Open URLs as new tabs of the dedicated browser and focus the last one."""
++    ensure_browser_running()
++    base = BROWSER_CDP_URL.rstrip("/")
++
++    for url in urls:
++        target_id = None
++        for method in ("PUT", "GET"):
++            try:
++                req = urllib.request.Request(
++                    base + "/json/new?" + quote(url, safe=""), method=method
++                )
++                with urllib.request.urlopen(req, timeout=10) as response:
++                    target_id = json.loads(response.read().decode("utf-8")).get("id")
++                break
++            except Exception:
++                continue
++        if target_id:
++            try:
++                with urllib.request.urlopen(base + "/json/activate/" + target_id, timeout=5):
++                    pass
++            except Exception:
++                pass
++        log_line(f"Opened in dedicated browser: {url}")
++
++    emit("SUCCESS", "opened")
++    return EXIT_SUCCESS
++
++
+ # ---------------------------------------------------------------------------
+ # MAIN
+ # ---------------------------------------------------------------------------
+@@ -4725,53 +4959,53 @@
+ def _download_routed(context, source: str, raw: str, doi: str | None, resolved: str | None) -> Path:
+     """Run the platform downloader for an identified source."""
+     if source == "elsevier":
+-        log_line("Browser route: Elsevier -> Yandex Browser (port 9223)")
++        log_line("Browser route: Elsevier -> dedicated browser (port 9223)")
+         return download_elsevier(context, raw, doi, resolved)
+ 
+     if source == "elibrary":
+-        log_line("Browser route: eLIBRARY -> Yandex Browser (port 9223)")
++        log_line("Browser route: eLIBRARY -> dedicated browser (port 9223)")
+         return download_elibrary(context, raw)
+ 
+     if source == "generic":
+         log_line(
+-            "Browser route: Generic DOI publisher -> Yandex Browser (port 9223)"
++            "Browser route: Generic DOI publisher -> dedicated browser (port 9223)"
+         )
+         return download_generic(context, raw, doi, resolved)
+ 
+     if source == "mdpi":
+-        log_line("Browser route: MDPI -> Yandex Browser (port 9223)")
++        log_line("Browser route: MDPI -> dedicated browser (port 9223)")
+         return download_mdpi(context, raw, doi, resolved)
+ 
+     if source == "acs":
+-        log_line("Browser route: ACS -> Yandex Browser (port 9223)")
++        log_line("Browser route: ACS -> dedicated browser (port 9223)")
+         return download_acs(context, raw, doi, resolved)
+ 
+     if source == "nature":
+-        log_line("Browser route: Nature/Springer Nature -> Yandex Browser (port 9223)")
++        log_line("Browser route: Nature/Springer Nature -> dedicated browser (port 9223)")
+         return download_nature(context, raw, doi, resolved)
+ 
+     if source == "frontiers":
+-        log_line("Browser route: Frontiers -> Yandex Browser (port 9223)")
++        log_line("Browser route: Frontiers -> dedicated browser (port 9223)")
+         return download_frontiers(context, raw, doi, resolved)
+ 
+     if source == "oxford":
+-        log_line("Browser route: Oxford Academic -> Yandex Browser (port 9223)")
++        log_line("Browser route: Oxford Academic -> dedicated browser (port 9223)")
+         return download_oxford(context, raw, doi, resolved)
+ 
+     if source == "taylor":
+-        log_line("Browser route: Taylor & Francis -> Yandex Browser (port 9223)")
++        log_line("Browser route: Taylor & Francis -> dedicated browser (port 9223)")
+         return download_taylor(context, raw, doi, resolved)
+ 
+     if source == "springer":
+-        log_line("Browser route: Springer -> Yandex Browser (port 9223)")
++        log_line("Browser route: Springer -> dedicated browser (port 9223)")
+         return download_springer(context, raw, doi)
+ 
+     if source == "wiley":
+-        log_line("Browser route: Wiley -> Yandex Browser (port 9223)")
++        log_line("Browser route: Wiley -> dedicated browser (port 9223)")
+         return download_wiley(context, raw, doi, resolved)
+ 
+     if source == "cnki":
+-        log_line("Browser route: CNKI -> Yandex Browser (port 9223)")
++        log_line("Browser route: CNKI -> dedicated browser (port 9223)")
+         return download_cnki(context, doi, resolved or raw)
+ 
+     raise UnsupportedSource(f"Unsupported source: {source}")
+@@ -4791,7 +5025,7 @@
+         os.environ.setdefault("ARTICLE_JOB_DEADLINE", f"{time.time() + 600:.0f}")
+         with sync_playwright() as p:
+             browser = connect_cdp_browser(
+-                p, YANDEX_CDP_URL, ensure_yandex_running, "Dedicated Yandex Browser"
++                p, BROWSER_CDP_URL, ensure_browser_running, "Dedicated browser"
+             )
+             return download_by_title(browser.contexts[0], title_query)
+ 
+@@ -4804,9 +5038,9 @@
+         log_line(f"Input: {raw}")
+         with sync_playwright() as p:
+             browser = connect_cdp_browser(
+-                p, YANDEX_CDP_URL, ensure_yandex_running, "Dedicated Yandex Browser"
++                p, BROWSER_CDP_URL, ensure_browser_running, "Dedicated browser"
+             )
+-            log_line("Browser route: CNKI by title -> Yandex Browser (port 9223)")
++            log_line("Browser route: CNKI by title -> dedicated browser (port 9223)")
+             return download_cnki(browser.contexts[0], cnki_doi, None, cnki_title)
+ 
+     doi = extract_doi(raw)
+@@ -4814,7 +5048,7 @@
+     log_line(f"DOI: {doi or '-'}")
+ 
+     # Fast classification first. This lets known Elsevier inputs go directly
+-    # to Yandex Browser without starting Edge at all.
++    # to the dedicated browser without an extra resolution step.
+     source = classify_direct(raw, doi)
+     resolved = raw if raw.startswith("http") else None
+ 
+@@ -4822,13 +5056,13 @@
+         edge_browser = None
+         edge_context = None
+ 
+-        # Unknown DOI/source: use Yandex Browser for neutral resolution / CNKI probe.
++        # Unknown DOI/source: use the dedicated browser for neutral resolution / CNKI probe.
+         if source is None:
+             edge_browser = connect_cdp_browser(
+                 p,
+                 EDGE_CDP_URL,
+                 ensure_edge_running,
+-                "Dedicated Yandex Browser",
++                "Dedicated browser",
+             )
+             edge_context = edge_browser.contexts[0]
+ 
+@@ -4842,14 +5076,14 @@
+         if resolved:
+             log_line(f"Resolved: {resolved}")
+ 
+-        # All routes share the dedicated Yandex Browser on port 9223; a
++        # All routes share the dedicated browser on port 9223; a
+         # second attach only doubles the work for every open tab.
+         if edge_context is None:
+             edge_browser = connect_cdp_browser(
+                 p,
+                 EDGE_CDP_URL,
+                 ensure_edge_running,
+-                "Dedicated Yandex Browser",
++                "Dedicated browser",
+             )
+             edge_context = edge_browser.contexts[0]
+ 
+@@ -4875,10 +5109,10 @@
+                     f"Target/browser closed; self-heal retry {attempt + 1}/3: {msg}"
+                 )
+                 try:
+-                    restart_yandex_running()
++                    restart_browser_running()
+                 except Exception as restart_exc:
+                     log_line(
+-                        f"Yandex restart message: {type(restart_exc).__name__}: {restart_exc}"
++                        f"Browser restart message: {type(restart_exc).__name__}: {restart_exc}"
+                     )
+                 time.sleep(2)
+                 continue
+@@ -4911,11 +5145,41 @@
+     parser = argparse.ArgumentParser()
+     parser.add_argument(
+         "query",
++        nargs="?",
+         help='DOI, article URL or "title: <title> || <year> || <journal> || #<no>"',
+     )
++    parser.add_argument(
++        "--warmup",
++        metavar="BASES_JSON",
++        help="open the databases listed in this JSON file and wait for CAPTCHAs",
++    )
++    parser.add_argument(
++        "--open",
++        metavar="URL",
++        nargs="+",
++        help="open URLs in the dedicated browser",
++    )
++    parser.add_argument(
++        "--restart-browser",
++        action="store_true",
++        help="restart the dedicated browser",
++    )
+     args = parser.parse_args()
+ 
+     try:
++        if args.warmup:
++            return run_warmup(Path(args.warmup))
++        if args.open:
++            return open_in_dedicated_browser(args.open)
++        if args.restart_browser:
++            stop_dedicated_browser()
++            time.sleep(2)
++            ensure_browser_running()
++            emit("SUCCESS", "browser restarted")
++            return EXIT_SUCCESS
++        if not args.query:
++            parser.error("query is required")
++
+         path = process_one(args.query)
+         log_line(f"SUCCESS: {path}")
+         emit("SUCCESS", str(path))
