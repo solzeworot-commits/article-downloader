@@ -251,6 +251,11 @@ def _http_error(source: str, code: int, body: str) -> SearchError:
     low = body.lower()
     name = SERVICE_TITLES[source]
     if code == 429 or "quota" in low or "too many" in low:
+        if source == "openalex":
+            # Without a key OpenAlex shares a small daily budget per IP address.
+            return SearchError("quota", "Исчерпан дневной лимит OpenAlex для этого компьютера. "
+                                        "Возьмите бесплатный ключ OpenAlex (окно «🔑 Ключи API» → "
+                                        "вкладка OpenAlex) или попробуйте завтра.")
         hint = " (бесплатный план: 50 запросов в день)" if source == "wos" else ""
         return SearchError("quota", f"Исчерпан лимит запросов {name}{hint}. Попробуйте позже.")
     if code == 400:

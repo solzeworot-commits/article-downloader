@@ -2,23 +2,32 @@
 Probe of the real services without keys: python api_probe.py <portable/scripts>
 
 Shows what Scopus and Web of Science answer to an invalid key (so the
-"неверный ключ" / "нет доступа" split in doi_search.py can be checked) and
-whether an OpenAlex search returns DOIs. Run by the Windows workflow.
+"неверный ключ" / "нет доступа" split in doi_search.py can be checked),
+whether OpenAlex search and keyword hints return data, and what the DOI
+lookup of the review module gets from OpenAlex and Crossref. Each probe runs
+on its own: one failing service does not hide the others. Run by the Windows
+workflow.
 """
 import sys
+import traceback
 
 sys.path.insert(0, sys.argv[1])
 import doi_search as ds  # noqa: E402
-
-print("Scopus, invalid key:", ds.check_key("scopus", {"scopus": "0" * 32}))
-print("WoS, invalid key:", ds.check_key("wos", {"wos": "0" * 40}))
-result = ds.run_search({"keywords": "grape pomace\npolyphenols", "max_results": 5}, ["openalex"], {})
-print("OpenAlex:", result["per_source"], [r["doi"] for r in result["records"]])
-hints = ds.suggest_keywords("grape pomace\npolyphenols", {})
-print("OpenAlex hints:", hints["papers"], "papers,", [(h["term"], h["count"]) for h in hints["terms"][:10]])
-
 import review as rv  # noqa: E402
-meta, error = rv.enrich(["10.3390/foods9111627", "10.1016/s0308-8146(98)00245-3"], {})
-print("Lookup error:", error or "-")
-for doi, m in meta.items():
-    print("GOST:", rv.gost(dict(m, doi=doi)), "| abstract:", len(m["abstract"]), "chars")
+
+
+def probe(title, action):
+    try:
+        print(title, action())
+    except Exception as exc:
+        print(title, "ERROR", type(exc).__name__, getattr(exc, "message", exc))
+        traceback.print_exc(limit=1)
+
+
+DOIS = ["10.3390/foods9111627", "10.1016/s0308-8146(98)00245-3"]
+probe("Crossref lookup:", lambda: {d: rv.gost(dict(m, doi=d)) for d, m in rv.fetch_crossref(DOIS).items()})
+probe("Scopus, invalid key:", lambda: ds.check_key("scopus", {"scopus": "0" * 32}))
+probe("WoS, invalid key:", lambda: ds.check_key("wos", {"wos": "0" * 40}))
+probe("OpenAlex search:", lambda: ds.run_search({"keywords": "grape pomace\npolyphenols", "max_results": 5}, ["openalex"], {})["per_source"])
+probe("OpenAlex hints:", lambda: [(h["term"], h["count"]) for h in ds.suggest_keywords("grape pomace\npolyphenols", {})["terms"][:8]])
+probe("OpenAlex lookup:", lambda: {d: (m["year"], len(m["abstract"])) for d, m in rv.fetch_openalex(DOIS, {}).items()})
