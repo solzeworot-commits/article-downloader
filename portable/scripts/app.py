@@ -44,8 +44,10 @@ from urllib.parse import parse_qs, quote, unquote, urlparse
 import urllib.request
 
 import doi_search as ds
+import i18n
 import review as rv
 import support as sp
+from i18n import tr
 
 
 SCRIPT_DIR = Path(__file__).resolve().parent
@@ -71,7 +73,7 @@ REPORT_PATH = ROOT / "Отчёт.csv"
 BIBLIO_DIR = ROOT / "Список литературы"
 
 UI_PORT = 17865
-APP_VERSION = "7.2"
+APP_VERSION = "7.3"
 APP_AUTHOR = "Bucaneiro"
 OFFICIAL_URL = "https://github.com/solzeworot-commits/article-downloader"
 DOWNLOAD_URL = OFFICIAL_URL + "/releases/tag/portable-latest"
@@ -149,6 +151,7 @@ DEFAULT_SETTINGS = {
     "title_for_plain_lines": False,
     "pdf_dir": "",
     "desktop_shortcut": True,
+    "lang": "",            # "" = by the Windows language
     "bases": {b[0]: True for b in BASES},
 }
 
@@ -693,9 +696,8 @@ def _runner():
             if _limit_reached():
                 with S.lock:
                     S.phase = "limit"
-                    S.notice = (f"Достигнут дневной лимит ({S.day_count} статей). "
-                                "Остальные скачаются завтра или после увеличения "
-                                "лимита в настройках.")
+                    S.notice = tr("Достигнут дневной лимит ({n} статей). Остальные скачаются "
+                                  "завтра или после увеличения лимита в настройках.", n=S.day_count)
                 break
 
             _run_item(item)
@@ -795,17 +797,17 @@ def _run_item(item: dict):
         message = result["message"]
 
         if S.stop_requested and not result["status"]:
-            status, message = "pending", "остановлено"
+            status, message = "pending", tr("остановлено")
             item["attempts"] -= 1
             S.day_count = max(0, S.day_count - 1)
         elif timed_out:
-            status, message = "failed", f"не уложилось в {limit // 60} мин"
+            status, message = "failed", tr("не уложилось в {m} мин", m=limit // 60)
         elif not result["status"]:
-            message = next((l for l in reversed(log) if l.strip()), f"код {code}")
+            message = next((l for l in reversed(log) if l.strip()), tr("код {code}", code=code))
 
         if status == "captcha" and item["attempts"] < 2:
             status = "pending"
-            message = "была капча — повторю в конце очереди"
+            message = tr("была капча — повторю в конце очереди")
 
         item["status"] = status
         item["message"] = message[:500]
@@ -828,9 +830,9 @@ def _report(item: dict):
         with REPORT_PATH.open("a", encoding="utf-8-sig", newline="") as f:
             writer = csv.writer(f, delimiter=";")
             if new:
-                writer.writerow(["Время", "Запрос", "Результат", "Файл", "Сообщение"])
+                writer.writerow([tr(x) for x in ("Время", "Запрос", "Результат", "Файл", "Сообщение")])
             writer.writerow([item.get("finished", ""), item["query"],
-                             REPORT_STATUS.get(item["status"], item["status"]),
+                             tr(REPORT_STATUS.get(item["status"], item["status"])),
                              item.get("file", ""),
                              "" if item["status"] == "success" else item["message"]])
     except Exception as exc:
@@ -919,9 +921,9 @@ def choose_file_dialog() -> str:
 Add-Type -AssemblyName System.Windows.Forms
 $owner = New-Object System.Windows.Forms.Form -Property @{{TopMost = $true; ShowInTaskbar = $false}}
 $d = New-Object System.Windows.Forms.OpenFileDialog
-$d.Title = {q('Выберите файл со списком DOI')}
+$d.Title = {q(tr('Выберите файл со списком DOI'))}
 $d.InitialDirectory = {q(INBOX)}
-$d.Filter = {q('Списки DOI|*.txt;*.csv;*.tsv;*.xlsx;*.docx;*.ris;*.bib;*.enw;*.nbib|Все файлы|*.*')}
+$d.Filter = {q(tr('Списки DOI|*.txt;*.csv;*.tsv;*.xlsx;*.docx;*.ris;*.bib;*.enw;*.nbib|Все файлы|*.*'))}
 if ($d.ShowDialog($owner) -eq [System.Windows.Forms.DialogResult]::OK) {{ Write-Output $d.FileName }}
 $owner.Dispose()
 """
@@ -989,14 +991,14 @@ def start_search(params: dict, sources: list[str]):
         except Exception as exc:
             app_log(f"Search error: {exc}\n{traceback.format_exc()}")
             with S.lock:
-                S.search.update(running=False, error=f"Поиск не удался: {exc}")
+                S.search.update(running=False, error=tr("Поиск не удался: {error}", error=exc))
 
     threading.Thread(target=run, daemon=True).start()
 
 
 def import_export(name: str, data: bytes) -> dict:
     records, no_doi = ds.parse_export(name, data)
-    slug = re.sub(r"[^\w\-]+", "_", Path(name).stem).strip("_") or "экспорт"
+    slug = re.sub(r"[^\w\-]+", "_", Path(name).stem).strip("_") or tr("экспорт")
     summary = {"from": "export", "file": name, "count": len(records),
                "no_doi": no_doi, "slug": slug}
     _set_search_result(records, summary)
@@ -1082,6 +1084,14 @@ def qr_svg(text: str) -> str:
 
 def donate_info() -> dict:
     data = load_donate()
+    # donate.json may carry English texts under "en" (message, plans, sbp title / note).
+    english = data.pop("en", None) or {}
+    if i18n.LANG == "en":
+        for key, value in english.items():
+            if isinstance(value, dict) and isinstance(data.get(key), dict):
+                data[key] = data[key] | value
+            else:
+                data[key] = value
     if data.get("sbp"):
         data["sbp"]["qr"] = qr_svg(data["sbp"]["url"])
     for item in data.get("crypto", []):
@@ -1147,7 +1157,7 @@ def start_lookup(list_name: str):
         except Exception as exc:
             app_log(f"Lookup error: {exc}\n{traceback.format_exc()}")
             with S.lock:
-                job["error"] = f"Данные о статьях не загрузились: {exc}"
+                job["error"] = tr("Данные о статьях не загрузились: {error}", error=exc)
         finally:
             with S.lock:
                 job["running"] = False
@@ -1190,7 +1200,7 @@ def save_selected(name: str, with_maybe: bool) -> dict:
                     "year": data["records"][d].get("year", ""),
                     "journal": data["records"][d].get("journal", ""), "sources": []} for d in dois]
     if not dois:
-        return {"error": "Пока ни одна статья не отмечена «✓ Подходит»."}
+        return {"error": tr("Пока ни одна статья не отмечена «✓ Подходит».")}
     stem = Path(name).stem
     saved = ds.save_list(INBOX, f"{stem}_отобранные", records, dated=False)
     # The new list keeps the found data and the decisions, and counts PRISMA
@@ -1250,7 +1260,7 @@ def search_meta(body: dict, saved: list[dict]) -> dict:
         meta["no_doi"] = int(summary.get("no_doi") or 0)
         meta["duplicates"] = max(0, sum(v["with_doi"] for v in ok.values()) - unique)
     elif summary.get("from") == "export":
-        meta["per_source"] = {"Экспорт с сайта": int(summary.get("count") or 0) + int(summary.get("no_doi") or 0)}
+        meta["per_source"] = {tr("Экспорт с сайта"): int(summary.get("count") or 0) + int(summary.get("no_doi") or 0)}
         meta["no_doi"] = int(summary.get("no_doi") or 0)
     return meta
 
@@ -1286,6 +1296,17 @@ def shutdown():
 # ---------------------------------------------------------------------------
 # v7.2: new version check and problem reports (support.py)
 # ---------------------------------------------------------------------------
+
+def share_url(to: str, text: str) -> str:
+    """Link that opens the chosen messenger (or the mail program) with the message."""
+    link, message = quote(DOWNLOAD_URL, safe=""), quote(f"{text} {DOWNLOAD_URL}".strip(), safe="")
+    return {
+        "telegram": f"https://t.me/share/url?url={link}&text={quote(text, safe='')}",
+        "whatsapp": f"https://wa.me/?text={message}",
+        "vk": f"https://vk.com/share.php?url={link}&title={quote(tr('Загрузчик статей'), safe='')}",
+        "email": f"mailto:?subject={quote(tr('Загрузчик статей — бесплатная программа'), safe='')}&body={message}",
+    }.get(to, "")
+
 
 def check_for_update() -> dict:
     result = sp.check_update(APP_VERSION, UPDATE_URL)
@@ -1357,7 +1378,7 @@ def open_in_dedicated_browser(urls: list[str]):
         for line in proc.stdout:
             if line.startswith("RESULT|FAILED|"):
                 with S.lock:
-                    S.notice = "Браузер не открылся: " + line.split("|", 2)[2].strip()
+                    S.notice = tr("Браузер не открылся: {error}", error=line.split("|", 2)[2].strip())
         proc.wait()
     threading.Thread(target=run, daemon=True).start()
 
@@ -1557,7 +1578,7 @@ def handle_api(path: str, body: dict) -> dict:
         name = Path(str(body.get("name") or "")).name
         target = INBOX / name
         if not name or not target.is_file():
-            return {"error": "Файл не найден в папке inbox."}
+            return {"error": tr("Файл не найден в папке inbox.")}
         return queue_list_file(target)
 
     # -- literature review ----------------------------------------------------
@@ -1565,21 +1586,21 @@ def handle_api(path: str, body: dict) -> dict:
         try:
             start_lookup(body.get("list"))
         except FileNotFoundError:
-            return {"error": "Список не найден в папке inbox."}
+            return {"error": tr("Список не найден в папке inbox.")}
         return {}
 
     if path == "/api/review_decide":
         try:
             data = get_review(body.get("list"))
         except FileNotFoundError:
-            return {"error": "Список не найден в папке inbox."}
+            return {"error": tr("Список не найден в папке inbox.")}
         decision = body.get("decision") or ""
         if decision not in rv.DECISIONS + ("",):
-            return {"error": "Неизвестное решение."}
+            return {"error": tr("Неизвестное решение.")}
         with S.lock:
             rec = data["records"].get(ds.normalize_doi(body.get("doi")))
             if rec is None:
-                return {"error": "Статьи нет в списке."}
+                return {"error": tr("Статьи нет в списке.")}
             rec["decision"] = decision
             rec["reason"] = str(body.get("reason") or "")[:120] if decision == "exclude" else ""
             rv.save_review(INBOX, data)
@@ -1589,13 +1610,13 @@ def handle_api(path: str, body: dict) -> dict:
         try:
             return save_selected(body.get("list"), bool(body.get("with_maybe")))
         except FileNotFoundError:
-            return {"error": "Список не найден в папке inbox."}
+            return {"error": tr("Список не найден в папке inbox.")}
 
     if path == "/api/biblio":
         try:
             records = biblio_records(body.get("list"), body.get("scope") or "included")
         except FileNotFoundError:
-            return {"error": "Список не найден в папке inbox."}
+            return {"error": tr("Список не найден в папке inbox.")}
         return {"entries": rv.gost_list(records, body.get("order") != "list"),
                 "count": len(records),
                 "missing": sum(1 for r in records if not r.get("found"))}
@@ -1605,7 +1626,7 @@ def handle_api(path: str, body: dict) -> dict:
             saved = save_biblio(body.get("list"), body.get("scope") or "included",
                                 body.get("order") != "list", body.get("format") or "txt")
         except FileNotFoundError:
-            return {"error": "Список не найден в папке inbox."}
+            return {"error": tr("Список не найден в папке inbox.")}
         return {"name": saved.name, "folder": str(BIBLIO_DIR)}
 
     if path == "/api/open_doi":
@@ -1615,11 +1636,11 @@ def handle_api(path: str, body: dict) -> dict:
             if os.environ.get("ARTICLE_UI_NO_WINDOW") != "1":
                 webbrowser.open(url)
             return {"url": url}
-        return {"error": "Это не DOI."}
+        return {"error": tr("Это не DOI.")}
 
     if path == "/api/archive_list":
         moved = archive_list(str(body.get("name") or ""))
-        return {"archived": moved} if moved else {"error": "Файл не найден в папке inbox."}
+        return {"archived": moved} if moved else {"error": tr("Файл не найден в папке inbox.")}
 
     if path == "/api/open_inbox":
         INBOX.mkdir(parents=True, exist_ok=True)
@@ -1637,7 +1658,7 @@ def handle_api(path: str, body: dict) -> dict:
     if path == "/api/search":
         sources = [x for x in body.get("sources") or [] if x in ds.SOURCE_TITLES]
         if not sources:
-            return {"error": "Отметьте хотя бы один источник."}
+            return {"error": tr("Отметьте хотя бы один источник.")}
         try:
             ds.build_queries(body)
         except ds.SearchError as exc:
@@ -1653,7 +1674,7 @@ def handle_api(path: str, body: dict) -> dict:
             name = Path(str(body.get("name") or "")).name
             source = downloads_dir() / name
             if not name or not source.is_file() or source.suffix.lower() not in EXPORT_SUFFIXES:
-                return {"error": "Файл экспорта не найден."}
+                return {"error": tr("Файл экспорта не найден.")}
             data = source.read_bytes()
         try:
             return import_export(name, data)
@@ -1688,8 +1709,8 @@ def handle_api(path: str, body: dict) -> dict:
             by_doi = {r["doi"]: r for r in S.search_records}
         records = [by_doi[d] for d in wanted if d in by_doi]
         if not records:
-            return {"error": "Не выбрано ни одной статьи."}
-        saved = ds.save_list(INBOX, str(body.get("slug") or "список"), records)
+            return {"error": tr("Не выбрано ни одной статьи.")}
+        saved = ds.save_list(INBOX, str(body.get("slug") or tr("список")), records)
         rv.save_meta(INBOX, saved.name, search_meta(body, records))
         app_log(f"Saved list {saved.name}: {len(records)} DOI")
         return {"name": saved.name, "count": len(records)}
@@ -1697,7 +1718,7 @@ def handle_api(path: str, body: dict) -> dict:
     if path == "/api/browser_search":
         source = body.get("source")
         if source not in ("scopus", "wos"):
-            return {"error": "Неизвестный источник."}
+            return {"error": tr("Неизвестный источник.")}
         url = browser_search_url(source, str(body.get("query") or ""))
         with S.lock:
             S.export_since = time.time()
@@ -1721,7 +1742,7 @@ def handle_api(path: str, body: dict) -> dict:
     if path == "/api/keys_check":
         source = body.get("source")
         if source not in ds.SOURCE_TITLES:
-            return {"error": "Неизвестный источник."}
+            return {"error": tr("Неизвестный источник.")}
         keys = ds.load_keys()
         for field in ds.KEY_FIELDS:
             if str(body.get(field) or "").strip():
@@ -1733,6 +1754,20 @@ def handle_api(path: str, body: dict) -> dict:
 
     if path == "/api/report":
         return problem_report(body)
+
+    if path == "/api/set_lang":
+        lang = i18n.set_lang(str(body.get("lang") or ""))
+        with S.lock:
+            S.settings["lang"] = lang
+            write_json_atomic(SETTINGS_PATH, S.settings)
+        app_log(f"Interface language: {lang}")
+        return {"lang": lang}
+
+    if path == "/api/share":
+        url = share_url(str(body.get("to") or ""), str(body.get("text") or "")[:600])
+        if url and os.environ.get("ARTICLE_UI_NO_WINDOW") != "1":
+            webbrowser.open(url)
+        return {"url": url}
 
     if path == "/api/check_update":
         return check_for_update()
@@ -1781,7 +1816,7 @@ class Handler(BaseHTTPRequestHandler):
         query = parse_qs(url.query)
 
         if url.path == "/":
-            page = (UI_FILE.read_text(encoding="utf-8").replace("__TOKEN__", S.token)
+            page = (i18n.translate_page(UI_FILE.read_text(encoding="utf-8")).replace("__TOKEN__", S.token)
                     .replace("__APP_VERSION__", APP_VERSION).replace("__APP_AUTHOR__", APP_AUTHOR))
             return self._send(200, page.encode("utf-8"), "text/html; charset=utf-8")
         if url.path == "/favicon.ico" and ICON_FILE.exists():
@@ -1809,11 +1844,13 @@ class Handler(BaseHTTPRequestHandler):
             return self._json(public_state(version))
         if url.path == "/api/donate":
             return self._json(donate_info())
+        if url.path == "/api/share_info":
+            return self._json({"url": DOWNLOAD_URL, "qr": qr_svg(DOWNLOAD_URL)})
         if url.path == "/api/review":
             try:
                 return self._json(review_state((query.get("list") or [""])[0]))
             except FileNotFoundError:
-                return self._json({"error": "Список не найден в папке inbox."})
+                return self._json({"error": tr("Список не найден в папке inbox.")})
         if url.path == "/api/inbox":
             return self._json({"files": inbox_lists(), "inbox": str(INBOX)})
         if url.path == "/api/search_results":
@@ -1826,7 +1863,7 @@ class Handler(BaseHTTPRequestHandler):
             except ValueError:
                 item_id = 0
             lines = list(S.job_logs.get(item_id, []))
-            text = "\n".join(lines) or "Журнала нет: статья ещё не скачивалась после запуска программы."
+            text = "\n".join(lines) or tr("Журнала нет: статья ещё не скачивалась после запуска программы.")
             return self._send(200, text.encode("utf-8"), "text/plain; charset=utf-8")
         return self._send(404, b"not found", "text/plain")
 
@@ -1854,7 +1891,7 @@ def message_box(text: str):
     if os.name == "nt":
         try:
             import ctypes
-            ctypes.windll.user32.MessageBoxW(None, text, "Загрузчик статей", 0x10)
+            ctypes.windll.user32.MessageBoxW(None, text, tr("Загрузчик статей"), 0x10)
             return
         except Exception:
             pass
@@ -1884,6 +1921,7 @@ def hand_over_to_running_copy(files: list[str]) -> bool:
 
 
 def main():
+    i18n.set_lang(S.settings.get("lang") or i18n.detect_lang())
     LOGS.mkdir(parents=True, exist_ok=True)
     try:
         if APP_LOG.exists() and APP_LOG.stat().st_size > 5_000_000:
@@ -1902,8 +1940,8 @@ def main():
     except OSError:
         if hand_over_to_running_copy(files):
             return
-        message_box(f"Порт {UI_PORT} занят другой программой. "
-                    "Закройте её или перезагрузите компьютер.")
+        message_box(tr("Порт {port} занят другой программой. Закройте её или перезагрузите компьютер.",
+                       port=UI_PORT))
         return
 
     S.server = server
@@ -1940,5 +1978,5 @@ if __name__ == "__main__":
     try:
         main()
     except Exception as exc:
-        message_box(f"Программа не запустилась:\n{exc}\n\nПодробности: {APP_LOG}")
+        message_box(tr("Программа не запустилась:\n{error}\n\nПодробности: {log}", error=exc, log=APP_LOG))
         app_log(traceback.format_exc())

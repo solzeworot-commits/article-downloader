@@ -22,6 +22,8 @@ import urllib.request
 from pathlib import Path
 from urllib.parse import quote
 
+from i18n import tr
+
 USER_AGENT = "ArticleDownloader (+https://github.com/solzeworot-commits/article-downloader)"
 # GitHub refuses longer "new issue" links; Cyrillic takes 6 characters per
 # letter once encoded, so the log part is shortened to fit.
@@ -83,42 +85,42 @@ def log_tail(paths: list[Path], lines: int) -> str:
         except OSError:
             continue
         if tail:
-            out.append(f"--- {path.name} (последние {len(tail)} строк) ---")
+            out.append(tr("--- {name} (последние {n} строк) ---", name=path.name, n=len(tail)))
             out.extend(line.rstrip("\n") for line in tail)
     return "\n".join(out)
 
 
 def system_info(version: str, browser: str = "") -> list[str]:
     return [
-        f"Версия программы: {version}",
+        tr("Версия программы: {version}", version=version),
         f"Windows: {platform.platform()}",
         f"Python: {sys.version.split()[0]}",
-        f"Браузер загрузчика: {browser or 'не найден'}",
-        f"Время: {time.strftime('%Y-%m-%d %H:%M')}",
+        tr("Браузер загрузчика: {browser}", browser=browser or tr("не найден")),
+        tr("Время: {time}", time=time.strftime("%Y-%m-%d %H:%M")),
     ]
 
 
 def build_report(version: str, section: str, description: str, browser: str = "",
                  logs: list[Path] | None = None, log_lines: int = 200) -> dict:
     """{"title", "head", "log"} — head is the description and system, log the tail."""
-    description = (description or "").strip() or "(описание не заполнено)"
+    description = (description or "").strip() or tr("(описание не заполнено)")
     head = "\n".join([
-        f"Где: {section or 'не указано'}",
+        tr("Где: {section}", section=section or tr("не указано")),
         "",
-        "Что случилось:",
+        tr("Что случилось:"),
         description,
         "",
         *system_info(version, browser),
     ])
     log = log_tail(logs or [], log_lines) if logs else ""
-    title = f"Проблема: {section or 'другое'} (версия {version})"
+    title = tr("Проблема: {section} (версия {version})", section=section or tr("другое"), version=version)
     return {"title": sanitize(title), "head": sanitize(head), "log": sanitize(log)}
 
 
 def report_text(report: dict) -> str:
     text = report["head"]
     if report["log"]:
-        text += "\n\nЖурнал работы:\n" + report["log"]
+        text += "\n\n" + tr("Журнал работы:") + "\n" + report["log"]
     return text + "\n"
 
 
@@ -127,7 +129,7 @@ def issue_url(base: str, report: dict) -> str:
     def build(log_lines: list[str]) -> str:
         body = report["head"]
         if log_lines:
-            body += "\n\nЖурнал работы (конец):\n```\n" + "\n".join(log_lines) + "\n```"
+            body += "\n\n" + tr("Журнал работы (конец):") + "\n```\n" + "\n".join(log_lines) + "\n```"
         return f"{base}?title={quote(report['title'])}&body={quote(body)}"
 
     lines = report["log"].split("\n") if report["log"] else []

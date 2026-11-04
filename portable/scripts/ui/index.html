@@ -251,6 +251,14 @@
                font: inherit; cursor: pointer; }
   .about-name { font-size: 20px; font-weight: 700; margin-bottom: 4px; }
   .about-free { margin-top: 10px; padding: 10px 12px; border-radius: 10px; background: var(--green-soft); font-weight: 600; }
+  .ver-badge { display: inline-flex; align-items: center; justify-content: center; min-width: 34px; height: 26px; padding: 0 7px;
+               border-radius: 7px; border: none; font: 700 13px/1 system-ui, sans-serif; color: #fff;
+               background: linear-gradient(#5b9bf8, #2563eb); box-shadow: inset 0 -2px 0 rgba(0,0,0,.18); cursor: default; }
+  .ver-badge.new { background: linear-gradient(#f87171, #dc2626); cursor: pointer; animation: ver-glow 1.6s ease-in-out infinite; }
+  @keyframes ver-glow { 0%, 100% { box-shadow: 0 0 0 0 rgba(220,38,38,.55); } 50% { box-shadow: 0 0 12px 4px rgba(220,38,38,.6); } }
+  .up-steps { padding-left: 22px; } .up-steps li { margin: 5px 0; }
+  .share-top { display: flex; gap: 18px; align-items: center; flex-wrap: wrap; }
+  .share-link { font: 13px Consolas, "Cascadia Mono", monospace; word-break: break-all; margin: 8px 0 0; }
   .faq details { border: 1px solid var(--line); border-radius: 10px; padding: 8px 12px; margin-bottom: 6px; }
   .faq summary { cursor: pointer; font-weight: 600; }
   .faq details div { margin-top: 6px; color: var(--text); }
@@ -309,25 +317,18 @@
 <body>
 <div class="wrap">
   <header>
-    <h1><img src="/favicon.ico" alt="">Загрузчик статей‌​‌</h1>
+    <h1><img src="/favicon.ico" alt="">Загрузчик статей‌​‌<span class="ver-badge" id="ver-cur" title="Ваша версия программы">__APP_VERSION__</span><button class="ver-badge new" id="ver-new" hidden title="Вышла новая версия — нажмите, чтобы обновить"></button></h1>
     <span class="chip" id="browser-chip">Браузер: …</span>
     <button id="btn-home" hidden>🏠 Главная</button>
-    <button id="btn-update" class="linkbtn" data-link="official" hidden>🆕 Обновить</button>
     <button id="btn-keys">🔑 Ключи API</button>
     <button id="btn-settings" title="Настройки" aria-label="Настройки">⚙</button>
     <button id="btn-report">🛟 Сообщить о проблеме</button>
+    <button id="btn-lang" title="English / Русский">🌐 EN</button>
     <button id="btn-quit">Выход</button>
   </header>
 
 
   <section id="view-home" class="view">
-    <div id="update-banner" class="banner blue" hidden>
-      <span class="big-icon">🆕</span>
-      <div class="msg"><b>Вышла новая версия <span id="up-latest"></span></b> (у вас __APP_VERSION__).
-        <div class="up-how">Как обновить: нажмите «Выход», скачайте архив и распакуйте его в ту же папку, где лежит
-          программа, с заменой файлов. Списки, PDF и настройки останутся.</div></div>
-      <button class="linkbtn" data-link="official">⬇ Скачать новую версию</button>
-    </div>
     <div id="home-note"></div>
     <div class="home-buttons four">
       <button class="big-choice blue" id="go-search"><span class="step-n">1</span><span class="ico">🔎</span><b>Получить список DOI</b>
@@ -344,6 +345,7 @@
       <button id="home-inbox">📂 Папка inbox</button>
       <button id="home-pdf">📂 Папка с PDF</button>
       <button id="home-clear" title="Очистить поиск и очередь; PDF и списки в inbox останутся">🧹 Очистить всё</button>
+      <button id="home-share">📤 Поделиться программой</button>
       <button id="home-donate" hidden>❤ Поблагодарить автора</button>
     </div>
     <div id="home-msg" class="recognized" style="text-align: center; margin-top: 12px"></div>
@@ -598,6 +600,44 @@ extraction"></textarea>
   <div class="body"><pre id="log-text"></pre></div>
 </dialog>
 
+<dialog id="dlg-update" style="width: min(560px, calc(100vw - 32px))">
+  <div class="head"><h3>🆕 Вышла новая версия <span id="up-latest"></span></h3><button data-close>✕</button></div>
+  <div class="body">
+    <p style="margin-top: 0">У вас версия __APP_VERSION__. Новая версия бесплатная, как и эта.</p>
+    <ol class="up-steps">
+      <li>Нажмите «⬇ Скачать новую версию» — откроется страница скачивания.</li>
+      <li>Нажмите «Выход» в этой программе.</li>
+      <li>Распакуйте новый архив в ту же папку, где лежит программа, с заменой файлов.</li>
+    </ol>
+    <p class="recognized">Списки в inbox, скачанные PDF и настройки останутся на месте.</p>
+    <div class="about-acts"><button class="linkbtn" data-link="official">⬇ Скачать новую версию</button></div>
+  </div>
+</dialog>
+
+<dialog id="dlg-share" style="width: min(720px, calc(100vw - 32px))">
+  <div class="head"><h3>📤 Поделиться программой</h3><button data-close>✕</button></div>
+  <div class="body">
+    <p style="margin-top: 0">Программа бесплатная — отправьте ссылку коллегам и друзьям.</p>
+    <div class="share-top">
+      <div class="qr" id="share-qr"></div>
+      <div>
+        <div class="recognized">Наведите камеру телефона на QR-код — откроется страница скачивания.</div>
+        <div class="share-link" id="share-link"></div>
+        <div class="about-acts"><button id="share-copy-link">📋 Скопировать ссылку</button></div>
+      </div>
+    </div>
+    <h4 class="dn-h">Готовое сообщение</h4>
+    <div class="letter" id="share-text">Бесплатная программа для обзора литературы: находит статьи в Scopus, Web of Science и OpenAlex, помогает отобрать нужные, сама скачивает PDF через подписку университета и делает список литературы по ГОСТ. Работает на Windows без установки.</div>
+    <div class="about-acts">
+      <button id="share-copy-text">📋 Скопировать сообщение со ссылкой</button>
+      <button class="linkbtn" data-share="telegram">Telegram</button>
+      <button class="linkbtn" data-share="whatsapp">WhatsApp</button>
+      <button class="linkbtn" data-share="vk">ВКонтакте</button>
+      <button class="linkbtn" data-share="email">✉ Почта</button>
+    </div>
+  </div>
+</dialog>
+
 <dialog id="dlg-donate" style="width: min(940px, calc(100vw - 32px))">
   <div class="head"><h3>❤ Поблагодарить автора</h3><button data-close>✕</button></div>
   <div class="body" id="donate-body"></div>
@@ -747,6 +787,7 @@ function esc(s) {
   return String(s ?? "").replace(/[&<>"']/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]));
 }
 function plural(n, one, few, many) {
+  if (document.documentElement.lang === "en") return n === 1 ? one : many;
   const m10 = n % 10, m100 = n % 100;
   if (m10 === 1 && m100 !== 11) return one;
   if (m10 >= 2 && m10 <= 4 && (m100 < 12 || m100 > 14)) return few;
@@ -1687,13 +1728,12 @@ $("home-about").onclick = () => $("dlg-about").showModal();
 // v7.2: new version and problem reports
 function renderUpdate(up) {
   const newer = !!(up && up.newer);
-  $("update-banner").hidden = !newer;
-  $("btn-update").hidden = !newer;
+  $("ver-new").hidden = !newer;
   if (newer) {
+    $("ver-new").textContent = up.latest;
     $("up-latest").textContent = up.latest;
-    $("btn-update").title = "Вышла версия " + up.latest + " — скачать";
   }
-  $("about-update").textContent = !up ? "" : newer ? `Есть новая версия ${up.latest} — кнопка «🆕» вверху.`
+  $("about-update").textContent = !up ? "" : newer ? `Есть новая версия ${up.latest} — красный квадратик вверху.`
     : up.error ? "Не удалось проверить обновления (нет интернета?)." : `Это последняя версия (проверено в ${up.checked}).`;
 }
 $("about-check").onclick = async () => {
@@ -1701,6 +1741,32 @@ $("about-check").onclick = async () => {
   try { renderUpdate(await api("/api/check_update")); } catch (e) { $("about-update").textContent = "Не проверилось: " + e.message; }
 };
 $("btn-report").onclick = () => $("dlg-report").showModal();
+$("ver-new").onclick = () => $("dlg-update").showModal();
+$("btn-lang").onclick = async () => {
+  const lang = document.documentElement.lang === "en" ? "ru" : "en";
+  try { await api("/api/set_lang", { lang }); } catch (e) {}
+  location.reload();
+};
+
+// sharing the program
+let shareUrl = "";
+$("home-share").onclick = async () => {
+  $("dlg-share").showModal();
+  if (shareUrl) return;
+  try {
+    const d = await (await fetch("/api/share_info", H)).json();
+    shareUrl = d.url;
+    $("share-link").textContent = d.url;
+    $("share-qr").innerHTML = d.qr || "";
+  } catch (e) { $("share-link").textContent = "Не загрузилось: " + e.message; }
+};
+const shareMessage = () => $("share-text").textContent.trim() + " " + shareUrl;
+$("share-copy-link").onclick = async (e) => flash(e.currentTarget, await copyText(shareUrl));
+$("share-copy-text").onclick = async (e) => flash(e.currentTarget, await copyText(shareMessage()));
+document.addEventListener("click", (e) => {
+  const t = e.target.closest("button[data-share]");
+  if (t) api("/api/share", { to: t.dataset.share, text: $("share-text").textContent.trim() });
+});
 function reportBody(action) {
   return { action, text: $("rp-text").value, section: $("rp-section").value, attach_log: $("rp-log").checked };
 }

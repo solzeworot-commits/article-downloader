@@ -8,6 +8,21 @@
       "📊 таблица по скачанным PDF: метод, сырьё, условия и результаты — сразу в Excel."
     ]
   },
+  "en": {
+    "message": "If the program saved you time, you can thank the author. All the money goes to the project. Thank you!",
+    "plans": {
+      "title": "Next goal: a built-in AI assistant:",
+      "items": [
+        "✏ your topic in your own words → keywords and ready queries for Scopus and Web of Science;",
+        "📝 article pre-screening: the AI reads the abstracts and suggests \"include / exclude\" with a reason;",
+        "📊 a table from the downloaded PDFs: method, raw material, conditions and results, straight into Excel."
+      ]
+    },
+    "sbp": {
+      "title": "Russian Faster Payments System (SBP, roubles)",
+      "note": "Point a phone camera at the QR code to open the bank app. On a computer, click \"Open link\"."
+    }
+  },
   "sbp": {
     "title": "Перевод по СБП (рубли)",
     "url": "https://t.tb.ru/pm_short/d8dQbglacy",

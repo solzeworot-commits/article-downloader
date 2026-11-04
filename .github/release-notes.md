@@ -8,3 +8,8 @@
 4. Откройте `C:\Статьи\ArticleDownloader` и дважды щёлкните **«СКАЧАТЬ СТАТЬИ»**. Если Windows спросит «Запустить этот файл?» или покажет «Windows защитила ваш компьютер», нажмите **«Подробнее»** → **«Выполнить в любом случае»** (или **«Запустить»**).
 
 Подробная инструкция лежит внутри: «КАК ПОЛЬЗОВАТЬСЯ.txt».
+
+## In English
+
+A free Windows program for literature reviews: finds articles in Scopus, Web of Science and OpenAlex, helps screen them, downloads the PDFs through your university's subscription and builds the reference list. Click **ArticleDownloader_Portable.zip** under **Assets**, unpack it to a short folder such as `C:\Articles`, open `ArticleDownloader` and double-click **«СКАЧАТЬ СТАТЬИ»** (= "download articles"). The window speaks English when Windows is not in Russian; the **🌐 EN / RU** button switches the language. Instructions inside: «HOW TO USE.txt».
+
