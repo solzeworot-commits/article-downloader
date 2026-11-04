@@ -45,6 +45,9 @@ def valid(network, address):
         return b58check(address, b"\x41")
     if "bitcoin" in net:
         return address.startswith("1") and b58check(address, b"\x00")
+    if "litecoin" in net:
+        versions = {"L": b"\x30", "M": b"\x32", "3": b"\x05"}
+        return address[:1] in versions and b58check(address, versions[address[:1]])
     if "solana" in net:
         return len(b58decode(address)) == 32
     if "ethereum" in net or "erc20" in net:

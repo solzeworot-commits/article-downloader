@@ -1,4 +1,5 @@
 <!doctype html>
+<!-- © 2026 Bucaneiro. Загрузчик статей — бесплатная программа; условия в файле ЛИЦЕНЗИЯ.txt. -->
 <html lang="ru">
 <head>
 <meta charset="utf-8">
@@ -35,8 +36,12 @@
     display: flex; align-items: center; gap: 12px; flex-wrap: wrap;
     margin-bottom: 14px;
   }
-  header h1 { font-size: 22px; margin: 0; flex: 1; display: flex; align-items: center; gap: 10px; }
+  header h1 { font-size: 22px; margin: 0; flex: 1; display: flex; align-items: center; gap: 10px; white-space: nowrap; }
   header h1 img { width: 30px; height: 30px; }
+  header button { padding: 7px 11px; font-size: 14px; flex-shrink: 0; white-space: nowrap; }
+  header { gap: 8px; flex-wrap: nowrap; }
+  header .chip { display: block; min-width: 40px; flex-shrink: 1; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  @media (max-width: 900px) { header { flex-wrap: wrap; } }
   .chip {
     display: inline-flex; align-items: center; gap: 6px;
     padding: 4px 10px; border-radius: 999px; background: var(--card);
@@ -237,6 +242,59 @@
   .donate-card .net { color: var(--amber); font-size: 13px; font-weight: 600; }
   .donate-card .addr { font: 12px Consolas, "Cascadia Mono", monospace; word-break: break-all; }
   #home-donate { color: #be123c; }
+  .home-foot { text-align: center; margin-top: 22px; color: var(--muted); font-size: 14px; }
+  .home-foot button { padding: 4px 10px; font-size: 14px; margin-left: 4px; }
+  .about-top { display: flex; gap: 18px; align-items: center; }
+  .about-emblem img { width: 120px; height: 120px; display: block; border-radius: 16px; }
+  .about-credit { margin-top: 6px; font-size: 12px; color: var(--muted); }
+  .plainlink { background: none; border: none; padding: 0; color: var(--blue); text-decoration: underline;
+               font: inherit; cursor: pointer; }
+  .about-name { font-size: 20px; font-weight: 700; margin-bottom: 4px; }
+  .about-free { margin-top: 10px; padding: 10px 12px; border-radius: 10px; background: var(--green-soft); font-weight: 600; }
+  .faq details { border: 1px solid var(--line); border-radius: 10px; padding: 8px 12px; margin-bottom: 6px; }
+  .faq summary { cursor: pointer; font-weight: 600; }
+  .faq details div { margin-top: 6px; color: var(--text); }
+  #rp-text { min-height: 110px; font-size: 15px; line-height: 1.45; font-family: inherit; border-style: solid; margin-top: 4px; }
+  .rp-check { display: flex; gap: 8px; align-items: flex-start; margin-top: 8px; font-size: 14px; }
+  .up-how { font-size: 14px; color: var(--muted); margin-top: 4px; }
+  .dn-plans { background: var(--blue-soft); border-radius: 12px; padding: 4px 16px 10px; margin-bottom: 10px; }
+  .dn-plans ul { margin: 4px 0 0; padding-left: 22px; }
+  .dn-plans li { margin: 4px 0; }
+  .about-acts { display: flex; gap: 8px; flex-wrap: wrap; margin: 14px 0 4px; }
+  .bcn-about ul { margin: 4px 0 0; padding-left: 22px; }
+  .bcn-about li { margin: 3px 0; }
+
+  /* v7.0: four steps, screening, reference list, PRISMA */
+  .big-choice { position: relative; }
+  .home-buttons.four .big-choice { min-height: 200px; }
+  .big-choice.purple { background: #7c3aed; }
+  .big-choice.teal { background: #0f766e; }
+  .step-n { position: absolute; top: 14px; left: 16px; width: 30px; height: 30px; border-radius: 50%;
+    background: rgba(255, 255, 255, .25); font-weight: 700; display: flex; align-items: center; justify-content: center; }
+  .rv-nav { display: flex; align-items: center; gap: 10px; margin-bottom: 10px; }
+  .rv-nav span { flex: 1; text-align: center; color: var(--muted); }
+  #rv-title { font-size: 20px; margin: 0 0 6px; line-height: 1.35; }
+  .rv-meta { color: var(--muted); font-size: 14px; margin-bottom: 12px; }
+  .rv-abstract { font-size: 16px; line-height: 1.6; background: #fbfdff; border: 1px solid var(--line); border-radius: 10px; padding: 14px 16px; max-height: 340px; overflow: auto; }
+  .rv-abstract mark { background: #fef08a; border-radius: 3px; padding: 0 2px; }
+  .rv-decide { display: grid; grid-template-columns: repeat(3, 1fr); gap: 10px; margin-top: 14px; }
+  .dec { padding: 16px 10px; font-size: 19px; font-weight: 700; border: none; border-radius: 12px; color: #fff; }
+  .dec:hover { border: none; filter: brightness(1.08); }
+  .dec.inc { background: var(--green); }
+  .dec.may { background: #d97706; }
+  .dec.exc { background: var(--red); }
+  .dec kbd { background: rgba(255, 255, 255, .25); border: none; color: #fff; margin-left: 6px; }
+  .dec.cur { outline: 4px solid #0f172a; outline-offset: 2px; }
+  .rv-reasons { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 8px; justify-content: flex-end; }
+  .rv-reasons button { font-size: 13px; padding: 4px 10px; color: var(--red); }
+  .rv-status-badge { display: inline-block; padding: 2px 10px; border-radius: 99px; font-size: 13px; margin-left: 6px; }
+  .bb-list { padding-left: 28px; font-size: 14px; line-height: 1.5; max-height: 460px; overflow: auto; border: 1px solid var(--line); border-radius: 10px; padding-top: 10px; padding-bottom: 10px; padding-right: 12px; }
+  .bb-list li { margin-bottom: 6px; }
+  .prisma { display: grid; grid-template-columns: 150px 1fr 1fr; gap: 10px 16px; align-items: stretch; font-size: 14px; }
+  .prisma .stage { writing-mode: vertical-rl; transform: rotate(180deg); background: var(--blue-soft); color: var(--blue); font-weight: 700; border-radius: 8px; display: flex; align-items: center; justify-content: center; padding: 8px 4px; }
+  .prisma .box { border: 2px solid #334155; border-radius: 8px; padding: 10px 12px; background: var(--card); }
+  .prisma .box.side { border-style: dashed; border-color: #94a3b8; }
+  .prisma .box b { font-size: 16px; }
 
   @media (max-width: 640px) {
     .home-buttons { grid-template-columns: 1fr; }
@@ -251,29 +309,46 @@
 <body>
 <div class="wrap">
   <header>
-    <h1><img src="/favicon.ico" alt="">Загрузчик статей</h1>
+    <h1><img src="/favicon.ico" alt="">Загрузчик статей‌​‌</h1>
     <span class="chip" id="browser-chip">Браузер: …</span>
     <button id="btn-home" hidden>🏠 Главная</button>
+    <button id="btn-update" class="linkbtn" data-link="official" hidden>🆕 Обновить</button>
     <button id="btn-keys">🔑 Ключи API</button>
-    <button id="btn-settings">⚙ Настройки</button>
+    <button id="btn-settings" title="Настройки" aria-label="Настройки">⚙</button>
+    <button id="btn-report">🛟 Сообщить о проблеме</button>
     <button id="btn-quit">Выход</button>
   </header>
 
 
   <section id="view-home" class="view">
+    <div id="update-banner" class="banner blue" hidden>
+      <span class="big-icon">🆕</span>
+      <div class="msg"><b>Вышла новая версия <span id="up-latest"></span></b> (у вас __APP_VERSION__).
+        <div class="up-how">Как обновить: нажмите «Выход», скачайте архив и распакуйте его в ту же папку, где лежит
+          программа, с заменой файлов. Списки, PDF и настройки останутся.</div></div>
+      <button class="linkbtn" data-link="official">⬇ Скачать новую версию</button>
+    </div>
     <div id="home-note"></div>
-    <div class="home-buttons">
-      <button class="big-choice blue" id="go-search"><span class="ico">🔎</span><b>Получить список DOI</b>
-        <span class="sub2">Поиск статей по ключевым словам в Scopus и Web of Science. Список сохранится в папку inbox.</span></button>
-      <button class="big-choice green" id="go-download"><span class="ico">⬇</span><b>Скачать статьи</b>
+    <div class="home-buttons four">
+      <button class="big-choice blue" id="go-search"><span class="step-n">1</span><span class="ico">🔎</span><b>Получить список DOI</b>
+        <span class="sub2">Поиск статей по ключевым словам в Scopus, Web of Science и OpenAlex. Список сохранится в папку inbox.</span></button>
+      <button class="big-choice purple" id="go-review"><span class="step-n">2</span><span class="ico">📝</span><b>Отобрать статьи</b>
+        <span class="sub2">Читайте аннотации и отмечайте: подходит или нет. Отобранные — в новый список.</span></button>
+      <button class="big-choice green" id="go-download"><span class="step-n">3</span><span class="ico">⬇</span><b>Скачать статьи</b>
         <span class="sub2">Выберите список DOI из папки inbox — программа откроет базы и скачает PDF.</span></button>
+      <button class="big-choice teal" id="go-biblio"><span class="step-n">4</span><span class="ico">📚</span><b>Список литературы</b>
+        <span class="sub2">По ГОСТ Р 7.0.100-2018, файлы для Zotero и EndNote, схема отбора PRISMA.</span></button>
     </div>
     <div class="home-small">
       <button id="home-keys">🔑 Ключи API для Scopus и Web of Science</button>
       <button id="home-inbox">📂 Папка inbox</button>
       <button id="home-pdf">📂 Папка с PDF</button>
+      <button id="home-clear" title="Очистить поиск и очередь; PDF и списки в inbox останутся">🧹 Очистить всё</button>
       <button id="home-donate" hidden>❤ Поблагодарить автора</button>
     </div>
+    <div id="home-msg" class="recognized" style="text-align: center; margin-top: 12px"></div>
+    <div class="home-foot">Бесплатная программа · © 2026 <b>__APP_AUTHOR__</b> · версия __APP_VERSION__
+      <button id="home-about">ℹ О программе</button></div>
   </section>
 
   <section id="view-download" class="view" hidden>
@@ -348,6 +423,74 @@ https://link.springer.com/article/10.1007/s12393-026-09447-8
     </div>
     <div id="items"></div>
   </div>
+  </section>
+
+  <section id="view-review" class="view" hidden>
+    <div class="card">
+      <h2><span>📝 Отбор статей</span><small>читайте аннотацию и отмечайте, подходит ли статья</small></h2>
+      <div class="acts"><label>Список: <select id="rv-list"></select></label><span class="recognized" id="rv-status"></span></div>
+      <div class="progress" style="margin-top: 12px"><div id="rv-bar"></div></div>
+      <div class="counts" id="rv-counts"></div>
+      <div class="seg" id="rv-filter">
+        <button data-rvf="undecided" class="on">Не отобраны</button><button data-rvf="all">Все</button>
+        <button data-rvf="include">✓ Подходят</button><button data-rvf="maybe">? Под вопросом</button><button data-rvf="exclude">✗ Не подходят</button>
+      </div>
+    </div>
+    <div class="card" id="rv-card">
+      <div class="rv-nav"><button id="rv-prev">← Назад</button><span id="rv-pos"></span><button id="rv-next">Дальше →</button></div>
+      <div id="rv-body"></div>
+      <div class="rv-decide">
+        <button class="dec inc" data-dec="include">✓ Подходит <kbd>1</kbd></button>
+        <button class="dec may" data-dec="maybe">? Под вопросом <kbd>2</kbd></button>
+        <button class="dec exc" data-dec="exclude">✗ Не подходит <kbd>3</kbd></button>
+      </div>
+      <div class="rv-reasons">
+        <span class="recognized">не подходит, потому что:</span>
+        <button data-reason="не по теме">✗ не по теме</button><button data-reason="не тот объект исследования">✗ не тот объект</button>
+        <button data-reason="не тот тип публикации">✗ не тот тип публикации</button><button data-reason="другой язык">✗ другой язык</button>
+      </div>
+      <div class="recognized" style="margin-top: 8px">Клавиши: <kbd>1</kbd> подходит, <kbd>2</kbd> под вопросом, <kbd>3</kbd> не подходит,
+        <kbd>←</kbd> <kbd>→</kbd> листать. После отметки сразу открывается следующая статья.</div>
+    </div>
+    <div class="card">
+      <h2><span>Что дальше</span></h2>
+      <div class="acts"><button class="linkbtn" id="rv-save">💾 Сохранить отобранные как новый список</button>
+        <label><input type="checkbox" id="rv-with-maybe"> вместе с «под вопросом»</label>
+        <button id="rv-biblio">📚 Список литературы и PRISMA</button></div>
+      <div id="rv-saved" style="margin-top: 10px"></div>
+    </div>
+  </section>
+
+  <section id="view-biblio" class="view" hidden>
+    <div class="card">
+      <h2><span>📚 Список литературы</span><small>по ГОСТ Р 7.0.100-2018</small></h2>
+      <div class="form-grid" style="margin-top: 0">
+        <label class="f">Список <select id="bb-list"></select></label>
+        <label class="f">Какие статьи
+          <select id="bb-scope"><option value="included">только «✓ подходит»</option><option value="included_maybe">«подходит» и «под вопросом»</option>
+            <option value="all">все статьи списка</option></select></label>
+        <label class="f">Порядок
+          <select id="bb-order"><option value="alpha">по алфавиту (сначала русские)</option><option value="list">как в списке</option></select></label>
+      </div>
+      <div class="recognized" id="bb-status" style="margin: 10px 0"></div>
+      <ol class="bb-list" id="bb-entries"></ol>
+      <div class="acts">
+        <button class="linkbtn" id="bb-copy">📋 Скопировать список</button>
+        <button id="bb-save-txt">💾 Сохранить (.txt)</button>
+        <button id="bb-save-ris">Для Zotero / EndNote / Mendeley (.ris)</button>
+        <button id="bb-save-bib">Для LaTeX (.bib)</button>
+        <button id="bb-open">📂 Папка «Список литературы»</button>
+      </div>
+      <div id="bb-saved" class="recognized" style="margin-top: 8px"></div>
+      <div class="recognized" style="margin-top: 6px">Проверьте оформление по требованиям вашего вуза: ГОСТ допускает варианты
+        (вид тире, «DOI:», пометка «Текст : электронный»).</div>
+    </div>
+    <div class="card">
+      <h2><span>Схема отбора PRISMA</span><small>для раздела «Материалы и методы»</small></h2>
+      <div id="prisma"></div>
+      <div class="acts" style="margin-top: 12px"><button id="pr-copy">📋 Скопировать цифры текстом</button>
+        <button id="pr-png">💾 Сохранить схему картинкой (PNG)</button><span class="recognized" id="pr-note"></span></div>
+    </div>
   </section>
 
   <section id="view-search" class="view" hidden>
@@ -460,6 +603,73 @@ extraction"></textarea>
   <div class="body" id="donate-body"></div>
 </dialog>
 
+<dialog id="dlg-about" class="bcn-about" style="width: min(640px, calc(100vw - 32px))">
+  <div class="head"><h3>ℹ О программе</h3><button data-close>✕</button></div>
+  <div class="body">
+    <div class="about-top">
+      <div class="about-emblem" id="about-emblem"><img src="/img/avatar.jpg" alt="__APP_AUTHOR__"></div>
+      <div>
+        <div class="about-name">Загрузчик статей</div>
+        <div>Версия __APP_VERSION__ · автор <b>__APP_AUTHOR__</b> · © 2026</div>
+        <div class="about-credit">Photo: <button class="plainlink" data-link="photo_source">Barry Skeates</button>,
+          <button class="plainlink" data-link="photo_license">CC BY 2.0</button>, cropped</div>
+        <div class="about-credit" id="about-update"></div>
+        <div class="about-free">Программа бесплатная. Если вам её продали, вас обманули:
+          скачайте её бесплатно на официальной странице.</div>
+      </div>
+    </div>
+    <div class="about-acts">
+      <button class="linkbtn" data-link="official">🌐 Официальная страница</button>
+      <button data-copytext="https://github.com/solzeworot-commits/article-downloader">📋 Скопировать ссылку</button>
+      <button id="about-license">📄 Лицензия</button>
+      <button id="about-check">🔄 Проверить обновления</button>
+      <button id="about-donate" hidden>❤ Поблагодарить автора</button>
+    </div>
+    <h4 class="dn-h">Можно</h4>
+    <ul>
+      <li>бесплатно пользоваться где угодно: дома, в вузе, в лаборатории;</li>
+      <li>делиться официальным архивом без изменений и бесплатно, со ссылкой на официальную страницу;</li>
+      <li>менять программу для себя, не раздавая изменённую версию.</li>
+    </ul>
+    <h4 class="dn-h">Нельзя без письменного разрешения автора</h4>
+    <ul>
+      <li>продавать программу, брать деньги за доступ к ней, установку или «активацию»;</li>
+      <li>раздавать изменённые версии, в том числе с добавленными функциями;</li>
+      <li>убирать имя автора, ссылку и текст лицензии.</li>
+    </ul>
+    <p class="recognized">Python и библиотеки в папке python распространяются по своим лицензиям, их тексты лежат рядом с ними.</p>
+  </div>
+</dialog>
+
+<dialog id="dlg-report" style="width: min(780px, calc(100vw - 32px))">
+  <div class="head"><h3>🛟 Сообщить о проблеме</h3><button data-close>✕</button></div>
+  <div class="body">
+    <h4 class="dn-h" style="margin-top: 0">Частые проблемы — попробуйте сначала</h4>
+    <div class="faq">
+    <details><summary>Окно программы не открывается</summary><div>Распакуйте архив целиком (не запускайте из zip) в короткую папку, например <b>C:\Статьи</b>. Если окно всё равно не появляется, запустите <b>scripts\debug_start.bat</b>: он покажет ошибку — её текст пришлите автору.</div></details>
+    <details><summary>«Браузер не найден»</summary><div>Нужен Яндекс.Браузер, Microsoft Edge или Google Chrome. Edge уже есть в Windows 10 и 11; если его удалили, поставьте Яндекс.Браузер (browser.yandex.ru) — он ставится без прав администратора.</div></details>
+    <details><summary>Базы не открываются или капча появляется снова и снова</summary><div>Пройдите капчу в окне браузера загрузчика сами: программа ждёт и продолжит. Если браузер завис, откройте «⚙ Настройки» → «Перезапустить браузер загрузчика».</div></details>
+    <details><summary>Статья не скачалась: «нет доступа»</summary><div>Войдите через организацию на сайте базы (кнопки входа на экране «Скачать статьи»). Если вход есть, а статьи нет, у университета может не быть подписки на этот журнал.</div></details>
+    <details><summary>Ключ Scopus или Web of Science не работает</summary><div>Откройте «🔑 Ключи API» и нажмите «Проверить». «Нет доступа» у Scopus обычно значит, что компьютер не в сети университета: подключитесь из университета или через его VPN.</div></details>
+    <details><summary>Поиск ничего не нашёл</summary><div>Уберите лишние слова, выберите «любое слово», расширьте годы. Слова нужны на английском — помогут подсказки «💡».</div></details>
+    <details><summary>«Исчерпан дневной лимит OpenAlex»</summary><div>Возьмите бесплатный ключ OpenAlex («🔑 Ключи API» → вкладка OpenAlex) или попробуйте завтра.</div></details>
+    <details><summary>У статей нет аннотаций</summary><div>Elsevier не отдаёт аннотации в открытые базы. Часть программа находит в Europe PMC, остальные откройте по DOI.</div></details>
+    <details><summary>Скачивает медленно</summary><div>Между статьями пауза 10 секунд и не больше 300 статей в день — это специально, чтобы издательства не заблокировали доступ всему университету.</div></details>
+    </div>
+    <h4 class="dn-h">Не помогло? Расскажите, что случилось</h4>
+    <div class="form-row"><label for="rp-section">Где это случилось</label><select id="rp-section"><option>Запуск программы</option><option>Получить список DOI</option><option>Отбор статей</option><option>Скачивание статей</option><option>Список литературы</option><option>Ключи API</option><option>Другое</option></select></div>
+    <textarea id="rp-text" spellcheck="true" placeholder="Что вы делали и что пошло не так. Например: выбрал список в «Скачать статьи», браузер открылся, но статьи не скачиваются."></textarea>
+    <label class="rp-check"><input type="checkbox" id="rp-log" checked> Приложить журнал работы программы (ключи, пароли и имя пользователя Windows в него не попадут)</label>
+    <div class="about-acts">
+      <button class="linkbtn" id="rp-github">🌐 Отправить автору через GitHub</button>
+      <button id="rp-copy">📋 Скопировать отчёт</button>
+      <button id="rp-save">💾 Сохранить отчёт в файл</button>
+    </div>
+    <p class="recognized" id="rp-note">Кнопка GitHub откроет страницу с готовым текстом — останется нажать «Create» / «Submit new issue»
+      (нужна бесплатная учётная запись GitHub). Нет учётной записи — скопируйте отчёт и отправьте автору любым способом.</p>
+  </div>
+</dialog>
+
 <dialog id="dlg-settings">
   <div class="head"><h3>Настройки</h3><button data-close>✕</button></div>
   <div class="body">
@@ -513,7 +723,7 @@ extraction"></textarea>
 <script>
 const TOKEN = "__TOKEN__";
 const $ = (id) => document.getElementById(id);
-let state = null, items = [], ver = 0, online = true, parsed = { entries: [], ignored: 0 }, firstRunSeen = false;
+let state = null, items = [], ver = 0, online = true, parsed = { entries: [], ignored: 0 }, firstRunSeen = false, quitting = false;
 
 const STATUS = {
   pending: ["в очереди", "⏳"],
@@ -554,6 +764,7 @@ async function api(path, body) {
 
 // ---- polling -------------------------------------------------------------
 async function poll() {
+  if (quitting) return;
   try {
     const r = await fetch("/api/state?v=" + ver, { headers: { "X-Token": TOKEN } });
     if (!r.ok) throw new Error(r.status);
@@ -598,6 +809,7 @@ function render() {
   if (!br.error && br.yandex_missing && br.kind !== "yandex")
     chip += ' · <a href="https://browser.yandex.ru/" target="_blank" title="С Яндекс.Браузером капча Elsevier держится дольше">поставить Яндекс</a>';
   $("browser-chip").innerHTML = chip;
+  $("browser-chip").title = $("browser-chip").textContent;
 
   // bases
   const enabled = w.bases.filter((b) => b.enabled);
@@ -812,8 +1024,17 @@ $("btn-clear-done").onclick = () => api("/api/clear", { what: "done" });
 $("btn-clear-all").onclick = () => { if (confirm("Убрать из списка все статьи? Скачанные PDF останутся в папке.")) api("/api/clear", { what: "all" }); };
 $("btn-quit").onclick = async () => {
   if (state && state.running && !confirm("Идёт скачивание. Остановить и закрыть программу?")) return;
+  quitting = true;
   try { await api("/api/quit"); } catch (e) {}
-  setBanner("grey", "👋", "Программа закрыта. Это окно можно закрыть.");
+  // The app window was opened once and only replaceState is used, so the
+  // browser lets the page close it. In an ordinary tab it may refuse: then
+  // the whole page says what to do instead of a banner on a hidden screen.
+  window.close();
+  setTimeout(() => {
+    document.body.innerHTML = '<div class="wrap" style="padding-top: 80px"><div class="note green" style="font-size: 20px">' +
+      '<span style="font-size: 30px">👋</span><span class="msg"><b>Программа закрыта.</b> Закройте это окно крестиком ' +
+      "в правом верхнем углу. Снова запустить — значок «Скачать статьи».</span></div></div>";
+  }, 400);
 };
 document.addEventListener("click", async (e) => {
   const t = e.target.closest("button");
@@ -893,7 +1114,7 @@ function flash(button, ok) {
 }
 
 function show(v) {
-  if (!["home", "download", "search", "keys"].includes(v)) v = "home";
+  if (!["home", "download", "search", "keys", "review", "biblio"].includes(v)) v = "home";
   view = v;
   document.querySelectorAll(".view").forEach((el) => { el.hidden = el.id !== "view-" + v; });
   $("btn-home").hidden = v === "home";
@@ -904,6 +1125,11 @@ function show(v) {
   if (v === "keys") renderKeySteps();
   if (v === "search") buildQueriesSoon();
   if (state) renderExtra();
+}
+function showFromHash(v) {
+  if (v === "review") return openReview();
+  if (v === "biblio") return openBiblio();
+  show(v);
 }
 
 function hasKey(src) { return !!(state && state.keys && state.keys[src]); }
@@ -931,6 +1157,8 @@ function renderExtra() {
   }
   $("btn-choose").hidden = !s.native_dialog;
   $("home-donate").hidden = !s.donate;
+  $("about-donate").hidden = !s.donate;
+  renderUpdate(s.update);
   renderKeysNote();
   renderSources();
   renderSearchProgress();
@@ -960,6 +1188,7 @@ function renderLists(files) {
     if (f.count && f.done >= f.count) status = "✅ всё скачано";
     return `<tr><td class="query"><b>${esc(f.name)}</b></td><td>${esc(f.modified)}</td><td>${f.count} DOI</td>` +
       `<td>${status || "ещё не скачивался"}</td><td class="act"><button class="linkbtn" data-list="${esc(f.name)}" ${f.count ? "" : "disabled"}>⬇ Скачать</button> ` +
+      `<button data-review="${esc(f.name)}" title="Отобрать статьи по аннотациям">📝</button> ` +
       `<button data-archive="${esc(f.name)}" title="Убрать список в архив (inbox\\_архив)">🗑</button></td></tr>`;
   });
   $("lists").innerHTML = `<table><thead><tr><th>Файл</th><th>Изменён</th><th>Сколько</th><th>Состояние</th><th></th></tr></thead><tbody>${rows.join("")}</tbody></table>`;
@@ -1140,11 +1369,11 @@ async function importExport(body) {
 }
 async function saveList() {
   const dois = records.filter((r) => selected.has(r.doi)).map((r) => r.doi);
-  const res = await api("/api/search_save", { dois, slug: $("save-name").value });
+  const res = await api("/api/search_save", { dois, slug: $("save-name").value, keywords: $("kw").value });
   if (res.error) { note($("save-note"), "red", "✖", esc(res.error)); return; }
-  savedVer = searchVer;
   note($("save-note"), "green", "✅", `Сохранено: <b>inbox\\${esc(res.name)}</b> — ${res.count} DOI.`,
-    `<button class="linkbtn" data-list="${esc(res.name)}">⬇ Скачать эти статьи сейчас</button><button data-act="open-inbox">📂 Открыть папку inbox</button>`);
+    `<button class="linkbtn" data-review="${esc(res.name)}">📝 Отобрать по аннотациям</button>` +
+    `<button data-list="${esc(res.name)}">⬇ Скачать все сразу</button><button data-act="open-inbox">📂 Открыть папку inbox</button>`);
 }
 
 // ---- key guide ----------------------------------------------------------------
@@ -1338,16 +1567,13 @@ document.addEventListener("click", async (e) => {
     $("f-type").value = saved.doc_type || "both";
     $("f-max").value = saved.max_results || 200;
   }
-  show(location.hash.slice(1) || "home");
+  showFromHash(location.hash.slice(1) || "home");
 })();
 
 // ===== v6.2: new topic, list archive, keyword hints, thanks to the author =====
 const HINT_DEFAULT = "Подберёт частые ключевые слова из статей по вашей теме (бесплатно, OpenAlex).";
-let savedVer = -1;
 
-$("btn-new-topic").onclick = async () => {
-  if (records.length && savedVer !== searchVer &&
-      !confirm("Найденное ещё не сохранено в список. Очистить всё и начать новую тему?")) return;
+async function resetSearch() {
   $("kw").value = "";
   $("f-match").value = "all";
   $("f-field").value = "tak";
@@ -1367,7 +1593,20 @@ $("btn-new-topic").onclick = async () => {
   delete $("save-name").dataset.touched;
   $("results-card").hidden = true;
   await api("/api/search_clear");
+}
+$("btn-new-topic").onclick = async () => {
+  await resetSearch();
   $("kw").focus();
+};
+// One press, no questions: stops the download and the databases, then clears.
+$("home-clear").onclick = async () => {
+  $("home-clear").disabled = true;
+  $("home-msg").textContent = "🧹 Останавливаю и очищаю…";
+  await resetSearch();
+  try { await api("/api/reset_all"); } catch (e) {}
+  $("home-clear").disabled = false;
+  $("home-msg").textContent = "🧹 Готово: всё остановлено, поиск и очередь очищены. PDF и списки в inbox на месте.";
+  setTimeout(() => { $("home-msg").textContent = ""; }, 8000);
 };
 
 async function archiveList(name) {
@@ -1421,6 +1660,10 @@ async function openDonate() {
     const r = await fetch("/api/donate", { headers: { "X-Token": TOKEN } });
     const d = await r.json();
     let html = d.message ? `<p class="dn-msg">${esc(d.message)}</p>` : "";
+    if (d.plans && d.plans.items && d.plans.items.length) {
+      html += `<div class="dn-plans"><h4 class="dn-h">${esc(d.plans.title || "")}</h4><ul>` +
+        d.plans.items.map((x) => `<li>${esc(x)}</li>`).join("") + "</ul></div>";
+    }
     if (d.sbp) {
       html += `<h4 class="dn-h">${esc(d.sbp.title || "Перевод по СБП")}</h4><div class="donate-sbp"><div class="qr">${d.sbp.qr || ""}</div>` +
         `<div><div>${esc(d.sbp.note || "")}</div><div class="acts"><button class="linkbtn" data-act="donate-link">Открыть ссылку</button>` +
@@ -1439,6 +1682,45 @@ async function openDonate() {
   }
 }
 $("home-donate").onclick = openDonate;
+$("home-about").onclick = () => $("dlg-about").showModal();
+
+// v7.2: new version and problem reports
+function renderUpdate(up) {
+  const newer = !!(up && up.newer);
+  $("update-banner").hidden = !newer;
+  $("btn-update").hidden = !newer;
+  if (newer) {
+    $("up-latest").textContent = up.latest;
+    $("btn-update").title = "Вышла версия " + up.latest + " — скачать";
+  }
+  $("about-update").textContent = !up ? "" : newer ? `Есть новая версия ${up.latest} — кнопка «🆕» вверху.`
+    : up.error ? "Не удалось проверить обновления (нет интернета?)." : `Это последняя версия (проверено в ${up.checked}).`;
+}
+$("about-check").onclick = async () => {
+  $("about-update").textContent = "Проверяю…";
+  try { renderUpdate(await api("/api/check_update")); } catch (e) { $("about-update").textContent = "Не проверилось: " + e.message; }
+};
+$("btn-report").onclick = () => $("dlg-report").showModal();
+function reportBody(action) {
+  return { action, text: $("rp-text").value, section: $("rp-section").value, attach_log: $("rp-log").checked };
+}
+$("rp-copy").onclick = async (e) => {
+  const t = e.currentTarget;
+  try { const r = await api("/api/report", reportBody("copy")); flash(t, await copyText(r.report)); }
+  catch (err) { $("rp-note").textContent = "Не получилось: " + err.message; }
+};
+$("rp-save").onclick = async () => {
+  try { const r = await api("/api/report", reportBody("save")); $("rp-note").textContent = "Отчёт сохранён: " + r.file; }
+  catch (err) { $("rp-note").textContent = "Не получилось: " + err.message; }
+};
+$("rp-github").onclick = async () => {
+  try {
+    await api("/api/report", reportBody("github"));
+    $("rp-note").textContent = "Открыл страницу GitHub в браузере: проверьте текст и нажмите «Create» / «Submit new issue». Спасибо!";
+  } catch (err) { $("rp-note").textContent = "Не получилось: " + err.message; }
+};
+$("about-license").onclick = () => api("/api/open", { what: "license" });
+$("about-donate").onclick = () => { $("dlg-about").close(); openDonate(); };
 document.addEventListener("click", (e) => {
   const t = e.target.closest("button");
   if (!t) return;
@@ -1446,6 +1728,254 @@ document.addEventListener("click", (e) => {
   if (t.dataset.hint) toggleHint(t.dataset.hint);
   if (t.dataset.act === "donate") openDonate();
   if (t.dataset.act === "donate-link") api("/api/open_donate_link");
+});
+
+// ===== v7.0: literature review — screening, reference list, PRISMA ============
+const H = { headers: { "X-Token": TOKEN } };
+const DEC_LABEL = { include: "✓ подходит", maybe: "? под вопросом", exclude: "✗ не подходит", "": "не отобрана" };
+const RV = { list: "", records: [], cur: "", filter: "undecided", keywords: [], timer: 0 };
+const BB = { list: "", timer: 0, scopeTouched: false };
+
+async function inboxFiles() {
+  try { return (await (await fetch("/api/inbox", H)).json()).files; } catch (e) { return []; }
+}
+function fillSelect(sel, files, preferred) {
+  const names = files.map((f) => f.name);
+  sel.innerHTML = names.length ? names.map((n) => `<option>${esc(n)}</option>`).join("")
+    : '<option value="">— в папке inbox нет списков —</option>';
+  sel.value = names.includes(preferred) ? preferred : (names[0] || "");
+}
+
+// ---- screening ------------------------------------------------------------------
+async function openReview(name) {
+  show("review");
+  const files = await inboxFiles();
+  fillSelect($("rv-list"), files, name || RV.list || (state && state.last_list));
+  if ($("rv-list").value) await selectReview($("rv-list").value);
+  else $("rv-body").innerHTML = '<div class="empty">Сначала сделайте список кнопкой «🔎 Получить список DOI» или положите файл с DOI в папку inbox.</div>';
+}
+async function selectReview(name) {
+  RV.list = name; RV.cur = ""; RV.filter = "undecided";
+  $("rv-saved").innerHTML = "";
+  await api("/api/review_open", { list: name });
+  await refreshReview();
+}
+async function refreshReview() {
+  clearTimeout(RV.timer);
+  if (!RV.list) return;
+  let d;
+  try { d = await (await fetch("/api/review?list=" + encodeURIComponent(RV.list), H)).json(); } catch (e) { return; }
+  if (d.error) { $("rv-status").textContent = d.error; return; }
+  RV.records = d.records; RV.keywords = d.keywords || []; RV.job = d.job || {};
+  renderReview();
+  if (RV.job.running && view === "review") RV.timer = setTimeout(refreshReview, 1500);
+}
+function rvVisible() {
+  return RV.records.filter((r) => RV.filter === "all" || (RV.filter === "undecided" ? !r.decision : r.decision === RV.filter));
+}
+function renderReview() {
+  const all = RV.records, done = all.filter((r) => r.decision).length;
+  const c = (k) => all.filter((r) => r.decision === k).length;
+  $("rv-bar").style.width = all.length ? (100 * done / all.length) + "%" : "0";
+  $("rv-counts").innerHTML = all.length ? [`отобрано <b>${done}</b> из ${all.length}`, `✓ подходит: <b>${c("include")}</b>`,
+    `? под вопросом: <b>${c("maybe")}</b>`, `✗ не подходит: <b>${c("exclude")}</b>`].map((x) => `<span>${x}</span>`).join("") : "";
+  const j = RV.job;
+  $("rv-status").innerHTML = j.running ? `⏳ Загружаю аннотации и данные статей: ${j.done} из ${j.total}…`
+    : (j.error ? `<span style="color: var(--red)">${esc(j.error)}</span>` : (all.length ? "" : "В этом списке нет DOI."));
+  document.querySelectorAll("#rv-filter button").forEach((b) => b.classList.toggle("on", b.dataset.rvf === RV.filter));
+  renderReviewCard();
+}
+function highlight(text) {
+  let out = esc(text);
+  const words = new Set();
+  for (const k of RV.keywords) { words.add(k); for (const w of k.split(/\s+/)) if (w.length > 3) words.add(w); }
+  const list = [...words].filter(Boolean).sort((a, b) => b.length - a.length).map((w) => esc(w).replace(/[.*+?^${}()|[\]\\]/g, "\\$&"));
+  if (list.length) out = out.replace(new RegExp(`(${list.join("|")})`, "gi"), "<mark>$1</mark>");
+  return out;
+}
+function renderReviewCard() {
+  const vis = rvVisible();
+  let i = vis.findIndex((r) => r.doi === RV.cur);
+  if (i < 0) { i = 0; RV.cur = vis[0] ? vis[0].doi : ""; }
+  const r = vis[i];
+  $("rv-pos").textContent = vis.length ? `${i + 1} из ${vis.length}` : "";
+  $("rv-prev").disabled = i <= 0; $("rv-next").disabled = i >= vis.length - 1;
+  document.querySelectorAll(".dec").forEach((b) => { b.disabled = !r; b.classList.toggle("cur", !!r && r.decision === b.dataset.dec); });
+  document.querySelectorAll("[data-reason]").forEach((b) => { b.disabled = !r; });
+  if (!r) {
+    $("rv-body").innerHTML = `<div class="empty" style="padding: 24px 4px">${RV.records.length
+      ? (RV.filter === "undecided" ? "🎉 Все статьи списка отобраны. Сохраните отобранные ниже или посмотрите фильтр «Все»." : "Здесь пока пусто.")
+      : "В списке нет статей с DOI."}</div>`;
+    return;
+  }
+  const authors = (r.authors || []).map((a) => `${a.family}${a.given ? " " + a.given : ""}`);
+  const who = authors.length > 5 ? authors.slice(0, 5).join(", ") + " и др." : authors.join(", ");
+  const where = [r.journal, r.year, r.volume ? "т. " + r.volume : "", r.issue ? "№ " + r.issue : ""].filter(Boolean).join(", ");
+  let abstract;
+  if (r.found === null || r.found === undefined) abstract = '<span class="empty">⏳ Загружаю аннотацию…</span>';
+  else if (!r.abstract) abstract = '<span class="empty">Аннотации в OpenAlex и Crossref нет — откройте статью по ссылке выше.</span>';
+  else abstract = highlight(r.abstract);
+  const badge = r.decision ? `<span class="badge b-${r.decision === "include" ? "success" : r.decision === "maybe" ? "captcha" : "failed"}">${DEC_LABEL[r.decision]}${r.reason ? " — " + esc(r.reason) : ""}</span>` : "";
+  $("rv-body").innerHTML = `<h3 id="rv-title">${esc(r.title || r.doi)}</h3>` +
+    `<div class="rv-meta">${who ? esc(who) + "<br>" : ""}${esc(where)}${where ? " · " : ""}` +
+    `<button class="link" data-doi="${esc(r.doi)}">открыть статью ↗</button> ${badge}</div>` +
+    `<div class="rv-abstract">${abstract}</div>`;
+}
+function rvMove(step) {
+  const vis = rvVisible(), i = vis.findIndex((r) => r.doi === RV.cur);
+  const next = vis[Math.min(vis.length - 1, Math.max(0, i + step))];
+  if (next) { RV.cur = next.doi; renderReviewCard(); }
+}
+async function rvDecide(decision, reason) {
+  const vis = rvVisible(), i = vis.findIndex((r) => r.doi === RV.cur), r = vis[i];
+  if (!r) return;
+  r.decision = decision; r.reason = decision === "exclude" ? (reason || "") : "";
+  // Straight to the next article: with "не отобраны" the decided one leaves the list.
+  const after = rvVisible();
+  const next = RV.filter === "undecided" ? (after[i] || after[i - 1]) : (vis[i + 1] || r);
+  RV.cur = next ? next.doi : "";
+  renderReview();
+  try { await api("/api/review_decide", { list: RV.list, doi: r.doi, decision, reason: r.reason }); } catch (e) {
+    $("rv-status").textContent = "Отметка не сохранилась: " + e.message;
+  }
+}
+document.addEventListener("keydown", (e) => {
+  if (view !== "review" || e.ctrlKey || e.altKey || e.metaKey) return;
+  if (["INPUT", "TEXTAREA", "SELECT"].includes(document.activeElement.tagName)) return;
+  if (e.key === "1") rvDecide("include");
+  else if (e.key === "2") rvDecide("maybe");
+  else if (e.key === "3") rvDecide("exclude");
+  else if (e.key === "ArrowRight") rvMove(1);
+  else if (e.key === "ArrowLeft") rvMove(-1);
+  else return;
+  e.preventDefault();
+});
+$("rv-list").onchange = () => selectReview($("rv-list").value);
+$("rv-prev").onclick = () => rvMove(-1);
+$("rv-next").onclick = () => rvMove(1);
+$("rv-save").onclick = async () => {
+  const res = await api("/api/review_save_selected", { list: RV.list, with_maybe: $("rv-with-maybe").checked });
+  if (res.error) { note($("rv-saved"), "amber", "⚠", esc(res.error)); return; }
+  note($("rv-saved"), "green", "✅", `Сохранено: <b>inbox\\${esc(res.name)}</b> — ${res.count} DOI.`,
+    `<button class="linkbtn" data-list="${esc(res.name)}">⬇ Скачать отобранные</button><button data-biblio="${esc(res.name)}">📚 Список литературы</button>`);
+};
+$("rv-biblio").onclick = () => openBiblio(RV.list);
+
+// ---- reference list and PRISMA ---------------------------------------------------
+async function openBiblio(name) {
+  show("biblio");
+  BB.scopeTouched = false;
+  fillSelect($("bb-list"), await inboxFiles(), name || BB.list || RV.list || (state && state.last_list));
+  await loadBiblio();
+}
+async function loadBiblio() {
+  clearTimeout(BB.timer);
+  BB.list = $("bb-list").value;
+  if (!BB.list) { $("bb-status").textContent = "В папке inbox нет списков."; $("bb-entries").innerHTML = ""; $("prisma").innerHTML = ""; return; }
+  await api("/api/review_open", { list: BB.list });
+  let d;
+  try { d = await (await fetch("/api/review?list=" + encodeURIComponent(BB.list), H)).json(); } catch (e) { return; }
+  if (d.error) { $("bb-status").textContent = d.error; return; }
+  // A list that was never screened: show all of it, not "только подходящие".
+  if (!BB.scopeTouched) $("bb-scope").value = d.records.some((r) => r.decision === "include") ? "included" : "all";
+  const res = await api("/api/biblio", { list: BB.list, scope: $("bb-scope").value, order: $("bb-order").value });
+  $("bb-entries").innerHTML = (res.entries || []).map((e) => `<li>${esc(e)}</li>`).join("") ||
+    '<li class="empty">Нет статей для списка. Отметьте подходящие на шаге «📝 Отобрать статьи» или выберите «все статьи списка».</li>';
+  let status = `Статей в списке литературы: <b>${res.count || 0}</b>.`;
+  if (d.job && d.job.running) status += ` ⏳ Загружаю данные статей: ${d.job.done} из ${d.job.total}…`;
+  else if (res.missing) status += ` У ${res.missing} не нашлось данных в Crossref/OpenAlex — у них в записи будут только DOI.`;
+  $("bb-status").innerHTML = status;
+  BB.entries = res.entries || [];
+  renderPrisma(d.prisma);
+  if (d.job && d.job.running && view === "biblio") BB.timer = setTimeout(loadBiblio, 2000);
+}
+function prismaLines(p) {
+  const src = Object.entries(p.per_source || {}).map(([k, v]) => `${k}: ${v}`).join("; ");
+  const reasons = Object.entries(p.reasons || {}).map(([k, v]) => `${k}: ${v}`).join("; ");
+  return {
+    identified: `Найдено записей: ${p.identified}` + (src ? ` (${src})` : ""),
+    removed: `Удалено до отбора: повторы — ${p.duplicates}, без DOI — ${p.no_doi}` + (p.removed_by_hand ? `, убрано вручную — ${p.removed_by_hand}` : ""),
+    screened: `Отобрано по названиям и аннотациям: ${p.screened}` + (p.undecided ? ` (ещё не просмотрено: ${p.undecided})` : ""),
+    excluded: `Исключено: ${p.excluded}` + (reasons ? ` (${reasons})` : ""),
+    maybe: p.maybe ? `Под вопросом: ${p.maybe}` : "",
+    included: `Включено в обзор: ${p.included}`,
+    retrieved: `Полные тексты: скачано — ${p.retrieved}, не получено — ${p.not_retrieved}`,
+  };
+}
+function renderPrisma(p) {
+  if (!p) { $("prisma").innerHTML = ""; return; }
+  BB.prisma = p;
+  const L = prismaLines(p);
+  const fromParent = p.list && p.list !== BB.list ? `<div class="recognized" style="margin-bottom: 8px">Цифры — по исходному списку «${esc(p.list)}».</div>` : "";
+  $("prisma").innerHTML = fromParent + `<div class="prisma">
+    <div class="stage">Поиск</div><div class="box"><b>${esc(L.identified)}</b></div><div class="box side">${esc(L.removed)}</div>
+    <div class="stage">Отбор</div><div class="box"><b>${esc(L.screened)}</b>${L.maybe ? "<br>" + esc(L.maybe) : ""}</div><div class="box side">${esc(L.excluded)}</div>
+    <div class="stage">Включено</div><div class="box"><b>${esc(L.included)}</b></div><div class="box side">${esc(L.retrieved)}</div></div>`;
+}
+function wrapText(ctx, text, x, y, width, lineHeight) {
+  const words = text.split(" ");
+  let line = "";
+  for (const w of words) {
+    const test = line ? line + " " + w : w;
+    if (ctx.measureText(test).width > width && line) { ctx.fillText(line, x, y); y += lineHeight; line = w; } else line = test;
+  }
+  if (line) ctx.fillText(line, x, y);
+  return y + lineHeight;
+}
+function prismaPng() {
+  const p = BB.prisma; if (!p) return;
+  const L = prismaLines(p), c = document.createElement("canvas");
+  c.width = 1400; c.height = 860;
+  const g = c.getContext("2d");
+  g.fillStyle = "#fff"; g.fillRect(0, 0, c.width, c.height);
+  g.font = "bold 30px Segoe UI, Arial"; g.fillStyle = "#0f172a"; g.fillText("Схема отбора публикаций (PRISMA 2020)", 40, 55);
+  const rows = [["Поиск", L.identified, L.removed], ["Отбор", L.screened + (L.maybe ? ". " + L.maybe : ""), L.excluded], ["Включено", L.included, L.retrieved]];
+  rows.forEach(([stage, main, side], n) => {
+    const y = 100 + n * 250;
+    g.fillStyle = "#dbeafe"; g.fillRect(40, y, 120, 200);
+    g.save(); g.translate(110, y + 100); g.rotate(-Math.PI / 2); g.fillStyle = "#1d4ed8"; g.font = "bold 24px Segoe UI, Arial"; g.textAlign = "center"; g.fillText(stage, 0, 0); g.restore();
+    g.strokeStyle = "#334155"; g.lineWidth = 3; g.setLineDash([]); g.strokeRect(190, y, 560, 200);
+    g.strokeStyle = "#94a3b8"; g.setLineDash([10, 8]); g.strokeRect(800, y, 560, 200); g.setLineDash([]);
+    g.fillStyle = "#0f172a"; g.font = "bold 24px Segoe UI, Arial"; wrapText(g, main, 210, y + 45, 520, 32);
+    g.font = "22px Segoe UI, Arial"; wrapText(g, side, 820, y + 45, 520, 30);
+    g.strokeStyle = "#334155"; g.beginPath(); g.moveTo(750, y + 100); g.lineTo(800, y + 100); g.stroke();
+    if (n < 2) { g.beginPath(); g.moveTo(470, y + 200); g.lineTo(470, y + 250); g.stroke(); }
+  });
+  const a = document.createElement("a");
+  a.href = c.toDataURL("image/png"); a.download = "PRISMA " + (BB.list || "схема").replace(/\.[^.]+$/, "") + ".png";
+  document.body.appendChild(a); a.click(); a.remove();
+  $("pr-note").textContent = "Картинка сохранена в папку «Загрузки».";
+}
+async function saveBiblio(format) {
+  const res = await api("/api/biblio_save", { list: BB.list, scope: $("bb-scope").value, order: $("bb-order").value, format });
+  $("bb-saved").innerHTML = res.error ? `<span style="color: var(--red)">${esc(res.error)}</span>`
+    : `💾 Сохранено: <b>Список литературы\\${esc(res.name)}</b>`;
+}
+$("bb-list").onchange = () => { BB.scopeTouched = false; loadBiblio(); };
+$("bb-scope").onchange = () => { BB.scopeTouched = true; loadBiblio(); };
+$("bb-order").onchange = () => loadBiblio();
+$("bb-copy").onclick = async (e) => flash(e.target.closest("button"), await copyText((BB.entries || []).map((x, n) => `${n + 1}. ${x}`).join("\n")));
+$("bb-save-txt").onclick = () => saveBiblio("txt");
+$("bb-save-ris").onclick = () => saveBiblio("ris");
+$("bb-save-bib").onclick = () => saveBiblio("bib");
+$("bb-open").onclick = () => api("/api/open", { what: "biblio_dir" });
+$("pr-copy").onclick = async (e) => {
+  if (!BB.prisma) return;
+  const L = prismaLines(BB.prisma);
+  flash(e.target.closest("button"), await copyText([L.identified, L.removed, L.screened, L.maybe, L.excluded, L.included, L.retrieved].filter(Boolean).join(".\n") + "."));
+};
+$("pr-png").onclick = prismaPng;
+$("go-review").onclick = () => openReview();
+$("go-biblio").onclick = () => openBiblio();
+document.addEventListener("click", (e) => {
+  const t = e.target.closest("button");
+  if (!t) return;
+  if (t.dataset.review) openReview(t.dataset.review);
+  if (t.dataset.biblio) openBiblio(t.dataset.biblio);
+  if (t.dataset.doi) api("/api/open_doi", { doi: t.dataset.doi });
+  if (t.dataset.rvf) { RV.filter = t.dataset.rvf; RV.cur = ""; renderReview(); }
+  if (t.dataset.dec) rvDecide(t.dataset.dec);
+  if (t.dataset.reason) rvDecide("exclude", t.dataset.reason);
 });
 
 fetch("/api/state?v=0", { headers: { "X-Token": TOKEN } }).then((r) => r.json()).then((s) => {

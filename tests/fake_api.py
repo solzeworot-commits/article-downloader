@@ -1,5 +1,6 @@
 """
-Fake Scopus Search API, Web of Science Starter API and OpenAlex for tests:
+Fake Scopus Search API, Web of Science Starter API, OpenAlex, Crossref, Europe PMC
+and the release's version.json for tests:
 
     python fake_api.py            (port 8001)
 
@@ -97,6 +98,43 @@ class Handler(BaseHTTPRequestHandler):
                                         "hits": [wos_hit(i) for i in ids]},
                                   {"X-RateLimit-Remaining-Day": "48"})
 
+        if url.path == "/openalex" and "abstract_inverted_index" in q.get("select", ""):
+            # Lookup by DOI for screening: every DOI ending in ".7" is unknown.
+            dois = q.get("filter", "")[len("doi:"):].split("|")
+            works = []
+            for doi in dois:
+                if doi.endswith(".7"):
+                    continue
+                words = f"This study examines {doi} grape pomace polyphenols extraction yield".split()
+                works.append({
+                    "doi": "https://doi.org/" + doi, "display_name": f"Paper about {doi}",
+                    "publication_year": 2021, "language": "en",
+                    "authorships": [{"author": {"display_name": n}} for n in ("Anna Petrova", "John Smith")],
+                    "biblio": {"volume": "12", "issue": "3", "first_page": "45", "last_page": "56"},
+                    "primary_location": {"source": {"display_name": "Food Chemistry"}},
+                    # "*.6": no abstract here (as with Elsevier); Europe PMC has it
+                    "abstract_inverted_index": None if doi.endswith(".6") else {w: [i] for i, w in enumerate(words)},
+                })
+            return self.send_json(200, {"meta": {"count": len(works)}, "results": works})
+
+        if url.path == "/europepmc":
+            import re as _re
+            dois = _re.findall(r'DOI:"([^"]+)"', q.get("query", ""))
+            result = [{"doi": d, "abstractText": f"<p>Europe PMC abstract of {d} on grape pomace.</p>"}
+                      for d in dois if d.endswith(".6")]
+            return self.send_json(200, {"hitCount": len(result), "resultList": {"result": result}})
+
+        if url.path == "/crossref":
+            dois = [f[len("doi:"):] for f in q.get("filter", "").split(",") if f.startswith("doi:")]
+            if "language" in q.get("select", ""):   # as the real Crossref answers
+                return self.send_json(400, {"status": "failed", "message-type": "validation-failure",
+                                            "message": [{"type": "select-not-available", "value": "language"}]})
+            items = [{"DOI": d.upper(), "title": [f"Paper about {d}"], "container-title": ["Food Chemistry"],
+                      "volume": "12", "issue": "3", "page": "45-56", "issued": {"date-parts": [[2021, 5]]},
+                      "author": [{"family": "Petrova", "given": "Anna"}, {"family": "Smith", "given": "John A."}]}
+                     for d in dois if not d.endswith(".7")]
+            return self.send_json(200, {"status": "ok", "message": {"items": items}})
+
         if url.path == "/openalex" and "keywords" in q.get("select", ""):
             # Keyword hints: keywords and topics of the most relevant works.
             pool = ["Grape pomace", "Polyphenols", "Antioxidant activity", "Extraction",
@@ -115,6 +153,10 @@ class Handler(BaseHTTPRequestHandler):
             nxt = f"c{start + per_page}" if start + per_page < OPENALEX_TOTAL else None
             return self.send_json(200, {"meta": {"count": OPENALEX_TOTAL, "next_cursor": nxt},
                                         "results": [openalex_work(i) for i in ids]})
+
+        if url.path == "/version.json":
+            # What the release page publishes next to the zip (update check).
+            return self.send_json(200, {"version": "9.9", "published": "2026-11-04"})
 
         self.send_json(404, {"message": "not found"})
 

@@ -1,4 +1,5 @@
 # -*- coding: utf-8 -*-
+# © 2026 Bucaneiro. Бесплатная программа; условия — в файле ЛИЦЕНЗИЯ.txt.
 """
 ArticleDownloader PORTABLE v6.0 (v5.24 STABLE CDP + JOB DEADLINE + TITLE SEARCH)
 v6.0:  portable build driven by app.py (window with the queue). The dedicated

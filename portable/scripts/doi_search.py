@@ -1,4 +1,5 @@
 # -*- coding: utf-8 -*-
+# © 2026 Bucaneiro. Бесплатная программа; условия — в файле ЛИЦЕНЗИЯ.txt.
 """
 DOI search for the "Получить список DOI" window (v6.1).
 
@@ -45,6 +46,8 @@ OPENALEX_URL = "https://api.openalex.org/works"
 
 KEY_FIELDS = ("scopus", "scopus_insttoken", "wos", "openalex")
 SOURCE_TITLES = {"scopus": "Scopus", "wos": "Web of Science", "openalex": "OpenAlex"}
+# Services the review module also asks (names for error messages only).
+SERVICE_TITLES = {**SOURCE_TITLES, "crossref": "Crossref", "europepmc": "Europe PMC"}
 MAX_RESULTS_CAP = 2000
 
 DOI_RE = re.compile(r"10\.\d{4,9}/[^\s\"<>{}|\\^`;,]+", re.I)
@@ -223,7 +226,7 @@ def _quota_left(headers) -> str:
 def _get_json(source: str, url: str, headers: dict, timeout: int = 40):
     req = urllib.request.Request(url, headers={
         "Accept": "application/json",
-        "User-Agent": "ArticleDownloader/6.1",
+        "User-Agent": "ArticleDownloader/7.1 (+https://github.com/solzeworot-commits/article-downloader)",
         **headers,
     })
     try:
@@ -239,16 +242,21 @@ def _get_json(source: str, url: str, headers: dict, timeout: int = 40):
         reason = getattr(exc, "reason", exc)
         raise SearchError(
             "network",
-            f"Нет связи с {SOURCE_TITLES[source]} ({reason}). Проверьте интернет.",
+            f"Нет связи с {SERVICE_TITLES[source]} ({reason}). Проверьте интернет.",
         ) from None
     except ValueError:
-        raise SearchError("other", f"{SOURCE_TITLES[source]} прислал непонятный ответ.") from None
+        raise SearchError("other", f"{SERVICE_TITLES[source]} прислал непонятный ответ.") from None
 
 
 def _http_error(source: str, code: int, body: str) -> SearchError:
     low = body.lower()
-    name = SOURCE_TITLES[source]
+    name = SERVICE_TITLES[source]
     if code == 429 or "quota" in low or "too many" in low:
+        if source == "openalex":
+            # Without a key OpenAlex shares a small daily budget per IP address.
+            return SearchError("quota", "Исчерпан дневной лимит OpenAlex для этого компьютера. "
+                                        "Возьмите бесплатный ключ OpenAlex (окно «🔑 Ключи API» → "
+                                        "вкладка OpenAlex) или попробуйте завтра.")
         hint = " (бесплатный план: 50 запросов в день)" if source == "wos" else ""
         return SearchError("quota", f"Исчерпан лимит запросов {name}{hint}. Попробуйте позже.")
     if code == 400:
@@ -636,11 +644,11 @@ def parse_export(name: str, data: bytes) -> tuple[list[dict], int]:
 # saving the list
 # ---------------------------------------------------------------------------
 
-def save_list(inbox: Path, slug: str, records: list[dict]) -> Path:
+def save_list(inbox: Path, slug: str, records: list[dict], dated: bool = True) -> Path:
     """inbox\\<date>_<slug>.txt with the DOIs and inbox\\_подробно\\<same>.csv."""
     inbox.mkdir(parents=True, exist_ok=True)
-    slug = re.sub(r"[^\w\-]+", "_", slug).strip("_")[:40] or "список"
-    stem = f"{date.today().isoformat()}_{slug}"
+    slug = re.sub(r"[^\w\-]+", "_", slug).strip("_")[:60 if not dated else 40] or "список"
+    stem = f"{date.today().isoformat()}_{slug}" if dated else slug
     path, n = inbox / f"{stem}.txt", 2
     while path.exists():
         path, n = inbox / f"{stem}_{n}.txt", n + 1

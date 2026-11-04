@@ -1,0 +1,95 @@
+ЛИЦЕНЗИЯ НА ПРОГРАММУ «ЗАГРУЗЧИК СТАТЕЙ»
+
+Copyright © 2026 Bucaneiro. Все права защищены.
+Официальная страница: https://github.com/solzeworot-commits/article-downloader
+
+1. Программа бесплатная. Автор (Bucaneiro) разрешает любому человеку и любой
+   организации бесплатно пользоваться программой на любом числе компьютеров:
+   дома, в вузе, в лаборатории, для учёбы и научной работы.
+
+2. Программой можно делиться: передавать и выкладывать официальный архив без
+   изменений, бесплатно, вместе с этим файлом и со ссылкой на официальную
+   страницу.
+
+3. Программу можно изменять для себя, на своих компьютерах, не передавая
+   изменённую версию другим.
+
+4. Без письменного разрешения автора НЕЛЬЗЯ:
+   а) продавать программу или её части; брать плату за доступ к ней, за её
+      установку, настройку или «активацию»; включать её в платные продукты
+      и услуги;
+   б) распространять изменённые версии программы или её части, в том числе
+      с добавленными функциями (например, с ИИ-помощником);
+   в) удалять или менять имя автора, знак ©, ссылку на официальную страницу,
+      этот текст и другую информацию об авторском праве;
+   г) выдавать программу или её части за свою разработку.
+
+5. Программа предоставляется «как есть», без гарантий. Автор не отвечает за
+   убытки от её использования. Пользователь сам отвечает за соблюдение условий
+   подписки своей организации и правил сайтов, с которых скачивает статьи.
+
+6. Использование программы с нарушением этих условий — это использование без
+   разрешения автора. Права автора защищаются законодательством об авторском
+   праве, в том числе Гражданским кодексом Российской Федерации,
+   законодательством Республики Казахстан и Бернской конвенцией.
+
+7. Python и библиотеки в папке python (Playwright, psutil, pypdf, qrcode и их
+   зависимости) распространяются по своим лицензиям; их тексты лежат рядом с
+   ними. Эта лицензия на них не распространяется. Фото на аватарке в окне
+   «О программе» — Barry Skeates, лицензия CC BY 2.0
+   (https://creativecommons.org/licenses/by/2.0/), обрезано; источник:
+   https://commons.wikimedia.org/wiki/File:Jolly_Roger_at_Portsmouth_Historic_Dockyard.jpg
+   Эта лицензия на него тоже не распространяется.
+
+8. Разрешение на то, что запрещено в пункте 4, можно попросить у автора через
+   официальную страницу программы.
+
+
+LICENSE FOR THE PROGRAM "ARTICLE DOWNLOADER" (English translation; in case of
+any difference the Russian text above prevails)
+
+Copyright © 2026 Bucaneiro. All rights reserved.
+Official page: https://github.com/solzeworot-commits/article-downloader
+
+1. The program is free of charge. The author (Bucaneiro) allows any person and
+   any organisation to use it free of charge on any number of computers: at
+   home, at a university, in a laboratory, for study and research.
+
+2. You may share the program: pass on and publish the official archive
+   unchanged, free of charge, together with this file and a link to the
+   official page.
+
+3. You may change the program for yourself, on your own computers, without
+   passing the changed version on to others.
+
+4. Without the author's written permission you may NOT:
+   a) sell the program or any part of it; charge for access to it, for its
+      installation, set-up or "activation"; include it in paid products or
+      services;
+   b) distribute changed versions of the program or of any part of it,
+      including versions with added features (for example an AI assistant);
+   c) remove or change the author's name, the © sign, the link to the official
+      page, this text or any other copyright information;
+   d) present the program or any part of it as your own work.
+
+5. The program is provided "as is", without any warranty. The author is not
+   liable for any loss caused by its use. Users are themselves responsible for
+   following the terms of their organisation's subscriptions and the rules of
+   the sites they download articles from.
+
+6. Using the program in breach of these terms is use without the author's
+   permission. The author's rights are protected by copyright law, including
+   the Civil Code of the Russian Federation, the law of the Republic of
+   Kazakhstan and the Berne Convention.
+
+7. Python and the libraries in the python folder (Playwright, psutil, pypdf,
+   qrcode and their dependencies) are distributed under their own licences,
+   whose texts lie next to them. This licence does not apply to them. The
+   avatar photo in the "О программе" window is by Barry Skeates, licensed
+   under CC BY 2.0 (https://creativecommons.org/licenses/by/2.0/), cropped;
+   source:
+   https://commons.wikimedia.org/wiki/File:Jolly_Roger_at_Portsmouth_Historic_Dockyard.jpg
+   This licence does not apply to it either.
+
+8. Permission for anything forbidden in point 4 can be requested from the
+   author through the official page of the program.
