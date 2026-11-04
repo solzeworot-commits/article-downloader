@@ -12,6 +12,12 @@
 
 ![Стартовое окно](screenshots/v6.1/1_home.png)
 
+## Скачать готовую программу
+
+👉 **[ArticleDownloader_Portable.zip](https://github.com/solzeworot-commits/article-downloader/releases/download/portable-latest/ArticleDownloader_Portable.zip)**
+(около 54 МБ; собирается и проверяется на Windows автоматически). Как установить — на странице
+[релиза](https://github.com/solzeworot-commits/article-downloader/releases/tag/portable-latest).
+
 ## Что где лежит
 
 | Путь | Что это |
