@@ -7,6 +7,7 @@
 <title>Загрузчик статей</title>
 <link rel="icon" href="/favicon.ico">
 <style>
+  [hidden] { display: none !important; }   /* also for elements whose class sets display */
   :root {
     --bg: #eef2f7;
     --card: #ffffff;
@@ -278,6 +279,26 @@
   /* v7.0: four steps, screening, reference list, PRISMA */
   .big-choice { position: relative; }
   .home-buttons.four .big-choice { min-height: 200px; }
+  .home-buttons.four { position: relative; }
+  /* right-hand cards carry their number on the outer corner, clear of the API circle */
+  .home-buttons.four .big-choice:nth-child(even) .step-n { left: auto; right: 14px; }
+  .api-hub { position: absolute; left: 50%; top: 50%; transform: translate(-50%, -50%); z-index: 2;
+             width: 132px; height: 132px; border-radius: 50%; border: 7px solid var(--bg); padding: 0;
+             display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 2px;
+             background: radial-gradient(circle at 35% 30%, #f87171, #dc2626 60%, #b91c1c); color: #fff;
+             cursor: pointer; animation: hub-glow 1.8s ease-in-out infinite; }
+  .api-hub b { font-size: 34px; line-height: 1; letter-spacing: .04em; }
+  .api-hub small { font-size: 12px; font-weight: 600; opacity: .95; }
+  .api-hub .step-n { position: absolute; top: 4px; left: 6px; width: 30px; height: 30px; border-radius: 50%;
+                     background: #fff; color: #b91c1c; font-weight: 800; display: flex; align-items: center; justify-content: center; }
+  .api-hub:hover { filter: brightness(1.07); }
+  .api-hub.ok { background: radial-gradient(circle at 35% 30%, #4ade80, #16a34a 60%, #15803d); animation: none; }
+  .api-hub.ok .step-n { color: #15803d; }
+  @keyframes hub-glow { 0%, 100% { box-shadow: 0 0 0 0 rgba(220,38,38,.55); } 50% { box-shadow: 0 0 22px 8px rgba(220,38,38,.55); } }
+  @media (prefers-reduced-motion: reduce) { .api-hub { animation: none; } }
+  .why-keys { display: grid; gap: 10px; margin-top: 10px; }
+  .why-keys > div { border: 1px solid var(--line); border-radius: 10px; padding: 10px 14px; }
+  .why-keys b.src { display: inline-block; min-width: 140px; }
   .big-choice.purple { background: #7c3aed; }
   .big-choice.teal { background: #0f766e; }
   .step-n { position: absolute; top: 14px; left: 16px; width: 30px; height: 30px; border-radius: 50%;
@@ -309,6 +330,7 @@
 
   @media (max-width: 640px) {
     .home-buttons { grid-template-columns: 1fr; }
+    .api-hub { position: relative; left: auto; top: auto; transform: none; margin: 0 auto; order: -1; }
     .big-choice { min-height: 180px; }
     .q-row { grid-template-columns: 1fr; }
     .form-row { grid-template-columns: 1fr; }
@@ -334,14 +356,16 @@
   <section id="view-home" class="view">
     <div id="home-note"></div>
     <div class="home-buttons four">
-      <button class="big-choice blue" id="go-search"><span class="step-n">1</span><span class="ico">🔎</span><b>Получить список DOI</b>
+      <button class="big-choice blue" id="go-search"><span class="step-n">2</span><span class="ico">🔎</span><b>Получить список DOI</b>
         <span class="sub2">Поиск статей по ключевым словам в Scopus, Web of Science и OpenAlex. Список сохранится в папку inbox.</span></button>
-      <button class="big-choice purple" id="go-review"><span class="step-n">2</span><span class="ico">📝</span><b>Отобрать статьи</b>
+      <button class="big-choice purple" id="go-review"><span class="step-n">3</span><span class="ico">📝</span><b>Отобрать статьи</b>
         <span class="sub2">Читайте аннотации и отмечайте: подходит или нет. Отобранные — в новый список.</span></button>
-      <button class="big-choice green" id="go-download"><span class="step-n">3</span><span class="ico">⬇</span><b>Скачать статьи</b>
+      <button class="big-choice green" id="go-download"><span class="step-n">4</span><span class="ico">⬇</span><b>Скачать статьи</b>
         <span class="sub2">Выберите список DOI из папки inbox — программа откроет базы и скачает PDF.</span></button>
-      <button class="big-choice teal" id="go-biblio"><span class="step-n">4</span><span class="ico">📚</span><b>Список литературы</b>
+      <button class="big-choice teal" id="go-biblio"><span class="step-n">5</span><span class="ico">📚</span><b>Список литературы</b>
         <span class="sub2">По ГОСТ Р 7.0.100-2018, файлы для Zotero и EndNote, схема отбора PRISMA.</span></button>
+      <button class="api-hub" id="go-api" title="Шаг 1: бесплатные ключи API — без них поиск статей часто не работает">
+        <span class="step-n">1</span><b id="api-hub-label">API</b><small id="api-hub-sub">получить ключи</small></button>
     </div>
     <div class="home-small">
       <button id="home-keys">🔑 Ключи API для Scopus и Web of Science</button>
@@ -579,9 +603,18 @@ extraction"></textarea>
   <section id="view-keys" class="view" hidden>
     <div class="card">
       <h2><span>🔑 Ключи API</span><small>вводятся один раз и хранятся только на этом компьютере</small></h2>
-      <div>Ключ — это длинный «пароль» из букв и цифр, по которому Scopus и Web of Science пускают программу.
-        Выберите базу и пройдите шаги по порядку: кнопки <b>«👉 Открыть страницу»</b> сами откроют нужный сайт.
-        <b>Никому не показывайте ключ.</b> Без ключей можно искать «Через браузер».</div>
+      <div>Ключ API — это бесплатный «пропуск» из букв и цифр, по которому база отвечает программе. Получить его нужно
+        один раз: выберите базу ниже и пройдите шаги по порядку, кнопки <b>«👉 Открыть…»</b> сами откроют нужный сайт.
+        <b>Никому не показывайте ключ.</b></div>
+      <div class="why-keys">
+        <div><b class="src">1. OpenAlex</b> бесплатно, для всех. Без ключа OpenAlex даёт мало запросов в день на один
+          интернет-адрес, и поиск может остановиться с ошибкой «слишком много запросов». С ключом у вас свой лимит.</div>
+        <div><b class="src">2. Web of Science</b> бесплатный ключ Starter API, план «Free Trial»: подписка организации не нужна,
+          до 50 запросов в день (это до 2500 статей). Без ключа Web of Science программу не пустит.</div>
+        <div><b class="src">3. Scopus</b> ключ бесплатный, но работает, только если ваша организация подписана на Scopus: из её
+          сети или с insttoken от библиотеки. Проверка: откройте scopus.com — если там нет названия вашей
+          организации, подписки нет, и ключ Scopus не поможет.</div>
+      </div>
       <details style="margin-top: 10px"><summary><b>Шаг 0: что спросить в библиотеке</b> (5 минут, сэкономит часы)</summary>
         <div class="letter" id="lib-text">Здравствуйте! Есть ли у университета доступ к Scopus и Web of Science? Я хочу искать литературу через их API (Scopus Search API, Web of Science Starter API). Нужен ли для этого institutional token (insttoken) от Elsevier и можете ли вы его запросить?</div>
         <div class="acts"><button data-copy="lib-text">📋 Скопировать текст</button></div>
@@ -590,9 +623,9 @@ extraction"></textarea>
       </details>
     </div>
     <div class="tabs" id="key-tabs">
-      <button data-ktab="scopus" class="on">Scopus <span id="kt-scopus"></span></button>
+      <button data-ktab="openalex" class="on">OpenAlex <span id="kt-openalex"></span></button>
       <button data-ktab="wos">Web of Science <span id="kt-wos"></span></button>
-      <button data-ktab="openalex">OpenAlex <span id="kt-openalex"></span></button>
+      <button data-ktab="scopus">Scopus <span id="kt-scopus"></span></button>
     </div>
     <div class="card" id="key-steps"></div>
   </section>
@@ -1136,7 +1169,7 @@ $("btn-restart-browser").onclick = () => api("/api/restart_browser");
 // ===== v6.1: screens, lists in inbox, DOI search, key guide ===================
 const SRC = { scopus: "Scopus", wos: "Web of Science", openalex: "OpenAlex", export: "экспорт" };
 let view = "home", searchVer = 0, records = [], selected = new Set(), qDirty = { scopus: false, wos: false };
-let searchMode = null, keyTab = "scopus", listsAt = 0, chooseBusy = false, loadingResults = false, searchMsg = "";
+let searchMode = null, keyTab = "openalex", listsAt = 0, chooseBusy = false, loadingResults = false, searchMsg = "";
 
 function store(key, value) { try { localStorage.setItem(key, JSON.stringify(value)); } catch (e) {} }
 function recall(key, fallback) {
@@ -1208,6 +1241,7 @@ function renderExtra() {
   $("home-donate").hidden = !s.donate;
   $("about-donate").hidden = !s.donate;
   renderUpdate(s.update);
+  renderApiHub(s.keys);
   renderUpdateJob(s.update_job);
   renderKeysNote();
   renderSources();
@@ -1444,22 +1478,27 @@ const GUIDE = {
     { t: "Появится ключ — строка примерно из 32 латинских букв и цифр. Выделите её целиком мышкой и нажмите <kbd>Ctrl</kbd>+<kbd>C</kbd>.", img: ["scopus_05_kluch.png"] },
   ] },
   wos: { field: "wos", steps: [
-    { t: "Откройте сайт Clarivate для разработчиков. <b>Одобрение может занять от нескольких дней до нескольких недель</b> — начните заранее.",
-      link: ["clarivate", "👉 Открыть developer.clarivate.com"] },
-    { t: "Нажмите <b>«Sign in»</b>. Аккаунт общий с Web of Science и EndNote — если у вас есть личный вход в Web of Science, попробуйте его. " +
-        "Если нет — <b>«Register»</b>: почта, пароль, затем подтвердите письмо.", img: ["wos_01_vhod.png"] },
-    { t: "Создайте «приложение»: в верхнем меню <b>«Applications»</b> → <b>«Register new application»</b>. <b>Name</b>: <code>ArticleDownloader</code>; " +
-        "<b>Description</b> (если просят): <code>Personal literature search for research</code>. Нажмите <b>«Submit»</b> / <b>«Register»</b>.",
-      copy: "ArticleDownloader", img: ["wos_02_applications.png", "wos_03_new_app.png"] },
-    { t: "Откройте страницу <b>Web of Science Starter API</b> и выберите план: <b>Free Trial</b> (бесплатный, до 50 запросов в день — это до 2500 статей) " +
-        "или институциональный, если университет подписан на Web of Science. Нажмите <b>«Subscribe»</b> и выберите своё приложение <code>ArticleDownloader</code>.",
-      link: ["wos_starter", "👉 Открыть Web of Science Starter API"], img: ["wos_04_starter_api.png", "wos_05_subscribe.png"] },
-    { t: "Снова <b>«Applications»</b> → ваше приложение → <b>API Key</b> (часто скрыт — нажмите <b>«Show»</b>). Выделите ключ и нажмите <kbd>Ctrl</kbd>+<kbd>C</kbd>. " +
-        "Если подписка ждёт одобрения (pending) — дождитесь письма от Clarivate.", img: ["wos_06_kluch.png"] },
+    { t: "Откройте сайт Clarivate для разработчиков и нажмите вверху справа <b>«Sign up»</b> (регистрация; если аккаунт уже есть — <b>«Log in»</b>): " +
+        "почта, пароль, затем подтвердите письмо, которое придёт на почту. Аккаунт общий с Web of Science и EndNote.",
+      link: ["clarivate", "👉 Открыть developer.clarivate.com"], img: ["wos_01_signup.jpg"] },
+    { t: "После входа откроется страница «Welcome». Сначала нажмите <b>«Register»</b>: так Clarivate называет регистрацию программы. " +
+        "<b>Name</b>: <code>ArticleDownloader</code>; <b>Description</b>, если просят: <code>Personal literature search for research</code>; " +
+        "нажмите <b>«Submit»</b>. Потом нажмите вверху <b>«APIs»</b>.", copy: "ArticleDownloader", img: ["wos_02_apis.jpg"] },
+    { t: "Слева в списке поставьте галочку <b>«Web of Science»</b> и нажмите <b>«Filter»</b>. Найдите карточку " +
+        "<b>«Web of Science Starter API»</b> и нажмите на её название.",
+      link: ["wos_starter", "👉 Открыть Web of Science Starter API"], img: ["wos_03_starter.jpg"] },
+    { t: "Нажмите <b>«Subscribe»</b> и выберите план <b>«Free Trial Plan»</b>: он бесплатный для всех, до 50 запросов в день. " +
+        "Если ваша организация подписана на Web of Science, можно взять <b>«Free Institutional Member Plan»</b> — до 5000 в день. " +
+        "Выберите своё приложение <code>ArticleDownloader</code>." },
+    { t: "Внизу этой же страницы, в таблице <b>«Applications»</b>, появится ключ. Нажмите на глазок 👁 рядом с точками, " +
+        "выделите ключ мышкой и нажмите <kbd>Ctrl</kbd>+<kbd>C</kbd>. Если вместо ключа написано «pending», дождитесь письма " +
+        "от Clarivate (обычно от нескольких часов до нескольких дней).", img: ["wos_04_key.jpg"] },
   ] },
   openalex: { field: "openalex", steps: [
-    { t: "OpenAlex — бесплатная база научных статей, <b>ключ не нужен</b>: просто отметьте OpenAlex в окне поиска. " +
-        "Для частого поиска можно взять бесплатный ключ на сайте OpenAlex (необязательно).", link: ["openalex", "👉 Открыть openalex.org"] },
+    { t: "Откройте сайт OpenAlex и нажмите вверху справа <b>«Sign up»</b> (регистрация; если аккаунт уже есть — <b>«Log in»</b>). " +
+        "Подойдёт любая почта, это бесплатно.", link: ["openalex", "👉 Открыть openalex.org"] },
+    { t: "Нажмите на кружок с вашей буквой вверху справа и выберите <b>«Settings»</b> («Настройки»).", img: ["openalex_01_settings.jpg"] },
+    { t: "Слева выберите <b>«API key»</b>, затем справа нажмите <b>«Copy»</b> — ключ скопируется.", img: ["openalex_02_key.jpg"] },
   ] },
 };
 function renderKeySteps() {
@@ -1549,7 +1588,7 @@ function renderKeyStatus() {
   if (!el) return;
   const k = state.keys[GUIDE[keyTab].field];
   el.innerHTML = k ? `Сохранён: <b>${esc(k)}</b>${keyTab === "scopus" && state.keys.scopus_insttoken ? " + insttoken" : ""} <button class="link" id="key-del">удалить</button>`
-    : (keyTab === "openalex" ? "Ключ необязателен." : "Ключ ещё не сохранён.");
+    : "Ключ ещё не сохранён.";
   if ($("key-del")) $("key-del").onclick = deleteKey;
 }
 
@@ -1733,6 +1772,13 @@ async function openDonate() {
 }
 $("home-donate").onclick = openDonate;
 $("home-about").onclick = () => $("dlg-about").showModal();
+$("go-api").onclick = () => show("keys");
+function renderApiHub(keys) {
+  const ok = !!(keys && keys.openalex && keys.wos);
+  $("go-api").classList.toggle("ok", ok);
+  $("api-hub-label").textContent = ok ? "API ✓" : "API";
+  $("api-hub-sub").textContent = ok ? "ключи есть" : "получить ключи";
+}
 
 // v7.2: new version and problem reports
 function renderUpdate(up) {
