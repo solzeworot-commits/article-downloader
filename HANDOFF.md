@@ -494,8 +494,7 @@ https://github.com/solzeworot-commits/article-downloader/releases/download/porta
   insttoken), проверка через scopus.com. Вкладки по порядку OpenAlex → WoS → Scopus.
 - Шаги WoS и OpenAlex переписаны по скриншотам автора (`ui/img/keys/wos_0*.jpg`,
   `openalex_01_settings.jpg`); **имя и фамилия автора на скриншотах закрашены/размыты** —
-  при замене скриншотов делать так же. `openalex_02_key.jpg` (страница «API key» → «Copy»)
-  ещё не прислан: пока шаг без картинки (`IMG` убирает отсутствующие).
+  при замене скриншотов делать так же. `openalex_02_key.jpg` — страница «API key» → «Copy».
 - Найдена ошибка 7.3–7.4: красный квадратик новой версии был виден пустым всегда — класс
   `.ver-badge` задаёт `display` и перебивал атрибут `hidden`. Добавлено общее правило
   `[hidden] { display: none !important; }`.
