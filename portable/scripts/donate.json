@@ -1,19 +1,17 @@
 {
   "message": "Если программа сэкономила вам время — можно поблагодарить автора. Все деньги пойдут на развитие проекта. Спасибо!",
   "plans": {
-    "title": "Уже сделано в 7.6 — ИИ-помощник на вашем ключе Perplexity: подбор слов для поиска и предотбор статей. Следующие цели:",
+    "title": "Уже сделано: ИИ-помощник на вашем ключе — подбор слов для поиска и предотбор статей; на выбор Perplexity, ChatGPT, Claude, GigaChat или YandexGPT. Следующая цель:",
     "items": [
-      "📊 таблица по скачанным PDF: метод, сырьё, условия и результаты — сразу в Excel;",
-      "🧠 ИИ-помощник без зарубежной карты — на российской нейросети (GigaChat или YandexGPT)."
+      "📊 таблица по скачанным PDF: метод, сырьё, условия и результаты — сразу в Excel."
     ]
   },
   "en": {
     "message": "If the program saved you time, you can thank the author. All the money goes to the project. Thank you!",
     "plans": {
-      "title": "Done in 7.6 — an AI helper on your own Perplexity key: search words and article pre-screening. Next goals:",
+      "title": "Done: an AI helper on your own key — search words and article pre-screening, with Perplexity, ChatGPT, Claude, GigaChat or YandexGPT. Next goal:",
       "items": [
-        "📊 a table from the downloaded PDFs: method, raw material, conditions and results, straight into Excel;",
-        "🧠 an AI helper without a foreign card — on a Russian model (GigaChat or YandexGPT)."
+        "📊 a table from the downloaded PDFs: method, raw material, conditions and results, straight into Excel."
       ]
     },
     "sbp": {

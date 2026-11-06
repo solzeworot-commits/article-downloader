@@ -46,7 +46,9 @@ SCOPUS_URL = "https://api.elsevier.com/content/search/scopus"
 WOS_URL = "https://api.clarivate.com/apis/wos-starter/v1/documents"
 OPENALEX_URL = "https://api.openalex.org/works"
 
-KEY_FIELDS = ("scopus", "scopus_insttoken", "wos", "openalex", "perplexity")
+KEY_FIELDS = ("scopus", "scopus_insttoken", "wos", "openalex",
+              # AI helper (ai_helper.KEY_FIELDS)
+              "perplexity", "openai", "anthropic", "gigachat", "yandex", "yandex_folder")
 SOURCE_TITLES = {"scopus": "Scopus", "wos": "Web of Science", "openalex": "OpenAlex"}
 # Services the review module also asks (names for error messages only).
 SERVICE_TITLES = {**SOURCE_TITLES, "crossref": "Crossref", "europepmc": "Europe PMC"}

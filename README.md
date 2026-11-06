@@ -9,7 +9,13 @@
 (около 54 МБ). Как установить и как проверить, что архив настоящий, — на странице
 [релиза](https://github.com/solzeworot-commits/article-downloader/releases/tag/portable-latest).
 
-## 🆕 Новое в версии 7.6
+## 🆕 Новое в версии 7.7
+
+- **🤖 ИИ-помощник на выбор:** Perplexity, ChatGPT, Claude, GigaChat или YandexGPT (Алиса) — вкладки в окне
+  помощника, у каждого сервиса пошаговая инструкция. Из России работают Perplexity, GigaChat и YandexGPT
+  (два последних — с оплатой российской картой); ChatGPT и Claude в России не работают.
+
+## Новое в версии 7.6
 
 - **🤖 ИИ-помощник** (по желанию, на вашем ключе Perplexity): опишите тему своими словами — он подберёт
   английские слова и синонимы для поиска; при отборе читает аннотации и подсказывает, подходит ли статья.
@@ -64,18 +70,20 @@
 
 ### 🤖 ИИ-помощник (с версии 7.6)
 
-Необязательный. Работает на **вашем собственном** ключе Perplexity API: вы регистрируетесь на
-perplexity.ai, пополняете счёт API (зарубежной картой или Apple Pay) и вставляете ключ в программу —
-инструкция со скриншотами в самой программе. Деньги за запросы списывает Perplexity с вашего счёта:
+Необязательный. Работает на **вашем собственном** ключе одного из сервисов: Perplexity, ChatGPT (OpenAI),
+Claude (Anthropic), GigaChat (Сбер) или YandexGPT (Яндекс) — с версии 7.7 на выбор. Вы регистрируетесь в
+сервисе, пополняете счёт API и вставляете ключ в программу — инструкции со скриншотами в самой программе.
+Из России работают Perplexity (зарубежная карта или Apple Pay), GigaChat и YandexGPT (российская карта);
+OpenAI и Anthropic пользователей в России не обслуживают. Деньги за запросы списывает сервис с вашего счёта:
 подбор слов — меньше цента, предотбор сотни статей — несколько центов; программа показывает, сколько
 потрачено. В Perplexity уходит только тема и названия с аннотациями статей; ключ хранится только на
 вашем компьютере.
 
 ## Планы
 
-Уже сделано в 7.6: ИИ-помощник — подбор слов по теме и предотбор статей. Дальше:
-- 📊 таблица по скачанным PDF: метод, сырьё, условия и результаты — сразу в Excel;
-- 🧠 ИИ-помощник без зарубежной карты — на российской нейросети (GigaChat или YandexGPT).
+Уже сделано: ИИ-помощник — подбор слов по теме и предотбор статей (7.6), выбор из пяти сервисов,
+включая GigaChat и YandexGPT с оплатой российской картой (7.7). Дальше:
+- 📊 таблица по скачанным PDF: метод, сырьё, условия и результаты — сразу в Excel.
 
 Сколько раз программу скачали и запускали —
 [📊 статистика](https://github.com/solzeworot-commits/article-downloader/releases/tag/download-stats)
@@ -95,9 +103,9 @@ reference list (GOST style, RIS, BibTeX) with a PRISMA flow diagram. No installa
 unpack the [archive](https://github.com/solzeworot-commits/article-downloader/releases/download/portable-latest/ArticleDownloader_Portable.zip)
 and double-click «СКАЧАТЬ СТАТЬИ» («download articles»). The window is in English when
 Windows is not in Russian; the **🌐 EN / RU** button at the top switches the language.
-An optional AI helper on your own Perplexity API key turns a topic in your own words into
-search terms and pre-screens abstracts. Instructions: «HOW TO USE.txt» inside the archive.
-Chat: [Telegram](https://t.me/ArticleDownloaderChat). New in 7.6: the AI helper and the chat buttons.
+An optional AI helper on your own API key (Perplexity, ChatGPT, Claude, GigaChat or YandexGPT)
+turns a topic in your own words into search terms and pre-screens abstracts. Instructions: «HOW TO USE.txt» inside the archive.
+Chat: [Telegram](https://t.me/ArticleDownloaderChat). New in 7.7: a choice of five AI services.
 
 ## Для разработчиков
 
@@ -131,11 +139,11 @@ python tools/build_portable.py
 
 ### Состояние
 
-Версия 7.6.2: поиск, отбор по аннотациям, скачивание, список литературы по ГОСТ и схема PRISMA;
+Версия 7.7: поиск, отбор по аннотациям, скачивание, список литературы по ГОСТ и схема PRISMA;
 лицензия и окно «О программе»; автоматическое обновление, «Сообщить о проблеме», «Поделиться»,
-интерфейс на русском и английском; ИИ-помощник на ключе Perplexity пользователя; ссылки на чаты.
+интерфейс на русском и английском; ИИ-помощник на ключе пользователя (пять сервисов на выбор); ссылки на чаты.
 Сборка проверяется на Windows автоматически при каждом изменении. Что ещё проверить руками —
-`HANDOFF.md` (разделы 2б–2н и 4).
+`HANDOFF.md` (разделы 2б–2о и 4).
 
 ## Лицензия
 
