@@ -549,6 +549,74 @@ def suggest_search(provider: str, keys: dict, topic: str, lang: str = "ru") -> d
     return {"lines": lines[:4], "note": note[:400], "sources": answer["sources"][:6], "cost": answer["cost"]}
 
 
+TRANSLATE_SCHEMA = ("translation", {
+    "type": "object",
+    "properties": {"title": {"type": "string"}, "abstract": {"type": "string"}},
+    "required": ["title", "abstract"],
+    "additionalProperties": False,
+})
+
+TRANSLATE_INSTRUCTIONS = """You translate the title and abstract of a scientific paper into {lang_name} for a researcher.
+Translate accurately and completely, in the style of a scientific text; keep numbers, units, chemical names,
+abbreviations and Latin species names as they are. Do not search the web, do not add comments.
+Reply with JSON only: {"title": "...", "abstract": "..."}"""
+
+
+def translate(provider: str, keys: dict, title: str, abstract: str, lang: str = "ru") -> dict:
+    """{"title", "abstract", "cost"} in the language of the window (Russian or English)."""
+    abstract = re.sub(r"\s+", " ", str(abstract or "")).strip()
+    if not abstract:
+        raise AIError("bad_answer", tr("У этой статьи нет аннотации — переводить нечего."))
+    lang_name = "Russian" if lang == "ru" else "English"
+    text = f"Title: {str(title or '').strip()[:500]}\n\nAbstract: {abstract[:6000]}"
+    answer = ask(provider, keys, TRANSLATE_INSTRUCTIONS.replace("{lang_name}", lang_name), text, search=False,
+                 max_tokens=min(4000, 300 + len(abstract) // 2), lang=lang, schema=TRANSLATE_SCHEMA)
+    data = _json_part(answer["text"])
+    if not isinstance(data, dict) or not str(data.get("abstract") or "").strip():
+        raise AIError("bad_answer", tr("ИИ ответил не по форме. Нажмите кнопку ещё раз."))
+    return {"title": str(data.get("title") or "").strip(), "abstract": str(data["abstract"]).strip(),
+            "cost": answer["cost"]}
+
+
+TABLE_SCHEMA = ("table_row", {
+    "type": "object",
+    "properties": {"cells": {"type": "array", "items": {"type": "string"}}},
+    "required": ["cells"],
+    "additionalProperties": False,
+})
+
+TABLE_INSTRUCTIONS = """You help a researcher build a summary table of papers for a literature review.
+Read the paper text given (it may be the full text or only the abstract) and fill these columns:
+{columns}
+Reply with JSON only: {"cells": ["...", "..."]} with exactly {n} strings, one per column, in this order.
+- Write in {lang_name}, briefly (a phrase, at most 30 words per cell), keep numbers, units and names exactly;
+- take facts only from the text given, do not search the web and do not guess;
+- if the text does not report something, write "—"."""
+
+
+def extract_table(provider: str, keys: dict, columns: list[str], title: str, text: str, lang: str = "ru") -> tuple[list, float]:
+    """The cells of one article's row (one per column) and the cost."""
+    columns = [str(c).strip() for c in columns if str(c).strip()][:12]
+    text = str(text or "").strip()
+    if not columns:
+        raise AIError("bad_answer", tr("Напишите хотя бы один столбец таблицы."))
+    if not text:
+        raise AIError("bad_answer", tr("Нет ни текста статьи, ни аннотации."))
+    lang_name = "Russian" if lang == "ru" else "English"
+    listing = "\n".join(f"{i}. {c}" for i, c in enumerate(columns, 1))
+    instructions = (TABLE_INSTRUCTIONS.replace("{columns}", listing).replace("{n}", str(len(columns)))
+                    .replace("{lang_name}", lang_name))
+    answer = ask(provider, keys, instructions, f"Title: {str(title or '').strip()[:500]}\n\n{text}", search=False,
+                 max_tokens=150 + 120 * len(columns), lang=lang, timeout=240, schema=TABLE_SCHEMA)
+    data = _json_part(answer["text"])
+    cells = data.get("cells") if isinstance(data, dict) else data
+    if not isinstance(cells, list) or not cells:
+        raise AIError("bad_answer", tr("ИИ ответил не по форме. Нажмите кнопку ещё раз."))
+    cells = [re.sub(r"\s+", " ", str(c)).strip()[:600] for c in cells][:len(columns)]
+    cells += ["—"] * (len(columns) - len(cells))
+    return cells, float(answer["cost"] or 0)
+
+
 SCREEN_INSTRUCTIONS = """You help a researcher pre-screen papers for a literature review by title and abstract.
 Judge every paper only by the text given; do not search the web. Reply with JSON only, no other text:
 {"papers": [{"id": 1, "verdict": "include", "why": "..."}, ...]}

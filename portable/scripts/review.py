@@ -161,7 +161,7 @@ def fetch_crossref(dois: list[str]) -> dict:
     for chunk in _chunks([d for d in dois if "," not in d], 20):
         url = (f"{base}?rows={len(chunk)}&filter="
                + quote(",".join("doi:" + d for d in chunk), safe=":,/")
-               + "&select=DOI,author,title,container-title,volume,issue,page,issued,abstract")
+               + "&select=DOI,author,title,container-title,short-container-title,volume,issue,page,issued,abstract")
         data, _ = ds._get_json("crossref", url, {})
         for item in (data.get("message") or {}).get("items") or []:
             doi = ds.normalize_doi(item.get("DOI"))
@@ -172,6 +172,7 @@ def fetch_crossref(dois: list[str]) -> dict:
                 "title": _clean((item.get("title") or [""])[0]),
                 "year": str(parts[0] or ""),
                 "journal": _clean((item.get("container-title") or [""])[0]),
+                "journal_abbr": _clean((item.get("short-container-title") or [""])[0]),
                 "volume": str(item.get("volume") or ""),
                 "issue": str(item.get("issue") or ""),
                 "pages": str(item.get("page") or ""),
@@ -203,7 +204,7 @@ def merge_meta(openalex: dict | None, crossref: dict | None) -> dict:
     oa, cr = openalex or {}, crossref or {}
     pick = lambda field: cr.get(field) or oa.get(field) or ""  # noqa: E731
     return {
-        "title": pick("title"), "year": pick("year"), "journal": pick("journal"),
+        "title": pick("title"), "year": pick("year"), "journal": pick("journal"), "journal_abbr": pick("journal_abbr"),
         "volume": pick("volume"), "issue": pick("issue"), "pages": pick("pages"),
         "abstract": oa.get("abstract") or cr.get("abstract") or "",
         "language": oa.get("language") or cr.get("language") or "",

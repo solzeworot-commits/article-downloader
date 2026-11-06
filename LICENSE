@@ -39,7 +39,10 @@ Copyright © 2026 Bucaneiro. Все права защищены.
    «О программе» — Barry Skeates, лицензия CC BY 2.0
    (https://creativecommons.org/licenses/by/2.0/), обрезано; источник:
    https://commons.wikimedia.org/wiki/File:Jolly_Roger_at_Portsmouth_Historic_Dockyard.jpg
-   Эта лицензия на него тоже не распространяется.
+   Эта лицензия на него тоже не распространяется. Список стилей журналов
+   (scripts\csl_styles.json.gz: названия и коды стилей) составлен по
+   репозиторию Citation Style Language (https://citationstyles.org/) и
+   распространяется по лицензии CC BY-SA 3.0, как и сам репозиторий.
 
 8. Разрешение на то, что запрещено в пункте 4, можно попросить у автора через
    официальную страницу программы.
@@ -89,7 +92,10 @@ Official page: https://github.com/solzeworot-commits/article-downloader
    under CC BY 2.0 (https://creativecommons.org/licenses/by/2.0/), cropped;
    source:
    https://commons.wikimedia.org/wiki/File:Jolly_Roger_at_Portsmouth_Historic_Dockyard.jpg
-   This licence does not apply to it either.
+   This licence does not apply to it either. The list of journal styles
+   (scripts\csl_styles.json.gz: style names and ids) is made from the
+   Citation Style Language repository (https://citationstyles.org/) and is
+   licensed under CC BY-SA 3.0, like the repository itself.
 
 8. Permission for anything forbidden in point 4 can be requested from the
    author through the official page of the program.

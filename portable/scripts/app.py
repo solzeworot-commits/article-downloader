@@ -44,6 +44,8 @@ from urllib.parse import parse_qs, quote, unquote, urlparse
 import urllib.request
 
 import ai_helper as ai
+import cite_styles as cs
+import pdf_table as pt
 import doi_search as ds
 import i18n
 import review as rv
@@ -74,7 +76,7 @@ REPORT_PATH = ROOT / "Отчёт.csv"
 BIBLIO_DIR = ROOT / "Список литературы"
 
 UI_PORT = 17865
-APP_VERSION = "7.7"
+APP_VERSION = "8.0"
 APP_AUTHOR = "Bucaneiro"
 OFFICIAL_URL = "https://github.com/solzeworot-commits/article-downloader"
 DOWNLOAD_URL = OFFICIAL_URL + "/releases/tag/portable-latest"
@@ -422,6 +424,9 @@ class State:
         self.reviews: dict[str, dict] = {}       # list file name -> review (rv)
         self.review_jobs: dict[str, dict] = {}   # list file name -> lookup progress
         self.ai_jobs: dict[str, dict] = {}       # list file name -> AI pre-screening progress
+        self.style_jobs: dict[str, dict] = {}    # list file name -> journal style formatting progress
+        self.style_failed: dict[tuple, set] = {} # (list, style) -> DOIs doi.org could not format
+        self.table_jobs: dict[str, dict] = {}    # list file name -> AI table progress
 
         self.browser = {}
         self.update: dict | None = None    # support.check_update()
@@ -1334,7 +1339,200 @@ def biblio_records(name: str, scope: str) -> list[dict]:
                 if keep is None or data["records"][d].get("decision") in keep]
 
 
-def save_biblio(name: str, scope: str, alphabetical: bool, fmt: str) -> Path:
+def style_info(style: str) -> dict:
+    """{"id", "title", "numeric", "csl": the CSL style dict or None}; unknown styles are GOST."""
+    if style.startswith("csl:"):
+        found = cs.csl_find(style[4:])
+        if found:
+            return {"id": style, "title": found["title"], "numeric": found["format"] in ("numeric", "label"),
+                    "csl": found}
+        style = "gost"
+    if style not in cs.STYLES:
+        style = "gost"
+    title, fmt, _fn, _label = cs.STYLES[style]
+    return {"id": style, "title": title, "numeric": fmt == "numeric", "csl": None}
+
+
+def start_style_job(name: str, info: dict, scope: str) -> dict:
+    """Format the references of a list in a journal's style by doi.org, one by one, in the background."""
+    data = get_review(name)
+    csl = info["csl"]
+    keep = BIBLIO_SCOPES.get(scope, ("include",))
+    with S.lock:
+        job = S.style_jobs.get(data["list"])
+        if job and job["running"]:
+            return job
+        # DOIs doi.org could not format are not asked again in this session (no endless retries).
+        failed = S.style_failed.setdefault((data["list"], csl["id"]), set())
+        todo = [d for d in data["order"]
+                if (keep is None or data["records"][d].get("decision") in keep)
+                and not (data["records"][d].get("csl") or {}).get(csl["id"]) and d not in failed]
+        if not todo:
+            if not (job and job.get("style") == info["id"]):
+                job = {"running": False, "done": 0, "total": 0, "failed": len(failed), "error": "", "style": info["id"]}
+                S.style_jobs[data["list"]] = job
+            return job
+        job = {"running": True, "done": 0, "total": len(todo), "failed": 0, "error": "", "style": info["id"]}
+        S.style_jobs[data["list"]] = job
+    request_style = csl["parent"] or csl["id"]
+
+    def run():
+        failures = 0
+        for doi in todo:
+            try:
+                text = cs.csl_format(doi, request_style, info["numeric"])
+                with S.lock:
+                    data["records"][doi].setdefault("csl", {})[csl["id"]] = text
+                failures = 0
+            except cs.StyleError as exc:
+                failures += 1
+                with S.lock:
+                    job["failed"] += 1
+                    job["error"] = str(exc)
+                    failed.add(doi)
+                if failures >= 5:          # doi.org is not answering at all: stop asking
+                    break
+            with S.lock:
+                job["done"] += 1
+            time.sleep(0.15)
+        with S.lock:
+            rv.save_review(INBOX, data)
+            job["running"] = False
+        app_log(f"Journal style {csl['id']}: {job['done']} of {job['total']}, failed {job['failed']}")
+
+    threading.Thread(target=run, daemon=True).start()
+    return job
+
+
+def table_columns(columns) -> list[str]:
+    cols = [re.sub(r"\s+", " ", str(c)).strip()[:80] for c in (columns or [])]
+    return [c for c in cols if c][:12]
+
+
+def start_table(name: str, scope: str, columns) -> dict:
+    """Fill the table of the articles of a list in the background: PDF text, else the abstract."""
+    data = get_review(name)
+    provider, keys = ai_service()
+    if not provider:
+        return {"error": tr("ИИ-помощник не подключён: вставьте ключ (кнопка «🤖 ИИ-помощник» на главной).")}
+    columns = table_columns(columns)
+    if not columns:
+        return {"error": tr("Напишите хотя бы один столбец таблицы.")}
+    keep = BIBLIO_SCOPES.get(scope, ("include",))
+    with S.lock:
+        job = S.table_jobs.get(data["list"])
+        if job and job["running"]:
+            return {}
+        todo = [d for d in data["order"]
+                if (keep is None or data["records"][d].get("decision") in keep)
+                and (data["records"][d].get("table") or {}).get("columns") != columns
+                and data["records"][d].get("found") is not None]
+        items = [dict(i) for i in S.items]
+    if not todo:
+        return {"nothing": True}
+    pdfs = pt.find_pdfs(todo, pdf_dir(), REPORT_PATH, items)
+    job = {"running": True, "done": 0, "total": len(todo), "error": "", "cost": 0.0, "stop": False,
+           "pdf": 0, "abstract": 0, "skipped": 0}
+    with S.lock:
+        S.table_jobs[data["list"]] = job
+    lang = i18n.LANG
+
+    def run():
+        app_log(f"AI table: {len(todo)} articles of {data['list']}, {len(pdfs)} with a PDF")
+        try:
+            for doi in todo:
+                with S.lock:
+                    if job["stop"]:
+                        break
+                    rec = data["records"][doi]
+                    title, abstract = rec.get("title", ""), rec.get("abstract", "")
+                text, source = (pt.pdf_text(pdfs[doi]), "pdf") if doi in pdfs else ("", "")
+                if not text and abstract:
+                    text, source = abstract, "abstract"
+                if not text:
+                    with S.lock:
+                        job["skipped"] += 1
+                        job["done"] += 1
+                    continue
+                cells, cost = ai.extract_table(provider, keys, columns, title, text, lang)
+                with S.lock:
+                    rec["table"] = {"columns": columns, "cells": cells, "source": source}
+                    job[source] += 1
+                    job["cost"] += cost
+                    job["done"] += 1
+                    rv.save_review(INBOX, data)
+        except ai.AIError as exc:
+            with S.lock:
+                job["error"] = exc.message
+        except Exception as exc:
+            app_log(f"AI table error: {exc}\n{traceback.format_exc()}")
+            with S.lock:
+                job["error"] = tr("Таблица прервалась: {error}", error=exc)
+        finally:
+            with S.lock:
+                job["running"] = False
+            app_log(f"AI table finished: {job['done']} of {job['total']}, cost ${job['cost']:.4f}")
+
+    threading.Thread(target=run, daemon=True).start()
+    return {}
+
+
+def table_rows(name: str, scope: str, columns) -> dict:
+    """The table as it is now: the rows of the articles that have their cells for these columns."""
+    data = get_review(name)
+    columns = table_columns(columns)
+    keep = BIBLIO_SCOPES.get(scope, ("include",))
+    with S.lock:
+        recs = [dict(data["records"][d]) for d in data["order"]
+                if keep is None or data["records"][d].get("decision") in keep]
+        job = dict(S.table_jobs.get(data["list"]) or {})
+    rows = []
+    for rec in recs:
+        table = rec.get("table") or {}
+        if table.get("columns") != columns:
+            continue
+        authors = rec.get("authors") or []
+        who = authors[0].get("family", "") + (" et al." if len(authors) > 2 else
+                                              (" & " + authors[1].get("family", "") if len(authors) == 2 else ""))
+        rows.append({"doi": rec["doi"], "who": who.strip(), "year": rec.get("year", ""), "title": rec.get("title", ""),
+                     "journal": rec.get("journal", ""), "cells": table.get("cells") or [],
+                     "source": table.get("source", "")})
+    return {"columns": columns, "rows": rows, "total": len(recs), "job": job}
+
+
+def save_table(name: str, scope: str, columns) -> Path:
+    t = table_rows(name, scope, columns)
+    BIBLIO_DIR.mkdir(parents=True, exist_ok=True)
+    path = BIBLIO_DIR / f"{Path(name).stem} ({tr('таблица')}).xlsx"
+    source = {"pdf": tr("полный текст (PDF)"), "abstract": tr("аннотация")}
+    header = ["№", tr("Авторы"), tr("Год"), tr("Название"), tr("Журнал"), "DOI"] + t["columns"] + [tr("Прочитано")]
+    rows = [[str(n), r["who"], r["year"], r["title"], r["journal"], r["doi"]] + r["cells"] + [source.get(r["source"], "")]
+            for n, r in enumerate(t["rows"], 1)]
+    widths = [5, 18, 7, 40, 24, 24] + [34] * len(t["columns"]) + [16]
+    pt.to_xlsx(path, header, rows, widths, sheet=tr("Таблица"))
+    app_log(f"Table saved: {path.name}")
+    return path
+
+
+def biblio_items(name: str, scope: str, alphabetical: bool, style: str) -> dict:
+    records = biblio_records(name, scope)
+    info = style_info(style)
+    out = {"count": len(records), "missing": sum(1 for r in records if not r.get("found")),
+           "style": info["id"], "title": info["title"], "numeric": info["numeric"]}
+    if info["csl"]:
+        job = start_style_job(name, info, scope)
+        records = biblio_records(name, scope)          # with the texts formatted so far
+        items = cs.csl_entries(records, info["csl"], alphabetical)
+        with S.lock:
+            out["job"] = dict(job)
+        out["fallback"] = sum(1 for i in items if i.get("fallback"))
+    else:
+        items = cs.entries(records, info["id"], alphabetical)
+    out["items"] = items
+    return out
+
+
+def save_biblio(name: str, scope: str, alphabetical: bool, fmt: str, style: str = "gost") -> Path:
     records = biblio_records(name, scope)
     BIBLIO_DIR.mkdir(parents=True, exist_ok=True)
     suffix = {"included": "", "included_maybe": "_с_вопросами", "all": "_все"}.get(scope, "")
@@ -1346,10 +1544,15 @@ def save_biblio(name: str, scope: str, alphabetical: bool, fmt: str) -> Path:
         path = BIBLIO_DIR / f"{stem}.bib"
         path.write_text(rv.to_bibtex(records), encoding="utf-8")
     else:
-        path = BIBLIO_DIR / f"{stem} (ГОСТ).txt"
-        entries = rv.gost_list(records, alphabetical)
-        text = "\r\n".join(f"{n}. {e}" for n, e in enumerate(entries, 1)) + "\r\n"
-        path.write_bytes(b"\xef\xbb\xbf" + text.encode("utf-8"))
+        data = biblio_items(name, scope, alphabetical, style)
+        label = "ГОСТ" if data["style"] == "gost" else re.sub(r'[\\/:*?"<>|]+', " ", data["title"]).strip()[:60]
+        if fmt == "docx":
+            path = BIBLIO_DIR / f"{stem} ({label}).docx"
+            cs.to_docx(path, tr("Список литературы") + f" — {data['title']}", data["items"])
+        else:
+            path = BIBLIO_DIR / f"{stem} ({label}).txt"
+            text = "\r\n".join(i["label"] + i["text"] for i in data["items"]) + "\r\n"
+            path.write_bytes(b"\xef\xbb\xbf" + text.encode("utf-8"))
     app_log(f"Reference list saved: {path.name}")
     return path
 
@@ -1771,6 +1974,30 @@ def handle_api(path: str, body: dict) -> dict:
                 job["stop"] = True
         return {}
 
+    if path == "/api/ai_translate":
+        try:
+            data = get_review(body.get("list"))
+        except FileNotFoundError:
+            return {"error": tr("Список не найден в папке inbox.")}
+        doi = ds.normalize_doi(body.get("doi"))
+        with S.lock:
+            rec = data["records"].get(doi)
+            if rec is None:
+                return {"error": tr("Статьи нет в списке.")}
+            cached = rec.get("tr") or {}
+            title, abstract = rec.get("title", ""), rec.get("abstract", "")
+        if cached.get("lang") == i18n.LANG and cached.get("abstract"):
+            return cached
+        provider, keys = ai_service()
+        try:
+            result = ai.translate(provider, keys, title, abstract, i18n.LANG)
+        except ai.AIError as exc:
+            return {"error": exc.message, "kind": exc.kind}
+        with S.lock:
+            rec["tr"] = {"lang": i18n.LANG, "title": result["title"], "abstract": result["abstract"]}
+            rv.save_review(INBOX, data)
+        return rec["tr"] | {"cost": result["cost"]}
+
     if path == "/api/ai_accept":
         try:
             return accept_ai_advice(body.get("list"))
@@ -1818,14 +2045,35 @@ def handle_api(path: str, body: dict) -> dict:
             records = biblio_records(body.get("list"), body.get("scope") or "included")
         except FileNotFoundError:
             return {"error": tr("Список не найден в папке inbox.")}
-        return {"entries": rv.gost_list(records, body.get("order") != "list"),
-                "count": len(records),
-                "missing": sum(1 for r in records if not r.get("found"))}
+        return biblio_items(body.get("list"), body.get("scope") or "included", body.get("order") != "list",
+                            str(body.get("style") or "gost"))
+
+    if path in ("/api/table", "/api/table_start", "/api/table_save", "/api/table_stop"):
+        name, scope, columns = body.get("list"), body.get("scope") or "included", body.get("columns") or []
+        try:
+            if path == "/api/table_start":
+                return start_table(name, scope, columns)
+            if path == "/api/table_stop":
+                with S.lock:
+                    job = S.table_jobs.get(Path(str(name or "")).name)
+                    if job:
+                        job["stop"] = True
+                return {}
+            if path == "/api/table_save":
+                saved = save_table(name, scope, columns)
+                return {"name": saved.name, "folder": str(BIBLIO_DIR)}
+            return table_rows(name, scope, columns)
+        except FileNotFoundError:
+            return {"error": tr("Список не найден в папке inbox.")}
+
+    if path == "/api/csl_search":
+        return {"styles": cs.csl_search(str(body.get("q") or ""))}
 
     if path == "/api/biblio_save":
         try:
             saved = save_biblio(body.get("list"), body.get("scope") or "included",
-                                body.get("order") != "list", body.get("format") or "txt")
+                                body.get("order") != "list", body.get("format") or "txt",
+                                str(body.get("style") or "gost"))
         except FileNotFoundError:
             return {"error": tr("Список не найден в папке inbox.")}
         return {"name": saved.name, "folder": str(BIBLIO_DIR)}

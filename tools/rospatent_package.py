@@ -26,6 +26,8 @@ FILES = [
     "scripts/review.py",
     "scripts/support.py",
     "scripts/ai_helper.py",
+    "scripts/cite_styles.py",
+    "scripts/pdf_table.py",
     "scripts/i18n.py",
     "scripts/article_downloader.py",
     "scripts/ui/index.html",

@@ -1,17 +1,17 @@
 {
   "message": "Если программа сэкономила вам время — можно поблагодарить автора. Все деньги пойдут на развитие проекта. Спасибо!",
   "plans": {
-    "title": "Уже сделано: ИИ-помощник на вашем ключе — подбор слов для поиска и предотбор статей; на выбор Perplexity, ChatGPT, Claude, GigaChat или YandexGPT. Следующая цель:",
+    "title": "Уже сделано: ИИ-помощник на вашем ключе (Perplexity, ChatGPT, Claude, GigaChat или YandexGPT) — подбор слов, предотбор, перевод аннотаций и таблица по статьям для Excel; стили журналов. Следующая цель:",
     "items": [
-      "📊 таблица по скачанным PDF: метод, сырьё, условия и результаты — сразу в Excel."
+      "📝 черновик плана обзора по отобранным статьям: разделы и какие статьи в какой раздел."
     ]
   },
   "en": {
     "message": "If the program saved you time, you can thank the author. All the money goes to the project. Thank you!",
     "plans": {
-      "title": "Done: an AI helper on your own key — search words and article pre-screening, with Perplexity, ChatGPT, Claude, GigaChat or YandexGPT. Next goal:",
+      "title": "Done: an AI helper on your own key (Perplexity, ChatGPT, Claude, GigaChat or YandexGPT) — search words, pre-screening, abstract translation and a table of the articles for Excel; journal styles. Next goal:",
       "items": [
-        "📊 a table from the downloaded PDFs: method, raw material, conditions and results, straight into Excel."
+        "📝 a draft outline of the review from the selected articles: sections and which article goes where."
       ]
     },
     "sbp": {
