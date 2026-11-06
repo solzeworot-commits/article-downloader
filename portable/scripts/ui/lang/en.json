@@ -643,12 +643,11 @@
   "Тема своими словами</b> — ИИ подберёт английские слова и синонимы, программа соберёт из них запросы.": "Topic in your own words</b> — the AI picks English words and synonyms, the program builds the queries from them.",
   "ИИ-помощник не подключён: с ним ИИ сам прочитает аннотации и подскажет, какие статьи подходят.": "The AI helper is not connected: with it, the AI reads the abstracts itself and suggests which articles fit.",
   "Кнопка GitHub откроет страницу с готовым текстом — останется нажать «Create» / «Submit new issue»\n      (нужна бесплатная учётная запись GitHub). Нет учётной записи — скопируйте отчёт и пришлите его в чат программы.": "The GitHub button opens a page with the text filled in — just click «Create» / «Submit new issue» (a free GitHub account is needed). No account? Copy the report and send it to the program's chat.",
-  "Чат программы: вопросы, советы, новости": "The program's chat: questions, tips, news",
   "💬 Чат программы": "💬 Program chat",
   "💬 Проще всего — спросить в чате программы, там отвечают автор и другие пользователи:": "💬 The easiest way is to ask in the program's chat — the author and other users answer there:",
-  "💬 Чат в Telegram": "💬 Telegram chat",
-  "💬 Чат в MAX": "💬 MAX chat",
-  "Вопросы, советы и новости программы. Отвечают автор и другие пользователи.": "Questions, tips and news about the program. The author and other users answer."
+  "💬 Чат программы:": "💬 Program chat:",
+  "Чат программы в Telegram": "The program's chat in Telegram",
+  "Чат программы в MAX": "The program's chat in MAX"
  },
  "messages": {
   "экспорт": "export",

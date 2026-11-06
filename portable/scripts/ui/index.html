@@ -273,8 +273,16 @@
   .dn-plans ul { margin: 4px 0 0; padding-left: 22px; }
   .dn-plans li { margin: 4px 0; }
   .about-acts { display: flex; gap: 8px; flex-wrap: wrap; margin: 14px 0 4px; }
-  .chat-line { background: var(--blue-soft); border-radius: 12px; padding: 10px 14px; margin-bottom: 12px; }
-  .chat-line button { padding: 4px 12px; margin-left: 4px; }
+  .chat-line { background: var(--blue-soft); border-radius: 12px; padding: 10px 14px; margin-bottom: 12px;
+               display: flex; align-items: center; gap: 10px; flex-wrap: wrap; }
+  .chat-btns { display: inline-flex; gap: 8px; align-items: center; flex-wrap: wrap; }
+  .chat-btns .lbl { color: var(--muted); font-size: 14px; }
+  .chat-btn { display: inline-flex; align-items: center; gap: 8px; padding: 5px 16px 5px 5px; border: none;
+              border-radius: 99px; color: #fff; font-weight: 700; font-size: 15px; line-height: 1; }
+  .chat-btn svg { width: 30px; height: 30px; flex: none; }
+  .chat-btn.tg { background: #229ED9; }
+  .chat-btn.max { background: linear-gradient(135deg, #3d7bff, #7b3df5); }
+  .chat-btn:hover { border: none; filter: brightness(1.08); }
   .bcn-about ul { margin: 4px 0 0; padding-left: 22px; }
   .bcn-about li { margin: 3px 0; }
 
@@ -402,7 +410,7 @@
       <button id="home-pdf">📂 Папка с PDF</button>
       <button id="home-clear" title="Очистить поиск и очередь; PDF и списки в inbox останутся">🧹 Очистить всё</button>
       <button id="home-share">📤 Поделиться программой</button>
-      <button id="home-chat" title="Чат программы: вопросы, советы, новости">💬 Чат программы</button>
+<span class="chat-btns"><span class="lbl">💬 Чат программы:</span><button class="chat-btn tg" data-link="chat_tg" title="Чат программы в Telegram"><svg viewBox="0 0 32 32" aria-hidden="true"><circle cx="16" cy="16" r="16" fill="#fff"/><path d="M7.4 15.6l15.3-5.9c.7-.3 1.4.2 1.1 1.3l-2.6 12.2c-.2.9-.7 1.1-1.5.7l-4-2.9-1.9 1.9c-.2.2-.4.4-.8.4l.3-4.1 7.4-6.7c.3-.3-.1-.4-.5-.2l-9.1 5.8-3.9-1.2c-.8-.3-.9-.8.2-1.3z" fill="#229ED9"/></svg>Telegram</button><button class="chat-btn max" data-link="chat_max" title="Чат программы в MAX"><svg viewBox="0 0 32 32" aria-hidden="true"><circle cx="16" cy="16" r="16" fill="#fff"/><path d="M8.5 22V10.5h2.6l4.9 6.4 4.9-6.4h2.6V22h-3v-6.6l-4.5 5.8-4.5-5.8V22z" fill="#6d3df5"/></svg>MAX</button></span>
       <button id="home-donate" hidden>❤ Поблагодарить автора</button>
     </div>
     <div id="home-msg" class="recognized" style="text-align: center; margin-top: 12px"></div>
@@ -777,8 +785,7 @@ extraction"></textarea>
       <button data-copytext="https://github.com/solzeworot-commits/article-downloader">📋 Скопировать ссылку</button>
       <button id="about-license">📄 Лицензия</button>
       <button id="about-check">🔄 Проверить обновления</button>
-      <button data-link="chat_tg">💬 Чат в Telegram</button>
-      <button data-link="chat_max">💬 Чат в MAX</button>
+      <span class="chat-btns"><button class="chat-btn tg" data-link="chat_tg" title="Чат программы в Telegram"><svg viewBox="0 0 32 32" aria-hidden="true"><circle cx="16" cy="16" r="16" fill="#fff"/><path d="M7.4 15.6l15.3-5.9c.7-.3 1.4.2 1.1 1.3l-2.6 12.2c-.2.9-.7 1.1-1.5.7l-4-2.9-1.9 1.9c-.2.2-.4.4-.8.4l.3-4.1 7.4-6.7c.3-.3-.1-.4-.5-.2l-9.1 5.8-3.9-1.2c-.8-.3-.9-.8.2-1.3z" fill="#229ED9"/></svg>Telegram</button><button class="chat-btn max" data-link="chat_max" title="Чат программы в MAX"><svg viewBox="0 0 32 32" aria-hidden="true"><circle cx="16" cy="16" r="16" fill="#fff"/><path d="M8.5 22V10.5h2.6l4.9 6.4 4.9-6.4h2.6V22h-3v-6.6l-4.5 5.8-4.5-5.8V22z" fill="#6d3df5"/></svg>MAX</button></span>
       <button id="about-donate" hidden>❤ Поблагодарить автора</button>
     </div>
     <h4 class="dn-h">Можно</h4>
@@ -801,7 +808,7 @@ extraction"></textarea>
   <div class="head"><h3>🛟 Сообщить о проблеме</h3><button data-close>✕</button></div>
   <div class="body">
     <div class="chat-line">💬 Проще всего — спросить в чате программы, там отвечают автор и другие пользователи:
-      <button class="linkbtn" data-link="chat_tg">Telegram</button> <button class="linkbtn" data-link="chat_max">MAX</button></div>
+      <span class="chat-btns"><button class="chat-btn tg" data-link="chat_tg" title="Чат программы в Telegram"><svg viewBox="0 0 32 32" aria-hidden="true"><circle cx="16" cy="16" r="16" fill="#fff"/><path d="M7.4 15.6l15.3-5.9c.7-.3 1.4.2 1.1 1.3l-2.6 12.2c-.2.9-.7 1.1-1.5.7l-4-2.9-1.9 1.9c-.2.2-.4.4-.8.4l.3-4.1 7.4-6.7c.3-.3-.1-.4-.5-.2l-9.1 5.8-3.9-1.2c-.8-.3-.9-.8.2-1.3z" fill="#229ED9"/></svg>Telegram</button><button class="chat-btn max" data-link="chat_max" title="Чат программы в MAX"><svg viewBox="0 0 32 32" aria-hidden="true"><circle cx="16" cy="16" r="16" fill="#fff"/><path d="M8.5 22V10.5h2.6l4.9 6.4 4.9-6.4h2.6V22h-3v-6.6l-4.5 5.8-4.5-5.8V22z" fill="#6d3df5"/></svg>MAX</button></span></div>
     <h4 class="dn-h">Частые проблемы — попробуйте сначала</h4>
     <div class="faq">
     <details><summary>Окно программы не открывается</summary><div>Распакуйте архив целиком (не запускайте из zip) в короткую папку, например <b>C:\Статьи</b>. Если окно всё равно не появляется, запустите <b>scripts\debug_start.bat</b>: он покажет ошибку — её текст пришлите автору.</div></details>
@@ -825,15 +832,6 @@ extraction"></textarea>
     </div>
     <p class="recognized" id="rp-note">Кнопка GitHub откроет страницу с готовым текстом — останется нажать «Create» / «Submit new issue»
       (нужна бесплатная учётная запись GitHub). Нет учётной записи — скопируйте отчёт и пришлите его в чат программы.</p>
-  </div>
-</dialog>
-
-<dialog id="dlg-chat" style="width: min(520px, calc(100vw - 32px))">
-  <div class="head"><h3>💬 Чат программы</h3><button data-close>✕</button></div>
-  <div class="body">
-    <p style="margin-top: 0">Вопросы, советы и новости программы. Отвечают автор и другие пользователи.</p>
-    <div class="about-acts"><button class="linkbtn" data-link="chat_tg">Telegram</button>
-      <button class="linkbtn" data-link="chat_max">MAX</button></div>
   </div>
 </dialog>
 
@@ -1884,7 +1882,6 @@ $("home-donate").onclick = openDonate;
 $("home-about").onclick = () => $("dlg-about").showModal();
 $("go-api").onclick = () => show("keys");
 $("go-ai").onclick = () => show("ai");
-$("home-chat").onclick = () => $("dlg-chat").showModal();
 
 // ---- AI helper (v7.6) -----------------------------------------------------------
 let aiBusy = false;

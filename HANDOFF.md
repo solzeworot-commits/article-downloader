@@ -544,8 +544,9 @@ https://github.com/solzeworot-commits/article-downloader/releases/download/porta
   `/api/ai_screen`, `/api/ai_screen_stop`, `/api/ai_accept`; в `/api/review` добавлены
   `ai_job` и `ai_topic`.
 - **Чаты программы:** Telegram https://t.me/ArticleDownloaderChat и MAX (ссылка в
-  `GUIDE_LINKS["chat_max"]`). Кнопка «💬 Чат программы» на главной, строка в «Сообщить о
-  проблеме» (самый простой путь без GitHub), кнопки в «О программе».
+  `GUIDE_LINKS["chat_max"]`). С 7.6.2 — цветные кнопки-«таблетки» с иконками Telegram и MAX
+  (`.chat-btn`, иконки нарисованы встроенным SVG) внизу главной, в «Сообщить о проблеме»
+  (самый простой путь без GitHub) и в «О программе».
 - **Тест** `tests/ai_test.py`: поддельный Perplexity в форматах SDK — проверка ключа (без
   веб-поиска), неверный ключ, пустой счёт, подбор слов → запросы Scopus/WoS, предотбор
   (обрезка аннотаций, пустые аннотации), «отключённый» chat API → переход на Agent API.
