@@ -45,6 +45,7 @@ import urllib.request
 
 import ai_helper as ai
 import cite_styles as cs
+import pdf_table as pt
 import doi_search as ds
 import i18n
 import review as rv
@@ -75,7 +76,7 @@ REPORT_PATH = ROOT / "Отчёт.csv"
 BIBLIO_DIR = ROOT / "Список литературы"
 
 UI_PORT = 17865
-APP_VERSION = "7.9"
+APP_VERSION = "8.0"
 APP_AUTHOR = "Bucaneiro"
 OFFICIAL_URL = "https://github.com/solzeworot-commits/article-downloader"
 DOWNLOAD_URL = OFFICIAL_URL + "/releases/tag/portable-latest"
@@ -425,6 +426,7 @@ class State:
         self.ai_jobs: dict[str, dict] = {}       # list file name -> AI pre-screening progress
         self.style_jobs: dict[str, dict] = {}    # list file name -> journal style formatting progress
         self.style_failed: dict[tuple, set] = {} # (list, style) -> DOIs doi.org could not format
+        self.table_jobs: dict[str, dict] = {}    # list file name -> AI table progress
 
         self.browser = {}
         self.update: dict | None = None    # support.check_update()
@@ -1402,6 +1404,116 @@ def start_style_job(name: str, info: dict, scope: str) -> dict:
     return job
 
 
+def table_columns(columns) -> list[str]:
+    cols = [re.sub(r"\s+", " ", str(c)).strip()[:80] for c in (columns or [])]
+    return [c for c in cols if c][:12]
+
+
+def start_table(name: str, scope: str, columns) -> dict:
+    """Fill the table of the articles of a list in the background: PDF text, else the abstract."""
+    data = get_review(name)
+    provider, keys = ai_service()
+    if not provider:
+        return {"error": tr("ИИ-помощник не подключён: вставьте ключ (кнопка «🤖 ИИ-помощник» на главной).")}
+    columns = table_columns(columns)
+    if not columns:
+        return {"error": tr("Напишите хотя бы один столбец таблицы.")}
+    keep = BIBLIO_SCOPES.get(scope, ("include",))
+    with S.lock:
+        job = S.table_jobs.get(data["list"])
+        if job and job["running"]:
+            return {}
+        todo = [d for d in data["order"]
+                if (keep is None or data["records"][d].get("decision") in keep)
+                and (data["records"][d].get("table") or {}).get("columns") != columns
+                and data["records"][d].get("found") is not None]
+        items = [dict(i) for i in S.items]
+    if not todo:
+        return {"nothing": True}
+    pdfs = pt.find_pdfs(todo, pdf_dir(), REPORT_PATH, items)
+    job = {"running": True, "done": 0, "total": len(todo), "error": "", "cost": 0.0, "stop": False,
+           "pdf": 0, "abstract": 0, "skipped": 0}
+    with S.lock:
+        S.table_jobs[data["list"]] = job
+    lang = i18n.LANG
+
+    def run():
+        app_log(f"AI table: {len(todo)} articles of {data['list']}, {len(pdfs)} with a PDF")
+        try:
+            for doi in todo:
+                with S.lock:
+                    if job["stop"]:
+                        break
+                    rec = data["records"][doi]
+                    title, abstract = rec.get("title", ""), rec.get("abstract", "")
+                text, source = (pt.pdf_text(pdfs[doi]), "pdf") if doi in pdfs else ("", "")
+                if not text and abstract:
+                    text, source = abstract, "abstract"
+                if not text:
+                    with S.lock:
+                        job["skipped"] += 1
+                        job["done"] += 1
+                    continue
+                cells, cost = ai.extract_table(provider, keys, columns, title, text, lang)
+                with S.lock:
+                    rec["table"] = {"columns": columns, "cells": cells, "source": source}
+                    job[source] += 1
+                    job["cost"] += cost
+                    job["done"] += 1
+                    rv.save_review(INBOX, data)
+        except ai.AIError as exc:
+            with S.lock:
+                job["error"] = exc.message
+        except Exception as exc:
+            app_log(f"AI table error: {exc}\n{traceback.format_exc()}")
+            with S.lock:
+                job["error"] = tr("Таблица прервалась: {error}", error=exc)
+        finally:
+            with S.lock:
+                job["running"] = False
+            app_log(f"AI table finished: {job['done']} of {job['total']}, cost ${job['cost']:.4f}")
+
+    threading.Thread(target=run, daemon=True).start()
+    return {}
+
+
+def table_rows(name: str, scope: str, columns) -> dict:
+    """The table as it is now: the rows of the articles that have their cells for these columns."""
+    data = get_review(name)
+    columns = table_columns(columns)
+    keep = BIBLIO_SCOPES.get(scope, ("include",))
+    with S.lock:
+        recs = [dict(data["records"][d]) for d in data["order"]
+                if keep is None or data["records"][d].get("decision") in keep]
+        job = dict(S.table_jobs.get(data["list"]) or {})
+    rows = []
+    for rec in recs:
+        table = rec.get("table") or {}
+        if table.get("columns") != columns:
+            continue
+        authors = rec.get("authors") or []
+        who = authors[0].get("family", "") + (" et al." if len(authors) > 2 else
+                                              (" & " + authors[1].get("family", "") if len(authors) == 2 else ""))
+        rows.append({"doi": rec["doi"], "who": who.strip(), "year": rec.get("year", ""), "title": rec.get("title", ""),
+                     "journal": rec.get("journal", ""), "cells": table.get("cells") or [],
+                     "source": table.get("source", "")})
+    return {"columns": columns, "rows": rows, "total": len(recs), "job": job}
+
+
+def save_table(name: str, scope: str, columns) -> Path:
+    t = table_rows(name, scope, columns)
+    BIBLIO_DIR.mkdir(parents=True, exist_ok=True)
+    path = BIBLIO_DIR / f"{Path(name).stem} ({tr('таблица')}).xlsx"
+    source = {"pdf": tr("полный текст (PDF)"), "abstract": tr("аннотация")}
+    header = ["№", tr("Авторы"), tr("Год"), tr("Название"), tr("Журнал"), "DOI"] + t["columns"] + [tr("Прочитано")]
+    rows = [[str(n), r["who"], r["year"], r["title"], r["journal"], r["doi"]] + r["cells"] + [source.get(r["source"], "")]
+            for n, r in enumerate(t["rows"], 1)]
+    widths = [5, 18, 7, 40, 24, 24] + [34] * len(t["columns"]) + [16]
+    pt.to_xlsx(path, header, rows, widths, sheet=tr("Таблица"))
+    app_log(f"Table saved: {path.name}")
+    return path
+
+
 def biblio_items(name: str, scope: str, alphabetical: bool, style: str) -> dict:
     records = biblio_records(name, scope)
     info = style_info(style)
@@ -1935,6 +2047,24 @@ def handle_api(path: str, body: dict) -> dict:
             return {"error": tr("Список не найден в папке inbox.")}
         return biblio_items(body.get("list"), body.get("scope") or "included", body.get("order") != "list",
                             str(body.get("style") or "gost"))
+
+    if path in ("/api/table", "/api/table_start", "/api/table_save", "/api/table_stop"):
+        name, scope, columns = body.get("list"), body.get("scope") or "included", body.get("columns") or []
+        try:
+            if path == "/api/table_start":
+                return start_table(name, scope, columns)
+            if path == "/api/table_stop":
+                with S.lock:
+                    job = S.table_jobs.get(Path(str(name or "")).name)
+                    if job:
+                        job["stop"] = True
+                return {}
+            if path == "/api/table_save":
+                saved = save_table(name, scope, columns)
+                return {"name": saved.name, "folder": str(BIBLIO_DIR)}
+            return table_rows(name, scope, columns)
+        except FileNotFoundError:
+            return {"error": tr("Список не найден в папке inbox.")}
 
     if path == "/api/csl_search":
         return {"styles": cs.csl_search(str(body.get("q") or ""))}

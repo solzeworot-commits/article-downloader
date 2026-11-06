@@ -333,6 +333,13 @@
   .bb-list { padding-left: 28px; font-size: 14px; line-height: 1.5; max-height: 460px; overflow: auto; border: 1px solid var(--line); border-radius: 10px; padding-top: 10px; padding-bottom: 10px; padding-right: 12px; }
   .bb-list li { margin-bottom: 6px; }
   ul.bb-list { list-style: none; padding-left: 12px; }
+  #tb-cols { min-height: 116px; font-size: 15px; font-family: inherit; margin-top: 4px; }
+  .tb-wrap { max-height: 460px; overflow: auto; border: 1px solid var(--line); border-radius: 10px; margin-top: 10px; }
+  .tb-wrap:empty { display: none; }
+  #tb-table { border-collapse: collapse; font-size: 13px; min-width: 100%; }
+  #tb-table th, #tb-table td { border-bottom: 1px solid var(--line); padding: 6px 8px; text-align: left; vertical-align: top; }
+  #tb-table th { position: sticky; top: 0; background: var(--card); }
+  #tb-table td.src { color: var(--muted); white-space: nowrap; }
   ul.bb-list li { padding-left: 28px; text-indent: -28px; }
   ul.bb-list li.fallback { color: var(--muted); }
   .bb-journal { border: 1px solid var(--line); border-radius: 10px; padding: 10px 12px; margin-top: 10px; }
@@ -597,6 +604,23 @@ https://link.springer.com/article/10.1007/s12393-026-09447-8
       </div>
       <div id="bb-saved" class="recognized" style="margin-top: 8px"></div>
       <div class="recognized" style="margin-top: 6px" id="bb-hint"></div>
+    </div>
+    <div class="card" id="tb-card">
+      <h2><span>📊 Таблица по статьям</span><small>ИИ читает скачанные PDF (или аннотации) и заполняет столбцы — для обзора и Excel</small></h2>
+      <div id="tb-off">Нужен ИИ-помощник: он прочитает каждую статью и заполнит таблицу.
+        <button class="linkbtn" data-go="ai">🤖 Подключить ИИ-помощник</button></div>
+      <div id="tb-on" hidden>
+        <label>Столбцы таблицы — каждый с новой строки, можно поменять
+          <textarea id="tb-cols" spellcheck="true"></textarea></label>
+        <div class="acts"><button class="linkbtn" id="tb-run">🤖 Составить таблицу</button>
+          <button id="tb-stop" hidden>⏹ Остановить</button>
+          <button id="tb-save">💾 Сохранить для Excel (.xlsx)</button></div>
+        <div class="recognized" id="tb-status" style="margin-top: 6px"></div>
+        <div class="recognized" style="margin-top: 4px">Берутся статьи из списка выше («Какие статьи»). Статья целиком стоит
+          примерно 1–5 центов (у Claude Opus — дороже), по аннотации — меньше цента. Проверяйте цифры по статьям:
+          ИИ может ошибаться.</div>
+        <div class="tb-wrap" id="tb-wrap"></div>
+      </div>
     </div>
     <div class="card">
       <h2><span>Схема отбора PRISMA</span><small>для раздела «Материалы и методы»</small></h2>
@@ -2390,6 +2414,7 @@ async function loadBiblio() {
     : "Сверьте с требованиями журнала (Guide for Authors). Сокращённые названия журналов берутся из Crossref; если сокращения там нет, " +
       "пишется полное название. Курсив и жирный сохраняются при копировании в Word и в файле .docx.";
   renderPrisma(d.prisma);
+  loadTable();
   if (((d.job && d.job.running) || (sj && sj.running)) && view === "biblio") BB.timer = setTimeout(loadBiblio, 2000);
 }
 function prismaLines(p) {
@@ -2503,6 +2528,50 @@ $("bb-copy").onclick = async (e) => {
   flash(e.target.closest("button"), await copyRich(htmlText, items.map((x) => x.label + x.text).join("\n")));
 };
 $("bb-save-docx").onclick = () => saveBiblio("docx");
+// ---- the table of the articles (v8.0) -------------------------------------------
+const TB_DEFAULT = ["Объект / сырьё", "Метод", "Условия", "Главные результаты"];
+const TB = { timer: 0 };
+function tbColumns() { return $("tb-cols").value.split("\n").map((x) => x.trim()).filter(Boolean); }
+$("tb-cols").value = recall("ad_tb_cols", TB_DEFAULT).join("\n");
+$("tb-cols").addEventListener("change", () => { store("ad_tb_cols", tbColumns()); loadTable(); });
+async function loadTable() {
+  clearTimeout(TB.timer);
+  const on = aiOn();
+  $("tb-off").hidden = on; $("tb-on").hidden = !on;
+  if (!BB.list) return;
+  let res;
+  try { res = await api("/api/table", { list: BB.list, scope: $("bb-scope").value, columns: tbColumns() }); } catch (e) { return; }
+  if (res.error) { $("tb-status").textContent = res.error; return; }
+  const j = res.job || {}, src = { pdf: "PDF", abstract: "аннотация" };
+  $("tb-run").hidden = !!j.running; $("tb-stop").hidden = !j.running;
+  $("tb-save").disabled = !res.rows.length;
+  let txt = `В таблице <b>${res.rows.length}</b> из ${res.total} ${plural(res.total, "статьи", "статей", "статей")}.`;
+  if (j.running) txt += ` ⏳ ИИ читает статьи: ${j.done} из ${j.total}…`;
+  if (j.pdf || j.abstract) txt += ` Прочитано полностью (PDF): ${j.pdf || 0}, только по аннотации: ${j.abstract || 0}.`;
+  if (j.skipped) txt += ` Без текста и аннотации: ${j.skipped}.`;
+  if (j.cost) txt += costText(j.cost);
+  if (j.error) txt += ` <span style="color: var(--red)">${esc(j.error)}</span>`;
+  $("tb-status").innerHTML = txt;
+  $("tb-wrap").innerHTML = res.rows.length ? `<table id="tb-table"><thead><tr><th>Статья</th>` +
+    res.columns.map((c) => `<th>${esc(c)}</th>`).join("") + `<th>Прочитано</th></tr></thead><tbody>` +
+    res.rows.map((r) => `<tr><td><b>${esc(r.who)}${r.year ? ", " + esc(r.year) : ""}</b><br>${esc(r.title)}</td>` +
+      r.cells.map((c) => `<td>${esc(c)}</td>`).join("") + `<td class="src">${esc(src[r.source] || "")}</td></tr>`).join("") +
+    `</tbody></table>` : "";
+  if (j.running && view === "biblio") TB.timer = setTimeout(loadTable, 2000);
+}
+$("tb-run").onclick = async () => {
+  store("ad_tb_cols", tbColumns());
+  const res = await api("/api/table_start", { list: BB.list, scope: $("bb-scope").value, columns: tbColumns() });
+  if (res.error) { $("tb-status").innerHTML = `<span style="color: var(--red)">${esc(res.error)}</span>`; return; }
+  if (res.nothing) $("tb-status").textContent = "Все статьи уже в таблице с этими столбцами (или у них ещё загружаются данные).";
+  else loadTable();
+};
+$("tb-stop").onclick = () => api("/api/table_stop", { list: BB.list });
+$("tb-save").onclick = async () => {
+  const res = await api("/api/table_save", { list: BB.list, scope: $("bb-scope").value, columns: tbColumns() });
+  $("tb-status").innerHTML = res.error ? `<span style="color: var(--red)">${esc(res.error)}</span>`
+    : `💾 Сохранено: <b>Список литературы\\${esc(res.name)}</b>`;
+};
 $("bb-save-txt").onclick = () => saveBiblio("txt");
 (() => {
   const st = recall("ad_bb_style", "gost");

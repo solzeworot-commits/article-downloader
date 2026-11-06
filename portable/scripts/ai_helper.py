@@ -578,6 +578,45 @@ def translate(provider: str, keys: dict, title: str, abstract: str, lang: str = 
             "cost": answer["cost"]}
 
 
+TABLE_SCHEMA = ("table_row", {
+    "type": "object",
+    "properties": {"cells": {"type": "array", "items": {"type": "string"}}},
+    "required": ["cells"],
+    "additionalProperties": False,
+})
+
+TABLE_INSTRUCTIONS = """You help a researcher build a summary table of papers for a literature review.
+Read the paper text given (it may be the full text or only the abstract) and fill these columns:
+{columns}
+Reply with JSON only: {"cells": ["...", "..."]} with exactly {n} strings, one per column, in this order.
+- Write in {lang_name}, briefly (a phrase, at most 30 words per cell), keep numbers, units and names exactly;
+- take facts only from the text given, do not search the web and do not guess;
+- if the text does not report something, write "—"."""
+
+
+def extract_table(provider: str, keys: dict, columns: list[str], title: str, text: str, lang: str = "ru") -> tuple[list, float]:
+    """The cells of one article's row (one per column) and the cost."""
+    columns = [str(c).strip() for c in columns if str(c).strip()][:12]
+    text = str(text or "").strip()
+    if not columns:
+        raise AIError("bad_answer", tr("Напишите хотя бы один столбец таблицы."))
+    if not text:
+        raise AIError("bad_answer", tr("Нет ни текста статьи, ни аннотации."))
+    lang_name = "Russian" if lang == "ru" else "English"
+    listing = "\n".join(f"{i}. {c}" for i, c in enumerate(columns, 1))
+    instructions = (TABLE_INSTRUCTIONS.replace("{columns}", listing).replace("{n}", str(len(columns)))
+                    .replace("{lang_name}", lang_name))
+    answer = ask(provider, keys, instructions, f"Title: {str(title or '').strip()[:500]}\n\n{text}", search=False,
+                 max_tokens=150 + 120 * len(columns), lang=lang, timeout=240, schema=TABLE_SCHEMA)
+    data = _json_part(answer["text"])
+    cells = data.get("cells") if isinstance(data, dict) else data
+    if not isinstance(cells, list) or not cells:
+        raise AIError("bad_answer", tr("ИИ ответил не по форме. Нажмите кнопку ещё раз."))
+    cells = [re.sub(r"\s+", " ", str(c)).strip()[:600] for c in cells][:len(columns)]
+    cells += ["—"] * (len(columns) - len(cells))
+    return cells, float(answer["cost"] or 0)
+
+
 SCREEN_INSTRUCTIONS = """You help a researcher pre-screen papers for a literature review by title and abstract.
 Judge every paper only by the text given; do not search the web. Reply with JSON only, no other text:
 {"papers": [{"id": 1, "verdict": "include", "why": "..."}, ...]}

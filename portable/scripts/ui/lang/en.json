@@ -717,7 +717,25 @@
   "переводить каждую статью сразу": "translate every article at once",
   "🌐 Перевести на русский — подключите ИИ-помощника": "🌐 Translate into English — connect the AI helper",
   "⏳ Перевожу…": "⏳ Translating…",
-  "🌐 Перевести на русский": "🌐 Translate into English"
+  "🌐 Перевести на русский": "🌐 Translate into English",
+  "💾 Сохранить для Excel (.xlsx)": "💾 Save for Excel (.xlsx)",
+  "🤖 Составить таблицу": "🤖 Build the table",
+  "Нужен ИИ-помощник: он прочитает каждую статью и заполнит таблицу.": "The AI helper is needed: it reads every article and fills the table.",
+  "📊 Таблица по статьям": "📊 Table of the articles",
+  "ИИ читает скачанные PDF (или аннотации) и заполняет столбцы — для обзора и Excel": "the AI reads the downloaded PDFs (or abstracts) and fills the columns — for the review and Excel",
+  "Столбцы таблицы — каждый с новой строки, можно поменять": "Table columns — one per line, you can change them",
+  "\"Объект / сырьё\", \"Метод\", \"Условия\", \"Главные результаты\"": "\"Object / material\", \"Method\", \"Conditions\", \"Main results\"",
+  "abstract: \"аннотация\"": "abstract: \"abstract\"",
+  " Прочитано полностью (PDF): ": " Read in full (PDF): ",
+  ", только по аннотации: ": ", by the abstract only: ",
+  "ИИ читает статьи:": "The AI is reading the articles:",
+  " Без текста и аннотации: ": " Without text or abstract: ",
+  "Все статьи уже в таблице с этими столбцами (или у них ещё загружаются данные).": "All articles are already in the table with these columns (or their data are still loading).",
+  "В таблице ": "In the table: ",
+  "\"статьи\", \"статей\", \"статей\"": "\"article\", \"articles\", \"articles\"",
+  "Статья</th>": "Article</th>",
+  "<th>Прочитано</th>": "<th>Read from</th>",
+  "Берутся статьи из списка выше («Какие статьи»). Статья целиком стоит\n          примерно 1–5 центов (у Claude Opus — дороже), по аннотации — меньше цента. Проверяйте цифры по статьям:\n          ИИ может ошибаться.": "The articles come from the list above («Which articles»). A whole article costs about 1–5 cents (more with Claude Opus), an abstract less than a cent. Check the numbers against the articles: the AI can be wrong."
  },
  "messages": {
   "экспорт": "export",
@@ -837,6 +855,15 @@
   "Нет связи с doi.org ({reason}).": "No connection to doi.org ({reason}).",
   "doi.org прислал пустой ответ.": "doi.org sent an empty answer.",
   "Список литературы": "Reference list",
-  "У этой статьи нет аннотации — переводить нечего.": "This article has no abstract — nothing to translate."
+  "У этой статьи нет аннотации — переводить нечего.": "This article has no abstract — nothing to translate.",
+  "Напишите хотя бы один столбец таблицы.": "Write at least one table column.",
+  "Нет ни текста статьи, ни аннотации.": "There is neither the article's text nor an abstract.",
+  "Таблица прервалась: {error}": "The table stopped: {error}",
+  "таблица": "table",
+  "полный текст (PDF)": "full text (PDF)",
+  "аннотация": "abstract",
+  "Авторы": "Authors",
+  "Прочитано": "Read from",
+  "Таблица": "Table"
  }
 }

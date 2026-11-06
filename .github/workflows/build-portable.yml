@@ -68,6 +68,8 @@ jobs:
           if ($LASTEXITCODE) { throw "support_test" }
           & $py -E -s -X utf8 tests\styles_test.py (Join-Path $app "scripts")
           if ($LASTEXITCODE) { throw "styles_test: стили списка литературы" }
+          & $py -E -s -X utf8 tests\table_test.py (Join-Path $app "scripts")
+          if ($LASTEXITCODE) { throw "table_test: таблица по статьям" }
           & $py -E -s -X utf8 tests\ai_test.py (Join-Path $app "scripts")
           if ($LASTEXITCODE) { throw "ai_test: ИИ-помощник" }
           & $py -E -s -X utf8 tests\i18n_test.py (Join-Path $app "scripts")
