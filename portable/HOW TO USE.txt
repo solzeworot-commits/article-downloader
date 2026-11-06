@@ -1,4 +1,4 @@
-﻿ARTICLE DOWNLOADER, portable version 7.5
+﻿ARTICLE DOWNLOADER, portable version 7.6.2
 ========================================
 
 Runs on any computer with Windows 10 or 11. Nothing to install: Python and everything
@@ -14,7 +14,8 @@ HOW TO USE
    Science, step by step with pictures; once). When the keys are saved, it turns green.
 
 2. «🔎 Get a DOI list» — if you have no list of articles yet.
-   Type keywords (each word or phrase on a new line), the years, and click «FIND ARTICLES».
+   Type keywords (each word or phrase on a new line; synonyms on one line separated by
+   «;»), the years, and click «FIND ARTICLES».
    «💡 Suggest words» offers frequent keywords on your topic (free) — click the ones you
    want. «🧹 New topic» clears everything for the next search. Look through the results,
    untick the extra ones and click «Save the list to inbox».
@@ -25,6 +26,8 @@ HOW TO USE
 2a. «📝 Screen articles» — the program fetches the abstracts. Read and click «✓ Fits»,
    «? Maybe» or «✗ Doesn't fit» (or the keys 1, 2, 3); the next article opens at once.
    Then «Save the selected as a new list».
+   With the AI helper, «🤖 Ask the AI about the articles not screened yet» reads the
+   abstracts and suggests for every article: fits, questionable or does not fit.
 
 3. «⬇ Download articles» — the inbox folder opens: choose a file with a DOI list.
    The program opens the database sites in the downloader's browser. If a site asks you
@@ -41,6 +44,22 @@ If you closed the program before the list was finished, the home screen shows
 «▶ Continue». «🧹 Clear all» stops downloading and clears the search and the queue in one
 click (downloaded PDFs and lists in inbox stay). «Exit» closes the program.
 You can also drop a DOI list file onto the icon: downloading starts at once.
+
+
+AI HELPER (OPTIONAL)
+--------------------
+The «🤖 AI helper» bar under the four buttons: red — not connected, green — connected.
+It works on your own Perplexity API key:
+  • «Topic in your own words» in «🔎 Get a DOI list»: describe the topic as you would to
+    a friend, the AI picks English terms and synonyms, the program builds the queries;
+  • «🤖 AI pre-screening» in «📝 Screen articles»: the AI reads the abstracts and says
+    whether each article fits, with a reason. You still decide; «✓ Accept the AI advice»
+    turns the advice into marks, and you can change any of them.
+To connect: click the bar and follow the steps with screenshots (sign up at
+perplexity.ai → All settings → API platform → top up the balance → create a key → paste
+it into the program). Picking words costs less than a cent, pre-screening a hundred
+articles a few cents; the money goes to Perplexity, not to the author. Only the topic and
+the titles with abstracts go to Perplexity; the key stays on this computer.
 
 
 FIRST START ON A NEW COMPUTER: INSTITUTIONAL SIGN-IN

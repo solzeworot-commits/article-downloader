@@ -43,6 +43,7 @@ from pathlib import Path
 from urllib.parse import parse_qs, quote, unquote, urlparse
 import urllib.request
 
+import ai_helper as ai
 import doi_search as ds
 import i18n
 import review as rv
@@ -73,7 +74,7 @@ REPORT_PATH = ROOT / "Отчёт.csv"
 BIBLIO_DIR = ROOT / "Список литературы"
 
 UI_PORT = 17865
-APP_VERSION = "7.5"
+APP_VERSION = "7.6.2"
 APP_AUTHOR = "Bucaneiro"
 OFFICIAL_URL = "https://github.com/solzeworot-commits/article-downloader"
 DOWNLOAD_URL = OFFICIAL_URL + "/releases/tag/portable-latest"
@@ -105,6 +106,9 @@ GUIDE_LINKS = {
     "clarivate": "https://developer.clarivate.com/",
     "wos_starter": "https://developer.clarivate.com/apis/wos-starter",
     "openalex": "https://openalex.org/",
+    "perplexity": "https://www.perplexity.ai/",
+    "chat_tg": "https://t.me/ArticleDownloaderChat",
+    "chat_max": "https://max.ru/join/_ADhfiFX_Bf37RsP1VR8hDHUdFgj_im_R5DqDx4Iseo",
     "official": DOWNLOAD_URL,
     "photo_source": "https://commons.wikimedia.org/wiki/File:Jolly_Roger_at_Portsmouth_Historic_Dockyard.jpg",
     "photo_license": "https://creativecommons.org/licenses/by/2.0/",
@@ -409,6 +413,7 @@ class State:
         self.last_list = ""
         self.reviews: dict[str, dict] = {}       # list file name -> review (rv)
         self.review_jobs: dict[str, dict] = {}   # list file name -> lookup progress
+        self.ai_jobs: dict[str, dict] = {}       # list file name -> AI pre-screening progress
 
         self.browser = {}
         self.update: dict | None = None    # support.check_update()
@@ -1167,6 +1172,86 @@ def start_lookup(list_name: str):
     threading.Thread(target=run, daemon=True).start()
 
 
+def ai_key() -> str:
+    return ds.load_keys().get("perplexity", "")
+
+
+def start_ai_screening(list_name: str, topic: str) -> dict:
+    """Ask the AI about every undecided article with an abstract that has no advice yet."""
+    data = get_review(list_name)
+    name = data["list"]
+    key = ai_key()
+    if not key:
+        return {"error": tr("ИИ-помощник не подключён: вставьте ключ Perplexity (кнопка «🤖 ИИ-помощник» на главной).")}
+    topic = re.sub(r"\s+", " ", str(topic or "")).strip()
+    if len(topic) < 3:
+        return {"error": tr("Напишите, что вы ищете: тема и что должно быть в статье.")}
+    with S.lock:
+        job = S.ai_jobs.get(name)
+        if job and job["running"]:
+            return {}
+        todo = [d for d in data["order"]
+                if not data["records"][d].get("decision") and not data["records"][d].get("ai")
+                and data["records"][d].get("found") is not None]
+        job = {"running": bool(todo), "done": 0, "total": len(todo), "error": "", "cost": 0.0, "stop": False}
+        S.ai_jobs[name] = job
+        meta = rv.load_meta(INBOX, name)
+        meta["ai_topic"] = topic[:1500]
+        rv.save_meta(INBOX, name, meta)
+    if not todo:
+        return {"nothing": True}
+    lang = i18n.LANG
+
+    def run():
+        app_log(f"AI screening: {len(todo)} articles of {name}")
+        try:
+            for chunk in rv._chunks(todo, ai.SCREEN_BATCH):
+                with S.lock:
+                    if job["stop"]:
+                        break
+                    batch = [{"doi": d, "title": data["records"][d].get("title", ""),
+                              "abstract": data["records"][d].get("abstract", "")} for d in chunk]
+                advice, cost = ai.screen(key, batch, topic, lang)
+                with S.lock:
+                    for doi, item in advice.items():
+                        data["records"][doi]["ai"] = item
+                    job["done"] += len(chunk)
+                    job["cost"] += cost
+                    rv.save_review(INBOX, data)
+        except ai.AIError as exc:
+            with S.lock:
+                job["error"] = exc.message
+        except Exception as exc:
+            app_log(f"AI screening error: {exc}\n{traceback.format_exc()}")
+            with S.lock:
+                job["error"] = tr("ИИ-предотбор прервался: {error}", error=exc)
+        finally:
+            with S.lock:
+                job["running"] = False
+            app_log(f"AI screening finished: {job['done']} of {job['total']}, cost ${job['cost']:.4f}")
+
+    threading.Thread(target=run, daemon=True).start()
+    return {}
+
+
+def accept_ai_advice(list_name: str) -> dict:
+    """Turn the AI advice into decisions for the articles not decided yet."""
+    data = get_review(list_name)
+    n = 0
+    with S.lock:
+        for doi in data["order"]:
+            rec = data["records"][doi]
+            advice = rec.get("ai") or {}
+            if rec.get("decision") or advice.get("verdict") not in rv.DECISIONS:
+                continue
+            rec["decision"] = advice["verdict"]
+            rec["reason"] = (tr("ИИ: ") + advice.get("why", ""))[:120] if advice["verdict"] == "exclude" else ""
+            n += 1
+        if n:
+            rv.save_review(INBOX, data)
+    return {"accepted": n}
+
+
 def review_prisma(name: str) -> dict:
     """PRISMA numbers; a list of selected articles counts from its parent list."""
     meta = rv.load_meta(INBOX, name)
@@ -1188,8 +1273,10 @@ def review_state(name: str) -> dict:
             "list": data["list"],
             "records": [data["records"][d] for d in data["order"]],
             "job": dict(S.review_jobs.get(data["list"]) or {}),
+            "ai_job": dict(S.ai_jobs.get(data["list"]) or {}),
             "prisma": prisma,
             "keywords": meta.get("keywords") or [],
+            "ai_topic": meta.get("ai_topic") or "",
         }
 
 
@@ -1254,7 +1341,7 @@ def search_meta(body: dict, saved: list[dict]) -> dict:
         summary = dict(S.search.get("summary") or {})
         unique = len(S.search_records)
     meta = {"created": time.strftime("%Y-%m-%d %H:%M"),
-            "keywords": [k.strip() for k in str(body.get("keywords") or "").splitlines() if k.strip()],
+            "keywords": ds._terms(str(body.get("keywords") or "")),
             "unique": unique, "saved": len(saved), "deselected": max(0, unique - len(saved))}
     if summary.get("from") == "api":
         ok = {k: v for k, v in (summary.get("per_source") or {}).items() if v.get("ok")}
@@ -1649,6 +1736,41 @@ def handle_api(path: str, body: dict) -> dict:
             rv.save_review(INBOX, data)
         return {}
 
+    if path == "/api/ai_screen":
+        try:
+            return start_ai_screening(body.get("list"), body.get("topic"))
+        except FileNotFoundError:
+            return {"error": tr("Список не найден в папке inbox.")}
+
+    if path == "/api/ai_screen_stop":
+        with S.lock:
+            job = S.ai_jobs.get(Path(str(body.get("list") or "")).name)
+            if job:
+                job["stop"] = True
+        return {}
+
+    if path == "/api/ai_accept":
+        try:
+            return accept_ai_advice(body.get("list"))
+        except FileNotFoundError:
+            return {"error": tr("Список не найден в папке inbox.")}
+
+    if path == "/api/ai_search":
+        try:
+            return ai.suggest_search(ai_key(), body.get("topic") or "", i18n.LANG)
+        except ai.AIError as exc:
+            return {"error": exc.message, "kind": exc.kind}
+
+    if path == "/api/ai_check":
+        key = str(body.get("perplexity") or "").strip() or ai_key()
+        result = ai.check_key(key) | {"at": time.strftime("%H:%M")}
+        if result["ok"] and str(body.get("perplexity") or "").strip():
+            ds.save_keys({"perplexity": key})
+        app_log(f"AI key check: {result['kind']}")
+        with S.lock:
+            S.key_checks["perplexity"] = result
+        return result
+
     if path == "/api/review_save_selected":
         try:
             return save_selected(body.get("list"), bool(body.get("with_maybe")))
@@ -1777,7 +1899,7 @@ def handle_api(path: str, body: dict) -> dict:
     if path == "/api/keys_save":
         ds.save_keys({k: body[k] for k in ds.KEY_FIELDS if k in body})
         with S.lock:
-            for source in ("scopus", "wos", "openalex"):
+            for source in ("scopus", "wos", "openalex", "perplexity"):
                 if source in body or (source == "scopus" and "scopus_insttoken" in body):
                     S.key_checks.pop(source, None)
         return {"keys": ds.keys_status(ds.load_keys())}
