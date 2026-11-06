@@ -1,4 +1,4 @@
-﻿ARTICLE DOWNLOADER, portable version 7.8
+﻿ARTICLE DOWNLOADER, portable version 7.9
 ========================================
 
 Runs on any computer with Windows 10 or 11. Nothing to install: Python and everything
@@ -28,6 +28,8 @@ HOW TO USE
    Then «Save the selected as a new list».
    With the AI helper, «🤖 Ask the AI about the articles not screened yet» reads the
    abstracts and suggests for every article: fits, questionable or does not fit.
+   «🌐 Translate into English» under the abstract translates the title and abstract
+   (tick «translate every article at once» to skip the clicks); the translation is kept.
 
 3. «⬇ Download articles» — the inbox folder opens: choose a file with a DOI list.
    The program opens the database sites in the downloader's browser. If a site asks you

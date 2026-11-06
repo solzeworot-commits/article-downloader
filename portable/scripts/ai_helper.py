@@ -549,6 +549,35 @@ def suggest_search(provider: str, keys: dict, topic: str, lang: str = "ru") -> d
     return {"lines": lines[:4], "note": note[:400], "sources": answer["sources"][:6], "cost": answer["cost"]}
 
 
+TRANSLATE_SCHEMA = ("translation", {
+    "type": "object",
+    "properties": {"title": {"type": "string"}, "abstract": {"type": "string"}},
+    "required": ["title", "abstract"],
+    "additionalProperties": False,
+})
+
+TRANSLATE_INSTRUCTIONS = """You translate the title and abstract of a scientific paper into {lang_name} for a researcher.
+Translate accurately and completely, in the style of a scientific text; keep numbers, units, chemical names,
+abbreviations and Latin species names as they are. Do not search the web, do not add comments.
+Reply with JSON only: {"title": "...", "abstract": "..."}"""
+
+
+def translate(provider: str, keys: dict, title: str, abstract: str, lang: str = "ru") -> dict:
+    """{"title", "abstract", "cost"} in the language of the window (Russian or English)."""
+    abstract = re.sub(r"\s+", " ", str(abstract or "")).strip()
+    if not abstract:
+        raise AIError("bad_answer", tr("У этой статьи нет аннотации — переводить нечего."))
+    lang_name = "Russian" if lang == "ru" else "English"
+    text = f"Title: {str(title or '').strip()[:500]}\n\nAbstract: {abstract[:6000]}"
+    answer = ask(provider, keys, TRANSLATE_INSTRUCTIONS.replace("{lang_name}", lang_name), text, search=False,
+                 max_tokens=min(4000, 300 + len(abstract) // 2), lang=lang, schema=TRANSLATE_SCHEMA)
+    data = _json_part(answer["text"])
+    if not isinstance(data, dict) or not str(data.get("abstract") or "").strip():
+        raise AIError("bad_answer", tr("ИИ ответил не по форме. Нажмите кнопку ещё раз."))
+    return {"title": str(data.get("title") or "").strip(), "abstract": str(data["abstract"]).strip(),
+            "cost": answer["cost"]}
+
+
 SCREEN_INSTRUCTIONS = """You help a researcher pre-screen papers for a literature review by title and abstract.
 Judge every paper only by the text given; do not search the web. Reply with JSON only, no other text:
 {"papers": [{"id": 1, "verdict": "include", "why": "..."}, ...]}

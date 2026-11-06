@@ -46,6 +46,9 @@ CONCEPTS = ('{"concepts": [["grape pomace", "grape marc", "winery waste"], ["pol
 def answer_for(system: str, user: str, chatter: bool = False) -> str:
     if "single word OK" in system:
         return "OK"
+    if "translate the title and abstract" in system:
+        assert "Abstract: Grape pomace is" in user, user
+        return json.dumps({"title": "Выжимки", "abstract": "Виноградные выжимки — побочный продукт."}, ensure_ascii=False)
     if "literature search" in system:
         # Chatter, a fence and a citation mark around the JSON, as models like to do.
         return f"Here you go:\n```json\n{CONCEPTS} [1]\n```" if chatter else CONCEPTS
@@ -346,6 +349,17 @@ assert kind("yandex", {"yandex": "AQV-bad", "yandex_folder": "b1gfolder"}) == "b
 assert kind("yandex", {"yandex": "AQV-broke", "yandex_folder": "b1gfolder"}) == "no_money"
 res = ai.check_key("yandex", {"yandex": "AQV-norole", "yandex_folder": "b1gfolder"})
 assert res["kind"] == "bad_key" and "ai.languageModels.user" in res["message"], res
+
+# --- translation of an abstract (v7.9) -----------------------------------------
+for provider, keys in (("perplexity", P), ("openai", O), ("anthropic", A), ("gigachat", G), ("yandex", Y)):
+    res = ai.translate(provider, keys, "Grape pomace", "Grape pomace is a by-product.", "ru")
+    assert res["abstract"] == "Виноградные выжимки — побочный продукт." and res["title"] == "Выжимки", (provider, res)
+assert last_body()["messages"][0]["text"].startswith("You translate") and "Russian" in last_body()["messages"][0]["text"]
+try:
+    ai.translate("openai", O, "T", "  ", "ru")
+    raise AssertionError("an empty abstract was sent")
+except ai.AIError as exc:
+    assert exc.kind == "bad_answer"
 
 assert kind("nonsense", P) == "other"
 server.shutdown()

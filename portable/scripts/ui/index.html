@@ -368,6 +368,10 @@
   .rv-ai-hint.maybe { background: #fffbeb; border-color: #fcd34d; }
   .rv-ai-hint.exclude { background: #fef2f2; border-color: #fca5a5; }
   #rv-ai-topic { min-height: 48px; font-size: 15px; font-family: inherit; margin-top: 4px; }
+  .rv-tr { font-size: 16px; line-height: 1.6; background: #f5f3ff; border: 1px solid #ddd6fe; border-radius: 10px;
+           padding: 12px 16px; margin-top: 10px; max-height: 340px; overflow: auto; }
+  .rv-tr b { display: block; margin-bottom: 6px; }
+  .rv-tr-acts { display: flex; gap: 12px; align-items: center; flex-wrap: wrap; margin-top: 8px; font-size: 14px; }
   .ai-what li { margin: 6px 0; }
   .ai-info { background: var(--blue-soft); border-radius: 10px; padding: 10px 14px; margin-bottom: 8px; }
   #ai-use-line { margin-bottom: 10px; min-height: 4px; }
@@ -2256,8 +2260,43 @@ function renderReviewCard() {
     `<button class="link" data-doi="${esc(r.doi)}">открыть статью ↗</button> ${badge}</div>` +
     (r.ai ? `<div class="rv-ai-hint ${esc(r.ai.verdict)}">🤖 ИИ советует: <b>${DEC_LABEL[r.ai.verdict] || ""}</b>` +
       `${r.ai.why ? " — " + esc(r.ai.why) : ""}</div>` : "") +
-    `<div class="rv-abstract">${abstract}</div>`;
+    `<div class="rv-abstract">${abstract}</div>` + translationBlock(r);
+  if (r.abstract && !r.tr && aiOn() && recall("ad_auto_tr", false) && TR.errorFor !== r.doi) translateCurrent();
 }
+// ---- translation of the abstract (v7.9) ----------------------------------------
+const TR = { busy: "", error: "", errorFor: "" };
+function translationBlock(r) {
+  if (!r.abstract) return "";
+  if (r.tr && r.tr.abstract) {
+    return `<div class="rv-tr">${r.tr.title ? `<b>${esc(r.tr.title)}</b>` : ""}${esc(r.tr.abstract)}</div>` +
+      `<div class="recognized" style="margin-top: 4px">🤖 Перевод ИИ — сверяйте важные места с оригиналом.</div>`;
+  }
+  const auto = `<label><input type="checkbox" id="rv-tr-auto" ${recall("ad_auto_tr", false) ? "checked" : ""}> переводить каждую статью сразу</label>`;
+  if (!aiOn()) return `<div class="rv-tr-acts"><button data-go="ai">🌐 Перевести на русский — подключите ИИ-помощника</button></div>`;
+  if (TR.busy === r.doi) return `<div class="rv-tr-acts"><span>⏳ Перевожу…</span></div>`;
+  return `<div class="rv-tr-acts"><button id="rv-tr-btn">🌐 Перевести на русский</button>${auto}` +
+    `${TR.error && TR.errorFor === r.doi ? `<span style="color: var(--red)">${esc(TR.error)}</span>` : ""}</div>`;
+}
+async function translateCurrent() {
+  const r = RV.records.find((x) => x.doi === RV.cur);
+  if (!r || TR.busy) return;
+  TR.busy = r.doi; TR.error = "";
+  renderReviewCard();
+  try {
+    const res = await api("/api/ai_translate", { list: RV.list, doi: r.doi });
+    if (res.error) { TR.error = res.error; TR.errorFor = r.doi; }
+    else r.tr = { lang: res.lang, title: res.title, abstract: res.abstract };
+  } catch (e) {
+    TR.error = "Не получилось: " + e.message; TR.errorFor = r.doi;
+  } finally {
+    TR.busy = "";
+    if (RV.cur === r.doi) renderReviewCard();
+  }
+}
+$("rv-body").addEventListener("click", (e) => { if (e.target.closest("#rv-tr-btn")) translateCurrent(); });
+$("rv-body").addEventListener("change", (e) => {
+  if (e.target.id === "rv-tr-auto") { store("ad_auto_tr", e.target.checked); if (e.target.checked) translateCurrent(); }
+});
 function rvMove(step) {
   const vis = rvVisible(), i = vis.findIndex((r) => r.doi === RV.cur);
   const next = vis[Math.min(vis.length - 1, Math.max(0, i + step))];

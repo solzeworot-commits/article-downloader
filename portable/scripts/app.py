@@ -75,7 +75,7 @@ REPORT_PATH = ROOT / "Отчёт.csv"
 BIBLIO_DIR = ROOT / "Список литературы"
 
 UI_PORT = 17865
-APP_VERSION = "7.8"
+APP_VERSION = "7.9"
 APP_AUTHOR = "Bucaneiro"
 OFFICIAL_URL = "https://github.com/solzeworot-commits/article-downloader"
 DOWNLOAD_URL = OFFICIAL_URL + "/releases/tag/portable-latest"
@@ -1861,6 +1861,30 @@ def handle_api(path: str, body: dict) -> dict:
             if job:
                 job["stop"] = True
         return {}
+
+    if path == "/api/ai_translate":
+        try:
+            data = get_review(body.get("list"))
+        except FileNotFoundError:
+            return {"error": tr("Список не найден в папке inbox.")}
+        doi = ds.normalize_doi(body.get("doi"))
+        with S.lock:
+            rec = data["records"].get(doi)
+            if rec is None:
+                return {"error": tr("Статьи нет в списке.")}
+            cached = rec.get("tr") or {}
+            title, abstract = rec.get("title", ""), rec.get("abstract", "")
+        if cached.get("lang") == i18n.LANG and cached.get("abstract"):
+            return cached
+        provider, keys = ai_service()
+        try:
+            result = ai.translate(provider, keys, title, abstract, i18n.LANG)
+        except ai.AIError as exc:
+            return {"error": exc.message, "kind": exc.kind}
+        with S.lock:
+            rec["tr"] = {"lang": i18n.LANG, "title": result["title"], "abstract": result["abstract"]}
+            rv.save_review(INBOX, data)
+        return rec["tr"] | {"cost": result["cost"]}
 
     if path == "/api/ai_accept":
         try:

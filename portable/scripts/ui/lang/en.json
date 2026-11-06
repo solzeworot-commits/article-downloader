@@ -712,7 +712,12 @@
   "автор, год": "author, year",
   "номера": "numbered",
   "Не нашлось — попробуйте другое слово из названия.": "Nothing found — try another word of the title.",
-  "Около 11 000 журналов и стилей из базы\n          Citation Style Language — той же, что у Zotero и Mendeley. Оформление делает сервис doi.org (нужен интернет).": "About 11,000 journals and styles from the Citation Style Language database — the same one Zotero and Mendeley use. The formatting is done by the doi.org service (needs the internet)."
+  "Около 11 000 журналов и стилей из базы\n          Citation Style Language — той же, что у Zotero и Mendeley. Оформление делает сервис doi.org (нужен интернет).": "About 11,000 journals and styles from the Citation Style Language database — the same one Zotero and Mendeley use. The formatting is done by the doi.org service (needs the internet).",
+  "🤖 Перевод ИИ — сверяйте важные места с оригиналом.": "🤖 AI translation — check the important parts against the original.",
+  "переводить каждую статью сразу": "translate every article at once",
+  "🌐 Перевести на русский — подключите ИИ-помощника": "🌐 Translate into English — connect the AI helper",
+  "⏳ Перевожу…": "⏳ Translating…",
+  "🌐 Перевести на русский": "🌐 Translate into English"
  },
  "messages": {
   "экспорт": "export",
@@ -831,6 +836,7 @@
   "doi.org не смог оформить статью (код {code}).": "doi.org could not format the article (code {code}).",
   "Нет связи с doi.org ({reason}).": "No connection to doi.org ({reason}).",
   "doi.org прислал пустой ответ.": "doi.org sent an empty answer.",
-  "Список литературы": "Reference list"
+  "Список литературы": "Reference list",
+  "У этой статьи нет аннотации — переводить нечего.": "This article has no abstract — nothing to translate."
  }
 }
