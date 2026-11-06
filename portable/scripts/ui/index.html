@@ -332,6 +332,14 @@
   .rv-status-badge { display: inline-block; padding: 2px 10px; border-radius: 99px; font-size: 13px; margin-left: 6px; }
   .bb-list { padding-left: 28px; font-size: 14px; line-height: 1.5; max-height: 460px; overflow: auto; border: 1px solid var(--line); border-radius: 10px; padding-top: 10px; padding-bottom: 10px; padding-right: 12px; }
   .bb-list li { margin-bottom: 6px; }
+  ul.bb-list { list-style: none; padding-left: 12px; }
+  ul.bb-list li { padding-left: 28px; text-indent: -28px; }
+  ul.bb-list li.fallback { color: var(--muted); }
+  .bb-journal { border: 1px solid var(--line); border-radius: 10px; padding: 10px 12px; margin-top: 10px; }
+  .bb-journal input { width: 100%; font-size: 15px; }
+  .bb-found { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 8px; max-height: 160px; overflow: auto; }
+  .bb-found button { font-size: 13px; padding: 4px 10px; }
+  .bb-found button small { color: var(--muted); }
   .prisma { display: grid; grid-template-columns: 150px 1fr 1fr; gap: 10px 16px; align-items: stretch; font-size: 14px; }
   .prisma .stage { writing-mode: vertical-rl; transform: rotate(180deg); background: var(--blue-soft); color: var(--blue); font-weight: 700; border-radius: 8px; display: flex; align-items: center; justify-content: center; padding: 8px 4px; }
   .prisma .box { border: 2px solid #334155; border-radius: 8px; padding: 10px 12px; background: var(--card); }
@@ -545,27 +553,46 @@ https://link.springer.com/article/10.1007/s12393-026-09447-8
 
   <section id="view-biblio" class="view" hidden>
     <div class="card">
-      <h2><span>📚 Список литературы</span><small>по ГОСТ Р 7.0.100-2018</small></h2>
+      <h2><span>📚 Список литературы</span><small>ГОСТ, APA, Vancouver, стиль любого журнала</small></h2>
       <div class="form-grid" style="margin-top: 0">
         <label class="f">Список <select id="bb-list"></select></label>
         <label class="f">Какие статьи
           <select id="bb-scope"><option value="included">только «✓ подходит»</option><option value="included_maybe">«подходит» и «под вопросом»</option>
             <option value="all">все статьи списка</option></select></label>
         <label class="f">Порядок
-          <select id="bb-order"><option value="alpha">по алфавиту (сначала русские)</option><option value="list">как в списке</option></select></label>
+          <select id="bb-order"><option value="alpha">по алфавиту</option><option value="list">как в списке</option></select></label>
+        <label class="f">Стиль оформления
+          <select id="bb-style">
+            <option value="gost">ГОСТ Р 7.0.100-2018</option>
+            <option value="apa">APA 7 — многие журналы Elsevier, Wiley, Taylor &amp; Francis</option>
+            <option value="harvard">Elsevier Harvard — автор, год</option>
+            <option value="vancouver">Vancouver — медицина, биология</option>
+            <option value="acs">ACS — химия (похож на MDPI)</option>
+            <option value="ieee">IEEE — техника, информатика</option>
+            <option value="chicago">Chicago — автор, год</option>
+            <option value="nature">Nature</option>
+            <option value="journal">🔎 Стиль конкретного журнала…</option>
+          </select></label>
+      </div>
+      <div class="bb-journal" id="bb-journal" hidden>
+        <label>Название журнала (по-английски), например <i>Food Chemistry</i>
+          <input id="bb-journal-q" spellcheck="false" autocomplete="off"></label>
+        <div class="bb-found" id="bb-found"></div>
+        <div class="recognized" id="bb-journal-note" style="margin-top: 6px">Около 11 000 журналов и стилей из базы
+          Citation Style Language — той же, что у Zotero и Mendeley. Оформление делает сервис doi.org (нужен интернет).</div>
       </div>
       <div class="recognized" id="bb-status" style="margin: 10px 0"></div>
-      <ol class="bb-list" id="bb-entries"></ol>
+      <ul class="bb-list" id="bb-entries"></ul>
       <div class="acts">
         <button class="linkbtn" id="bb-copy">📋 Скопировать список</button>
-        <button id="bb-save-txt">💾 Сохранить (.txt)</button>
+        <button id="bb-save-docx">💾 Для Word (.docx)</button>
+        <button id="bb-save-txt">💾 Текстом (.txt)</button>
         <button id="bb-save-ris">Для Zotero / EndNote / Mendeley (.ris)</button>
         <button id="bb-save-bib">Для LaTeX (.bib)</button>
         <button id="bb-open">📂 Папка «Список литературы»</button>
       </div>
       <div id="bb-saved" class="recognized" style="margin-top: 8px"></div>
-      <div class="recognized" style="margin-top: 6px">Проверьте оформление по требованиям вашего вуза: ГОСТ допускает варианты
-        (вид тире, «DOI:», пометка «Текст : электронный»).</div>
+      <div class="recognized" style="margin-top: 6px" id="bb-hint"></div>
     </div>
     <div class="card">
       <h2><span>Схема отбора PRISMA</span><small>для раздела «Материалы и методы»</small></h2>
@@ -2118,7 +2145,12 @@ document.addEventListener("click", (e) => {
 const H = { headers: { "X-Token": TOKEN } };
 const DEC_LABEL = { include: "✓ подходит", maybe: "? под вопросом", exclude: "✗ не подходит", "": "не отобрана" };
 const RV = { list: "", records: [], cur: "", filter: "undecided", keywords: [], timer: 0, aiJob: {}, aiTopicFor: "" };
-const BB = { list: "", timer: 0, scopeTouched: false };
+const BB = { list: "", timer: 0, scopeTouched: false, orderTouched: false, items: [], journal: recall("ad_bb_journal", null) };
+const BB_NUMERIC = ["gost", "vancouver", "acs", "ieee", "nature"];
+function bbStyle() {
+  const v = $("bb-style").value;
+  return v === "journal" ? (BB.journal ? "csl:" + BB.journal.id : "gost") : v;
+}
 
 async function inboxFiles() {
   try { return (await (await fetch("/api/inbox", H)).json()).files; } catch (e) { return []; }
@@ -2296,16 +2328,30 @@ async function loadBiblio() {
   if (d.error) { $("bb-status").textContent = d.error; return; }
   // A list that was never screened: show all of it, not "только подходящие".
   if (!BB.scopeTouched) $("bb-scope").value = d.records.some((r) => r.decision === "include") ? "included" : "all";
-  const res = await api("/api/biblio", { list: BB.list, scope: $("bb-scope").value, order: $("bb-order").value });
-  $("bb-entries").innerHTML = (res.entries || []).map((e) => `<li>${esc(e)}</li>`).join("") ||
+  const journalMode = $("bb-style").value === "journal";
+  $("bb-journal").hidden = !journalMode;
+  if (journalMode && !BB.journal) {
+    $("bb-status").textContent = "Введите название журнала и выберите его из найденных.";
+    $("bb-entries").innerHTML = ""; BB.items = []; renderPrisma(d.prisma); return;
+  }
+  const res = await api("/api/biblio", { list: BB.list, scope: $("bb-scope").value, order: $("bb-order").value, style: bbStyle() });
+  BB.items = res.items || [];
+  $("bb-entries").innerHTML = BB.items.map((e) => `<li class="${e.fallback ? "fallback" : ""}">${esc(e.label)}${e.html}</li>`).join("") ||
     '<li class="empty">Нет статей для списка. Отметьте подходящие на шаге «📝 Отобрать статьи» или выберите «все статьи списка».</li>';
-  let status = `Статей в списке литературы: <b>${res.count || 0}</b>.`;
+  let status = `Статей в списке литературы: <b>${res.count || 0}</b>. Стиль: <b>${esc(res.title || "")}</b>.`;
   if (d.job && d.job.running) status += ` ⏳ Загружаю данные статей: ${d.job.done} из ${d.job.total}…`;
   else if (res.missing) status += ` У ${res.missing} не нашлось данных в Crossref/OpenAlex — у них в записи будут только DOI.`;
+  const sj = res.job;
+  if (sj && sj.running) status += ` ⏳ Оформляю в стиле журнала через doi.org: ${sj.done} из ${sj.total}…`;
+  else if (res.fallback) status += ` <span style="color: var(--red)">${res.fallback} ${plural(res.fallback, "запись", "записи", "записей")} doi.org не оформил` +
+    `${sj && sj.error ? " (" + esc(sj.error.replace(/\.$/, "")) + ")" : ""} — они серым, в ближайшем встроенном стиле.</span>`;
   $("bb-status").innerHTML = status;
-  BB.entries = res.entries || [];
+  $("bb-hint").innerHTML = res.style === "gost"
+    ? "Проверьте оформление по требованиям вашего вуза: ГОСТ допускает варианты (вид тире, «DOI:», пометка «Текст : электронный»)."
+    : "Сверьте с требованиями журнала (Guide for Authors). Сокращённые названия журналов берутся из Crossref; если сокращения там нет, " +
+      "пишется полное название. Курсив и жирный сохраняются при копировании в Word и в файле .docx.";
   renderPrisma(d.prisma);
-  if (d.job && d.job.running && view === "biblio") BB.timer = setTimeout(loadBiblio, 2000);
+  if (((d.job && d.job.running) || (sj && sj.running)) && view === "biblio") BB.timer = setTimeout(loadBiblio, 2000);
 }
 function prismaLines(p) {
   const src = Object.entries(p.per_source || {}).map(([k, v]) => `${k}: ${v}`).join("; ");
@@ -2365,15 +2411,67 @@ function prismaPng() {
   $("pr-note").textContent = "Картинка сохранена в папку «Загрузки».";
 }
 async function saveBiblio(format) {
-  const res = await api("/api/biblio_save", { list: BB.list, scope: $("bb-scope").value, order: $("bb-order").value, format });
+  const res = await api("/api/biblio_save", { list: BB.list, scope: $("bb-scope").value, order: $("bb-order").value, format, style: bbStyle() });
   $("bb-saved").innerHTML = res.error ? `<span style="color: var(--red)">${esc(res.error)}</span>`
     : `💾 Сохранено: <b>Список литературы\\${esc(res.name)}</b>`;
 }
 $("bb-list").onchange = () => { BB.scopeTouched = false; loadBiblio(); };
 $("bb-scope").onchange = () => { BB.scopeTouched = true; loadBiblio(); };
-$("bb-order").onchange = () => loadBiblio();
-$("bb-copy").onclick = async (e) => flash(e.target.closest("button"), await copyText((BB.entries || []).map((x, n) => `${n + 1}. ${x}`).join("\n")));
+$("bb-order").onchange = () => { BB.orderTouched = true; loadBiblio(); };
+$("bb-style").onchange = () => {
+  const v = $("bb-style").value;
+  store("ad_bb_style", v);
+  // Numbered styles keep the order of the text, author-date styles go alphabetically.
+  if (!BB.orderTouched) {
+    const numeric = v === "journal" ? !!(BB.journal && ["numeric", "label"].includes(BB.journal.format)) : BB_NUMERIC.includes(v);
+    $("bb-order").value = numeric && v !== "gost" ? "list" : "alpha";
+  }
+  loadBiblio();
+};
+let bbSearchTimer = 0;
+$("bb-journal-q").addEventListener("input", () => {
+  clearTimeout(bbSearchTimer);
+  bbSearchTimer = setTimeout(async () => {
+    const q = $("bb-journal-q").value.trim();
+    if (q.length < 3) { $("bb-found").innerHTML = ""; return; }
+    const res = await api("/api/csl_search", { q });
+    $("bb-found").innerHTML = (res.styles || []).map((st) =>
+      `<button data-csl="${esc(st.id)}" data-cslfmt="${esc(st.format)}" data-csltitle="${esc(st.title)}">${esc(st.title)} ` +
+      `<small>${st.format === "author-date" ? "автор, год" : (["numeric", "label"].includes(st.format) ? "номера" : "")}</small></button>`).join("") ||
+      '<span class="recognized">Не нашлось — попробуйте другое слово из названия.</span>';
+  }, 250);
+});
+$("bb-found").addEventListener("click", (e) => {
+  const b = e.target.closest("button[data-csl]");
+  if (!b) return;
+  BB.journal = { id: b.dataset.csl, title: b.dataset.csltitle, format: b.dataset.cslfmt };
+  store("ad_bb_journal", BB.journal);
+  $("bb-journal-q").value = BB.journal.title;
+  $("bb-found").innerHTML = "";
+  if (!BB.orderTouched) $("bb-order").value = ["numeric", "label"].includes(BB.journal.format) ? "list" : "alpha";
+  loadBiblio();
+});
+async function copyRich(htmlText, plainText) {
+  try {
+    await navigator.clipboard.write([new ClipboardItem({
+      "text/html": new Blob([htmlText], { type: "text/html" }), "text/plain": new Blob([plainText], { type: "text/plain" }) })]);
+    return true;
+  } catch (e) { return copyText(plainText); }
+}
+$("bb-copy").onclick = async (e) => {
+  const items = BB.items || [];
+  const htmlText = items.map((x) => `<p>${esc(x.label)}${x.html}</p>`).join("");
+  flash(e.target.closest("button"), await copyRich(htmlText, items.map((x) => x.label + x.text).join("\n")));
+};
+$("bb-save-docx").onclick = () => saveBiblio("docx");
 $("bb-save-txt").onclick = () => saveBiblio("txt");
+(() => {
+  const st = recall("ad_bb_style", "gost");
+  if ([...$("bb-style").options].some((o) => o.value === st)) $("bb-style").value = st;
+  if (BB.journal) $("bb-journal-q").value = BB.journal.title;
+  const numeric = st === "journal" ? !!(BB.journal && ["numeric", "label"].includes(BB.journal.format)) : BB_NUMERIC.includes(st);
+  $("bb-order").value = numeric && st !== "gost" ? "list" : "alpha";
+})();
 $("bb-save-ris").onclick = () => saveBiblio("ris");
 $("bb-save-bib").onclick = () => saveBiblio("bib");
 $("bb-open").onclick = () => api("/api/open", { what: "biblio_dir" });

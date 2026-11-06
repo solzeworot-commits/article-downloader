@@ -66,6 +66,8 @@ jobs:
           if ($LASTEXITCODE) { throw "donate_test: адрес или ссылка для донатов не прошли проверку" }
           & $py -E -s -X utf8 tests\support_test.py (Join-Path $app "scripts")
           if ($LASTEXITCODE) { throw "support_test" }
+          & $py -E -s -X utf8 tests\styles_test.py (Join-Path $app "scripts")
+          if ($LASTEXITCODE) { throw "styles_test: стили списка литературы" }
           & $py -E -s -X utf8 tests\ai_test.py (Join-Path $app "scripts")
           if ($LASTEXITCODE) { throw "ai_test: ИИ-помощник" }
           & $py -E -s -X utf8 tests\i18n_test.py (Join-Path $app "scripts")

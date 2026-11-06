@@ -44,6 +44,7 @@ from urllib.parse import parse_qs, quote, unquote, urlparse
 import urllib.request
 
 import ai_helper as ai
+import cite_styles as cs
 import doi_search as ds
 import i18n
 import review as rv
@@ -74,7 +75,7 @@ REPORT_PATH = ROOT / "Отчёт.csv"
 BIBLIO_DIR = ROOT / "Список литературы"
 
 UI_PORT = 17865
-APP_VERSION = "7.7"
+APP_VERSION = "7.8"
 APP_AUTHOR = "Bucaneiro"
 OFFICIAL_URL = "https://github.com/solzeworot-commits/article-downloader"
 DOWNLOAD_URL = OFFICIAL_URL + "/releases/tag/portable-latest"
@@ -422,6 +423,8 @@ class State:
         self.reviews: dict[str, dict] = {}       # list file name -> review (rv)
         self.review_jobs: dict[str, dict] = {}   # list file name -> lookup progress
         self.ai_jobs: dict[str, dict] = {}       # list file name -> AI pre-screening progress
+        self.style_jobs: dict[str, dict] = {}    # list file name -> journal style formatting progress
+        self.style_failed: dict[tuple, set] = {} # (list, style) -> DOIs doi.org could not format
 
         self.browser = {}
         self.update: dict | None = None    # support.check_update()
@@ -1334,7 +1337,90 @@ def biblio_records(name: str, scope: str) -> list[dict]:
                 if keep is None or data["records"][d].get("decision") in keep]
 
 
-def save_biblio(name: str, scope: str, alphabetical: bool, fmt: str) -> Path:
+def style_info(style: str) -> dict:
+    """{"id", "title", "numeric", "csl": the CSL style dict or None}; unknown styles are GOST."""
+    if style.startswith("csl:"):
+        found = cs.csl_find(style[4:])
+        if found:
+            return {"id": style, "title": found["title"], "numeric": found["format"] in ("numeric", "label"),
+                    "csl": found}
+        style = "gost"
+    if style not in cs.STYLES:
+        style = "gost"
+    title, fmt, _fn, _label = cs.STYLES[style]
+    return {"id": style, "title": title, "numeric": fmt == "numeric", "csl": None}
+
+
+def start_style_job(name: str, info: dict, scope: str) -> dict:
+    """Format the references of a list in a journal's style by doi.org, one by one, in the background."""
+    data = get_review(name)
+    csl = info["csl"]
+    keep = BIBLIO_SCOPES.get(scope, ("include",))
+    with S.lock:
+        job = S.style_jobs.get(data["list"])
+        if job and job["running"]:
+            return job
+        # DOIs doi.org could not format are not asked again in this session (no endless retries).
+        failed = S.style_failed.setdefault((data["list"], csl["id"]), set())
+        todo = [d for d in data["order"]
+                if (keep is None or data["records"][d].get("decision") in keep)
+                and not (data["records"][d].get("csl") or {}).get(csl["id"]) and d not in failed]
+        if not todo:
+            if not (job and job.get("style") == info["id"]):
+                job = {"running": False, "done": 0, "total": 0, "failed": len(failed), "error": "", "style": info["id"]}
+                S.style_jobs[data["list"]] = job
+            return job
+        job = {"running": True, "done": 0, "total": len(todo), "failed": 0, "error": "", "style": info["id"]}
+        S.style_jobs[data["list"]] = job
+    request_style = csl["parent"] or csl["id"]
+
+    def run():
+        failures = 0
+        for doi in todo:
+            try:
+                text = cs.csl_format(doi, request_style, info["numeric"])
+                with S.lock:
+                    data["records"][doi].setdefault("csl", {})[csl["id"]] = text
+                failures = 0
+            except cs.StyleError as exc:
+                failures += 1
+                with S.lock:
+                    job["failed"] += 1
+                    job["error"] = str(exc)
+                    failed.add(doi)
+                if failures >= 5:          # doi.org is not answering at all: stop asking
+                    break
+            with S.lock:
+                job["done"] += 1
+            time.sleep(0.15)
+        with S.lock:
+            rv.save_review(INBOX, data)
+            job["running"] = False
+        app_log(f"Journal style {csl['id']}: {job['done']} of {job['total']}, failed {job['failed']}")
+
+    threading.Thread(target=run, daemon=True).start()
+    return job
+
+
+def biblio_items(name: str, scope: str, alphabetical: bool, style: str) -> dict:
+    records = biblio_records(name, scope)
+    info = style_info(style)
+    out = {"count": len(records), "missing": sum(1 for r in records if not r.get("found")),
+           "style": info["id"], "title": info["title"], "numeric": info["numeric"]}
+    if info["csl"]:
+        job = start_style_job(name, info, scope)
+        records = biblio_records(name, scope)          # with the texts formatted so far
+        items = cs.csl_entries(records, info["csl"], alphabetical)
+        with S.lock:
+            out["job"] = dict(job)
+        out["fallback"] = sum(1 for i in items if i.get("fallback"))
+    else:
+        items = cs.entries(records, info["id"], alphabetical)
+    out["items"] = items
+    return out
+
+
+def save_biblio(name: str, scope: str, alphabetical: bool, fmt: str, style: str = "gost") -> Path:
     records = biblio_records(name, scope)
     BIBLIO_DIR.mkdir(parents=True, exist_ok=True)
     suffix = {"included": "", "included_maybe": "_с_вопросами", "all": "_все"}.get(scope, "")
@@ -1346,10 +1432,15 @@ def save_biblio(name: str, scope: str, alphabetical: bool, fmt: str) -> Path:
         path = BIBLIO_DIR / f"{stem}.bib"
         path.write_text(rv.to_bibtex(records), encoding="utf-8")
     else:
-        path = BIBLIO_DIR / f"{stem} (ГОСТ).txt"
-        entries = rv.gost_list(records, alphabetical)
-        text = "\r\n".join(f"{n}. {e}" for n, e in enumerate(entries, 1)) + "\r\n"
-        path.write_bytes(b"\xef\xbb\xbf" + text.encode("utf-8"))
+        data = biblio_items(name, scope, alphabetical, style)
+        label = "ГОСТ" if data["style"] == "gost" else re.sub(r'[\\/:*?"<>|]+', " ", data["title"]).strip()[:60]
+        if fmt == "docx":
+            path = BIBLIO_DIR / f"{stem} ({label}).docx"
+            cs.to_docx(path, tr("Список литературы") + f" — {data['title']}", data["items"])
+        else:
+            path = BIBLIO_DIR / f"{stem} ({label}).txt"
+            text = "\r\n".join(i["label"] + i["text"] for i in data["items"]) + "\r\n"
+            path.write_bytes(b"\xef\xbb\xbf" + text.encode("utf-8"))
     app_log(f"Reference list saved: {path.name}")
     return path
 
@@ -1818,14 +1909,17 @@ def handle_api(path: str, body: dict) -> dict:
             records = biblio_records(body.get("list"), body.get("scope") or "included")
         except FileNotFoundError:
             return {"error": tr("Список не найден в папке inbox.")}
-        return {"entries": rv.gost_list(records, body.get("order") != "list"),
-                "count": len(records),
-                "missing": sum(1 for r in records if not r.get("found"))}
+        return biblio_items(body.get("list"), body.get("scope") or "included", body.get("order") != "list",
+                            str(body.get("style") or "gost"))
+
+    if path == "/api/csl_search":
+        return {"styles": cs.csl_search(str(body.get("q") or ""))}
 
     if path == "/api/biblio_save":
         try:
             saved = save_biblio(body.get("list"), body.get("scope") or "included",
-                                body.get("order") != "list", body.get("format") or "txt")
+                                body.get("order") != "list", body.get("format") or "txt",
+                                str(body.get("style") or "gost"))
         except FileNotFoundError:
             return {"error": tr("Список не найден в папке inbox.")}
         return {"name": saved.name, "folder": str(BIBLIO_DIR)}
