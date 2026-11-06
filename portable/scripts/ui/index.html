@@ -366,6 +366,27 @@
                       font-size: 14px; letter-spacing: .05em; white-space: nowrap; }
   .ai-bar.ok { background: linear-gradient(135deg, #22c55e, #15803d); animation: none; }
   .ai-bar.warn { background: linear-gradient(135deg, #f59e0b, #b45309); animation: none; }
+  .guide-bar { display: flex; align-items: center; gap: 16px; width: 100%; margin: 0 0 16px; padding: 14px 22px;
+               border: none; border-radius: 18px; color: #3b2a00; text-align: left; cursor: pointer;
+               background: linear-gradient(135deg, #fde68a, #fbbf24); }
+  .guide-bar:hover { border: none; filter: brightness(1.04); }
+  .guide-bar .ai-ico { font-size: 36px; line-height: 1; }
+  .guide-bar .ai-txt { flex: 1; display: flex; flex-direction: column; gap: 3px; }
+  .guide-bar b { font-size: 24px; letter-spacing: .5px; }
+  .guide-bar small { font-size: 14px; }
+  .guide-bar.new { animation: guide-glow 1.8s ease-in-out infinite; }
+  @keyframes guide-glow { 0%, 100% { box-shadow: 0 0 0 0 rgba(245,158,11,.5); } 50% { box-shadow: 0 0 22px 8px rgba(245,158,11,.5); } }
+  @media (prefers-reduced-motion: reduce) { .guide-bar.new { animation: none; } }
+  .clear-bar { display: flex; align-items: center; gap: 14px; width: 100%; margin: 0 0 16px; padding: 10px 22px;
+               border: 1px solid #cbd5e1; border-radius: 14px; background: #e2e8f0; color: #1e293b; text-align: left; cursor: pointer; }
+  .clear-bar:hover { background: #d8dee8; }
+  .clear-bar b { font-size: 18px; }
+  .clear-bar small { color: #475569; font-size: 14px; }
+  #dlg-guide .body { font-size: 16px; line-height: 1.55; }
+  #dlg-guide h4 { margin: 16px 0 6px; font-size: 18px; }
+  #dlg-guide h4:first-child { margin-top: 0; }
+  #dlg-guide ul { margin: 4px 0; padding-left: 22px; }
+  #dlg-guide code { background: var(--blue-soft); border-radius: 5px; padding: 1px 6px; }
   .ai-box { border: 2px dashed #a78bfa; background: #faf5ff; border-radius: 12px; padding: 10px 14px; margin-bottom: 12px; }
   .ai-box textarea { min-height: 56px; margin-top: 6px; font-size: 15px; font-family: inherit; }
   .ai-box .ai-src { font-size: 13px; color: var(--muted); margin-top: 6px; }
@@ -410,6 +431,8 @@
 
   <section id="view-home" class="view">
     <div id="home-note"></div>
+    <button class="guide-bar" id="go-guide"><span class="ai-ico">📖</span>
+      <span class="ai-txt"><b>ИНСТРУКЦИЯ</b><small>с чего начать и зачем</small></span></button>
     <div class="home-buttons four">
       <button class="big-choice blue" id="go-search"><span class="step-n">2</span><span class="ico">🔎</span><b>Получить список DOI</b>
         <span class="sub2">Поиск статей по ключевым словам в Scopus, Web of Science и OpenAlex. Список сохранится в папку inbox.</span></button>
@@ -425,11 +448,12 @@
     <button class="ai-bar" id="go-ai" title="ИИ-помощник на вашем ключе (Perplexity, ChatGPT, Claude, GigaChat или YandexGPT): подбирает слова для поиска и помогает отобрать статьи">
       <span class="ai-ico">🤖</span><span class="ai-txt"><b>ИИ-помощник</b><small id="ai-bar-sub">не подключён — нажмите, чтобы подключить</small></span>
       <span class="ai-state" id="ai-bar-state">ВЫКЛ</span></button>
+    <button class="clear-bar" id="home-clear"><b>🧹 Очистить всё</b>
+      <small>остановить всё и начать заново — скачанные PDF и списки в inbox останутся</small></button>
     <div class="home-small">
       <button id="home-keys">🔑 Ключи API для Scopus и Web of Science</button>
       <button id="home-inbox">📂 Папка inbox</button>
       <button id="home-pdf">📂 Папка с PDF</button>
-      <button id="home-clear" title="Очистить поиск и очередь; PDF и списки в inbox останутся">🧹 Очистить всё</button>
       <button id="home-share">📤 Поделиться программой</button>
 <span class="chat-btns"><span class="lbl">💬 Чат программы:</span><button class="chat-btn tg" data-link="chat_tg" title="Чат программы в Telegram"><svg viewBox="0 0 32 32" aria-hidden="true"><circle cx="16" cy="16" r="16" fill="#fff"/><path d="M7.4 15.6l15.3-5.9c.7-.3 1.4.2 1.1 1.3l-2.6 12.2c-.2.9-.7 1.1-1.5.7l-4-2.9-1.9 1.9c-.2.2-.4.4-.8.4l.3-4.1 7.4-6.7c.3-.3-.1-.4-.5-.2l-9.1 5.8-3.9-1.2c-.8-.3-.9-.8.2-1.3z" fill="#229ED9"/></svg>Telegram</button><button class="chat-btn max" data-link="chat_max" title="Чат программы в MAX"><svg viewBox="0 0 32 32" aria-hidden="true"><circle cx="16" cy="16" r="16" fill="#fff"/><path d="M8.5 22V10.5h2.6l4.9 6.4 4.9-6.4h2.6V22h-3v-6.6l-4.5 5.8-4.5-5.8V22z" fill="#6d3df5"/></svg>MAX</button></span>
       <button id="home-donate" hidden>❤ Поблагодарить автора</button>
@@ -670,7 +694,7 @@ extraction"></textarea>
       <div class="src-line">
         <label><input type="checkbox" id="src-scopus" checked> Scopus <small id="src-scopus-note"></small></label>
         <label><input type="checkbox" id="src-wos" checked> Web of Science <small id="src-wos-note"></small></label>
-        <label id="src-openalex-l"><input type="checkbox" id="src-openalex"> OpenAlex <small>(бесплатно, без ключа)</small></label>
+        <label id="src-openalex-l"><input type="checkbox" id="src-openalex"> OpenAlex <small id="src-openalex-note"></small></label>
       </div>
       <div class="seg" id="mode-seg">
         <button data-mode="api" class="on">⚡ Автоматически (по ключам API)</button>
@@ -893,6 +917,50 @@ extraction"></textarea>
     </div>
     <p class="recognized" id="rp-note">Кнопка GitHub откроет страницу с готовым текстом — останется нажать «Create» / «Submit new issue»
       (нужна бесплатная учётная запись GitHub). Нет учётной записи — скопируйте отчёт и пришлите его в чат программы.</p>
+  </div>
+</dialog>
+
+<dialog id="dlg-guide" style="width: min(860px, calc(100vw - 32px))">
+  <div class="head"><h3>📖 Инструкция — с чего начать и зачем</h3><button data-close>✕</button></div>
+  <div class="body">
+    <h4>1. 🔑 Ключи API — один раз, в самом начале</h4>
+    <p>Ключ — бесплатный «пропуск», по которому база отвечает программе. С ключами программа сама ищет статьи в Scopus, Web of Science и OpenAlex и собирает список DOI. Без ключей придётся искать на сайтах вручную и выгружать файлы.</p>
+    <ul>
+      <li><b>OpenAlex</b> — бесплатно для всех; без ключа поиск быстро упирается в лимит запросов.</li>
+      <li><b>Web of Science</b> — бесплатный план, подписка вуза не нужна; без ключа не пустит.</li>
+      <li><b>Scopus</b> — только если ваш вуз подписан на Scopus.</li>
+    </ul>
+    <div class="about-acts"><button class="linkbtn" data-guide="keys">👉 Получить ключи — по шагам с картинками</button></div>
+
+    <h4>2. 🔎 Список DOI и ключевые слова</h4>
+    <p>Пишите слова по-английски, каждое понятие с новой строки, синонимы — в одной строке через «;»:<br>
+      <code>grape pomace; grape marc</code><br><code>polyphenols; phenolic compounds</code></p>
+    <p>Не знаете, какие слова? Нажмите <b>«💡 Подсказать слова»</b>: программа бесплатно покажет, какими словами описаны статьи по вашей теме. Или опишите тему своими словами — слова подберёт ИИ-помощник.</p>
+
+    <h4>3. 📝 Отбор статей</h4>
+    <p>Читайте аннотации и жмите «✓ Подходит», «? Под вопросом» или «✗ Не подходит» (или клавиши 1, 2, 3). Подходящие сохраните новым списком — его и скачивайте.</p>
+
+    <h4>4. ⬇ Скачивание и капча</h4>
+    <p>Когда выберете список, программа откроет базы (ScienceDirect, Springer, Wiley…) в своём браузере. Некоторые сайты сначала просят пройти проверку «я не робот» — пройдите её, дальше программа качает сама, можно уходить.</p>
+    <p>Ждать, пока откроются все базы, не обязательно: нажмите <b>«Начать, не дожидаясь»</b>. Скачивание начнётся сразу, а капчу пройдёте, когда сайт её покажет — программа подскажет.</p>
+    <p>На новом компьютере сначала один раз войдите через университет: кнопка <b>«🏛 Вход через организацию»</b>.</p>
+
+    <h4>5. 📚 Список литературы и схема PRISMA</h4>
+    <p>Готовый список литературы по ГОСТ, APA, Vancouver или в стиле нужного журнала (около 11 000 журналов) — скопировать в Word или сохранить файлом.</p>
+    <p><b>PRISMA</b> — международный стандарт: схема показывает, сколько статей нашли в базах, сколько отсеяли и почему и сколько вошло в обзор. Рецензенты журналов и диссертационные советы требуют её в систематических обзорах: по ней видно, что литература отобрана честно, а не «какие нашлись». Программа считает цифры сама по вашим отметкам на шаге 3 — сохраните схему картинкой и вставьте в раздел «Материалы и методы».</p>
+
+    <h4>🤖 ИИ-помощник — по желанию</h4>
+    <p>Программа работает и без него, с ним быстрее:</p>
+    <ul>
+      <li>тема своими словами → готовые слова и синонимы для поиска;</li>
+      <li>предотбор: ИИ читает аннотации и советует, какие статьи подходят;</li>
+      <li>перевод аннотаций на русский;</li>
+      <li>таблица по скачанным статьям (объект, метод, условия, результаты) для Excel.</li>
+    </ul>
+    <p>Нужен ваш ключ одного из сервисов: Perplexity, ChatGPT, Claude, GigaChat или YandexGPT. Запросы стоят центы.</p>
+    <div class="about-acts"><button class="linkbtn" data-guide="ai">🤖 Подключить ИИ-помощник</button></div>
+
+    <p class="recognized" style="margin-top: 16px">Что-то не получается — «🛟 Сообщить о проблеме» вверху окна или чат программы в Telegram и MAX (кнопки внизу главного окна).</p>
   </div>
 </dialog>
 
@@ -1511,6 +1579,10 @@ function renderSources() {
     $("src-" + src + "-note").textContent = missing ? "(нет ключа)" : "";
   }
   $("src-openalex-l").hidden = !apiMode;
+  // OpenAlex: ticked when there is a key, unless the user took the tick off themselves (remembered).
+  const oa = $("src-openalex"), oaChoice = recall("ad_src_openalex", null);
+  if (!oa.dataset.touched) oa.checked = oaChoice === null ? hasKey("openalex") : !!oaChoice;
+  $("src-openalex-note").textContent = hasKey("openalex") ? "(ключ есть ✓)" : "(бесплатно; с ключом лимит больше)";
   document.querySelectorAll("#mode-seg button").forEach((b) => b.classList.toggle("on", b.dataset.mode === currentMode()));
   $("mode-api").hidden = !apiMode;
   $("mode-browser").hidden = apiMode;
@@ -1841,6 +1913,7 @@ $("btn-settings-keys").onclick = () => { $("dlg-settings").close(); show("keys")
 $("btn-choose").onclick = chooseFile;
 $("btn-open-inbox").onclick = () => api("/api/open_inbox");
 $("btn-search").onclick = runSearch;
+$("src-openalex").addEventListener("change", (e) => { e.target.dataset.touched = "1"; store("ad_src_openalex", e.target.checked); });
 $("q-scopus").addEventListener("input", () => { qDirty.scopus = true; });
 $("q-wos").addEventListener("input", () => { qDirty.wos = true; });
 $("q-reset").onclick = () => { qDirty = { scopus: false, wos: false }; buildQueries(); };
@@ -2012,6 +2085,35 @@ $("home-donate").onclick = openDonate;
 $("home-about").onclick = () => $("dlg-about").showModal();
 $("go-api").onclick = () => show("keys");
 $("go-ai").onclick = () => show("ai");
+// ---- the instruction (v8.1) -------------------------------------------------------
+if (!recall("ad_guide_seen", false)) $("go-guide").classList.add("new");
+$("go-guide").onclick = () => {
+  store("ad_guide_seen", true);
+  $("go-guide").classList.remove("new");
+  $("dlg-guide").showModal();
+};
+$("dlg-guide").addEventListener("click", (e) => {
+  const b = e.target.closest("button[data-guide]");
+  if (!b) return;
+  $("dlg-guide").close();
+  show(b.dataset.guide);
+});
+// ---- the size of the window (v8.1): the screen once, the user's own size when they resize it
+(() => {
+  const start = { w: window.outerWidth, h: window.outerHeight };
+  const send = (body) => { try { api("/api/window_info", body); } catch (e) {} };
+  setTimeout(() => send({ screen: { w: screen.availWidth, h: screen.availHeight, x: screen.availLeft || 0, y: screen.availTop || 0 } }), 1500);
+  let timer = 0;
+  window.addEventListener("resize", () => {
+    clearTimeout(timer);
+    timer = setTimeout(() => {
+      if (Math.abs(window.outerWidth - start.w) > 30 || Math.abs(window.outerHeight - start.h) > 30) {
+        start.w = window.outerWidth; start.h = window.outerHeight;
+        send({ window: { w: window.outerWidth, h: window.outerHeight } });
+      }
+    }, 1200);
+  });
+})();
 
 // ---- AI helper (v7.6) -----------------------------------------------------------
 let aiBusy = false;

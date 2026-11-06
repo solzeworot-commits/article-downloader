@@ -1,4 +1,4 @@
-﻿ARTICLE DOWNLOADER, portable version 8.0
+﻿ARTICLE DOWNLOADER, portable version 8.1
 ========================================
 
 Runs on any computer with Windows 10 or 11. Nothing to install: Python and everything
@@ -10,6 +10,7 @@ HOW TO USE
 1. Double-click «СКАЧАТЬ СТАТЬИ» (it means «download articles»; or the «Скачать статьи»
    icon on the desktop). On the first start Windows may ask «Run this file?» — click «Run».
    A window with four big buttons opens: the steps of a literature review, in order.
+   The yellow «📖 HOW TO START» bar above them explains briefly where to begin and why.
    Step 1 is the red «API» circle in the middle: get the free keys (OpenAlex and Web of
    Science, step by step with pictures; once). When the keys are saved, it turns green.
 
