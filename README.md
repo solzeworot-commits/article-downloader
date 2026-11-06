@@ -9,6 +9,21 @@
 (около 54 МБ). Как установить и как проверить, что архив настоящий, — на странице
 [релиза](https://github.com/solzeworot-commits/article-downloader/releases/tag/portable-latest).
 
+## 🆕 Новое в версии 7.6
+
+- **🤖 ИИ-помощник** (по желанию, на вашем ключе Perplexity): опишите тему своими словами — он подберёт
+  английские слова и синонимы для поиска; при отборе читает аннотации и подсказывает, подходит ли статья.
+  На главной — плашка: красная, пока помощник не подключён, зелёная — когда подключён; инструкция со
+  скриншотами внутри программы;
+- **💬 Чат программы** в [Telegram](https://t.me/ArticleDownloaderChat) и
+  [MAX](https://max.ru/join/_ADhfiFX_Bf37RsP1VR8hDHUdFgj_im_R5DqDx4Iseo) — кнопки внизу главного окна:
+  вопросы, советы, новости;
+- синонимы можно писать в одной строке через «;» — программа сама соберёт запрос (одно из слов строки
+  И одно из слов следующей строки);
+- 7.6.1–7.6.2: помощник переведён на новый адрес API Perplexity, кнопки чатов с иконками.
+
+Программы 7.2 и новее предложат обновиться сами: красный квадратик с номером версии рядом с названием.
+
 ## Как это работает
 
 Двойной щелчок по «СКАЧАТЬ СТАТЬИ» → главное окно. Сначала красный кружок **«API»** в центре —
@@ -82,7 +97,7 @@ and double-click «СКАЧАТЬ СТАТЬИ» («download articles»). The wi
 Windows is not in Russian; the **🌐 EN / RU** button at the top switches the language.
 An optional AI helper on your own Perplexity API key turns a topic in your own words into
 search terms and pre-screens abstracts. Instructions: «HOW TO USE.txt» inside the archive.
-Chat: [Telegram](https://t.me/ArticleDownloaderChat).
+Chat: [Telegram](https://t.me/ArticleDownloaderChat). New in 7.6: the AI helper and the chat buttons.
 
 ## Для разработчиков
 
@@ -116,7 +131,7 @@ python tools/build_portable.py
 
 ### Состояние
 
-Версия 7.6: поиск, отбор по аннотациям, скачивание, список литературы по ГОСТ и схема PRISMA;
+Версия 7.6.2: поиск, отбор по аннотациям, скачивание, список литературы по ГОСТ и схема PRISMA;
 лицензия и окно «О программе»; автоматическое обновление, «Сообщить о проблеме», «Поделиться»,
 интерфейс на русском и английском; ИИ-помощник на ключе Perplexity пользователя; ссылки на чаты.
 Сборка проверяется на Windows автоматически при каждом изменении. Что ещё проверить руками —
