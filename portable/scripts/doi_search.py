@@ -46,7 +46,7 @@ SCOPUS_URL = "https://api.elsevier.com/content/search/scopus"
 WOS_URL = "https://api.clarivate.com/apis/wos-starter/v1/documents"
 OPENALEX_URL = "https://api.openalex.org/works"
 
-KEY_FIELDS = ("scopus", "scopus_insttoken", "wos", "openalex")
+KEY_FIELDS = ("scopus", "scopus_insttoken", "wos", "openalex", "perplexity")
 SOURCE_TITLES = {"scopus": "Scopus", "wos": "Web of Science", "openalex": "OpenAlex"}
 # Services the review module also asks (names for error messages only).
 SERVICE_TITLES = {**SOURCE_TITLES, "crossref": "Crossref", "europepmc": "Europe PMC"}
@@ -131,16 +131,25 @@ def keys_status(keys: dict) -> dict:
 # queries
 # ---------------------------------------------------------------------------
 
-def _terms(keywords) -> list[str]:
+def _groups(keywords) -> list[list[str]]:
+    """One concept per line; synonyms on the same line are separated by ";" (v7.6)."""
     if isinstance(keywords, str):
         keywords = keywords.splitlines()
-    terms, seen = [], set()
+    groups, seen = [], set()
     for raw in keywords:
-        term = re.sub(r"\s+", " ", str(raw).replace('"', " ")).strip()
-        if term and term.lower() not in seen:
-            seen.add(term.lower())
-            terms.append(term)
-    return terms
+        group = []
+        for part in str(raw).split(";"):
+            term = re.sub(r"\s+", " ", part.replace('"', " ")).strip()
+            if term and term.lower() not in seen:
+                seen.add(term.lower())
+                group.append(term)
+        if group:
+            groups.append(group)
+    return groups
+
+
+def _terms(keywords) -> list[str]:
+    return [term for group in _groups(keywords) for term in group]
 
 
 def _quoted(term: str) -> str:
@@ -161,11 +170,18 @@ def build_queries(params: dict) -> dict:
     year_from, year_to, doc_type "both"|"article"|"review"|"all".
     Returns {"scopus": str, "wos": str, "openalex": {"search", "filter"}}.
     """
-    terms = _terms(params.get("keywords") or "")
+    groups = _groups(params.get("keywords") or "")
+    terms = [term for group in groups for term in group]
     if not terms:
         raise SearchError("bad_query", tr("Введите хотя бы одно ключевое слово."))
-    joiner = " OR " if params.get("match") == "any" else " AND "
-    inner = joiner.join(_quoted(t) for t in terms)
+    if params.get("match") == "any":
+        inner = " OR ".join(_quoted(t) for t in terms)
+    else:
+        # Synonyms of a line go together with OR, the lines with AND.
+        inner = " AND ".join(_quoted(g[0]) if len(g) == 1 else "(" + " OR ".join(_quoted(t) for t in g) + ")"
+                             for g in groups)
+        if len(groups) == 1 and len(groups[0]) > 1:
+            inner = inner[1:-1]
     title_only = params.get("field") == "title"
     year_from, year_to = _year(params.get("year_from")), _year(params.get("year_to"))
     if year_from and year_to and year_from > year_to:
@@ -194,8 +210,11 @@ def build_queries(params: dict) -> dict:
 
     filters = []
     if title_only:
-        sep = "|" if params.get("match") == "any" else " "
-        filters.append("title.search:" + sep.join(t.replace(",", " ") for t in terms))
+        if params.get("match") == "any" or all(len(g) == 1 for g in groups):
+            sep = "|" if params.get("match") == "any" else " "
+            filters.append("title.search:" + sep.join(t.replace(",", " ") for t in terms))
+        else:
+            filters.append("title.search:" + inner.replace(",", " "))
     if year_from:
         filters.append(f"from_publication_date:{year_from}-01-01")
     if year_to:

@@ -1,21 +1,19 @@
 {
   "message": "Если программа сэкономила вам время — можно поблагодарить автора. Все деньги пойдут на развитие проекта. Спасибо!",
   "plans": {
-    "title": "Следующая цель — встроенный ИИ-помощник:",
+    "title": "Уже сделано в 7.6 — ИИ-помощник на вашем ключе Perplexity: подбор слов для поиска и предотбор статей. Следующие цели:",
     "items": [
-      "✏ тема своими словами → ключевые слова и готовые запросы для Scopus и Web of Science;",
-      "📝 предотбор статей: ИИ читает аннотации и советует «брать / не брать» с причиной;",
-      "📊 таблица по скачанным PDF: метод, сырьё, условия и результаты — сразу в Excel."
+      "📊 таблица по скачанным PDF: метод, сырьё, условия и результаты — сразу в Excel;",
+      "🧠 ИИ-помощник без зарубежной карты — на российской нейросети (GigaChat или YandexGPT)."
     ]
   },
   "en": {
     "message": "If the program saved you time, you can thank the author. All the money goes to the project. Thank you!",
     "plans": {
-      "title": "Next goal: a built-in AI assistant:",
+      "title": "Done in 7.6 — an AI helper on your own Perplexity key: search words and article pre-screening. Next goals:",
       "items": [
-        "✏ your topic in your own words → keywords and ready queries for Scopus and Web of Science;",
-        "📝 article pre-screening: the AI reads the abstracts and suggests \"include / exclude\" with a reason;",
-        "📊 a table from the downloaded PDFs: method, raw material, conditions and results, straight into Excel."
+        "📊 a table from the downloaded PDFs: method, raw material, conditions and results, straight into Excel;",
+        "🧠 an AI helper without a foreign card — on a Russian model (GigaChat or YandexGPT)."
       ]
     },
     "sbp": {

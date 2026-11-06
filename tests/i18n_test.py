@@ -50,7 +50,7 @@ if stale:
     fail("pieces no longer in the page: " + "; ".join(stale[:20]))
 
 missing = []
-for name in ("app.py", "doi_search.py", "review.py", "support.py"):
+for name in ("app.py", "doi_search.py", "review.py", "support.py", "ai_helper.py"):
     tree = ast.parse((SCRIPTS / name).read_text(encoding="utf-8"))
     for node in ast.walk(tree):
         if isinstance(node, ast.Call) and getattr(node.func, "id", None) == "tr" and node.args:

@@ -273,6 +273,8 @@
   .dn-plans ul { margin: 4px 0 0; padding-left: 22px; }
   .dn-plans li { margin: 4px 0; }
   .about-acts { display: flex; gap: 8px; flex-wrap: wrap; margin: 14px 0 4px; }
+  .chat-line { background: var(--blue-soft); border-radius: 12px; padding: 10px 14px; margin-bottom: 12px; }
+  .chat-line button { padding: 4px 12px; margin-left: 4px; }
   .bcn-about ul { margin: 4px 0 0; padding-left: 22px; }
   .bcn-about li { margin: 3px 0; }
 
@@ -328,6 +330,30 @@
   .prisma .box.side { border-style: dashed; border-color: #94a3b8; }
   .prisma .box b { font-size: 16px; }
 
+  /* v7.6: AI helper */
+  .ai-bar { display: flex; align-items: center; gap: 16px; width: 100%; margin: 0 0 16px; padding: 14px 22px;
+            border: none; border-radius: 18px; color: #fff; text-align: left; cursor: pointer;
+            background: linear-gradient(135deg, #ef4444, #b91c1c); animation: hub-glow 1.8s ease-in-out infinite; }
+  .ai-bar:hover { border: none; filter: brightness(1.06); }
+  .ai-bar .ai-ico { font-size: 40px; line-height: 1; }
+  .ai-bar .ai-txt { flex: 1; display: flex; flex-direction: column; gap: 3px; }
+  .ai-bar b { font-size: 24px; letter-spacing: .3px; }
+  .ai-bar small { font-size: 14px; opacity: .95; }
+  .ai-bar .ai-state { font-weight: 800; background: rgba(255,255,255,.22); border-radius: 99px; padding: 6px 14px;
+                      font-size: 14px; letter-spacing: .05em; white-space: nowrap; }
+  .ai-bar.ok { background: linear-gradient(135deg, #22c55e, #15803d); animation: none; }
+  .ai-bar.warn { background: linear-gradient(135deg, #f59e0b, #b45309); animation: none; }
+  .ai-box { border: 2px dashed #a78bfa; background: #faf5ff; border-radius: 12px; padding: 10px 14px; margin-bottom: 12px; }
+  .ai-box textarea { min-height: 56px; margin-top: 6px; font-size: 15px; font-family: inherit; }
+  .ai-box .ai-src { font-size: 13px; color: var(--muted); margin-top: 6px; }
+  .ai-box .ai-src a, .ai-box .ai-src button { font-size: 13px; }
+  .rv-ai-hint { border-radius: 10px; padding: 8px 12px; margin-bottom: 10px; font-size: 15px; border: 1px solid var(--line); }
+  .rv-ai-hint.include { background: #ecfdf5; border-color: #86efac; }
+  .rv-ai-hint.maybe { background: #fffbeb; border-color: #fcd34d; }
+  .rv-ai-hint.exclude { background: #fef2f2; border-color: #fca5a5; }
+  #rv-ai-topic { min-height: 48px; font-size: 15px; font-family: inherit; margin-top: 4px; }
+  .ai-what li { margin: 6px 0; }
+
   @media (max-width: 640px) {
     .home-buttons { grid-template-columns: 1fr; }
     .api-hub { position: relative; left: auto; top: auto; transform: none; margin: 0 auto; order: -1; }
@@ -367,12 +393,16 @@
       <button class="api-hub" id="go-api" title="Шаг 1: бесплатные ключи API — без них поиск статей часто не работает">
         <span class="step-n">1</span><b id="api-hub-label">API</b><small id="api-hub-sub">получить ключи</small></button>
     </div>
+    <button class="ai-bar" id="go-ai" title="ИИ-помощник на вашем ключе Perplexity: подбирает слова для поиска и помогает отобрать статьи">
+      <span class="ai-ico">🤖</span><span class="ai-txt"><b>ИИ-помощник</b><small id="ai-bar-sub">не подключён — нажмите, чтобы подключить</small></span>
+      <span class="ai-state" id="ai-bar-state">ВЫКЛ</span></button>
     <div class="home-small">
       <button id="home-keys">🔑 Ключи API для Scopus и Web of Science</button>
       <button id="home-inbox">📂 Папка inbox</button>
       <button id="home-pdf">📂 Папка с PDF</button>
       <button id="home-clear" title="Очистить поиск и очередь; PDF и списки в inbox останутся">🧹 Очистить всё</button>
       <button id="home-share">📤 Поделиться программой</button>
+      <button id="home-chat" title="Чат программы: вопросы, советы, новости">💬 Чат программы</button>
       <button id="home-donate" hidden>❤ Поблагодарить автора</button>
     </div>
     <div id="home-msg" class="recognized" style="text-align: center; margin-top: 12px"></div>
@@ -465,6 +495,19 @@ https://link.springer.com/article/10.1007/s12393-026-09447-8
         <button data-rvf="include">✓ Подходят</button><button data-rvf="maybe">? Под вопросом</button><button data-rvf="exclude">✗ Не подходят</button>
       </div>
     </div>
+    <div class="card" id="rv-ai">
+      <h2><span>🤖 ИИ-предотбор</span><small>ИИ читает аннотации и советует — решаете вы</small></h2>
+      <div id="rv-ai-off">ИИ-помощник не подключён: с ним ИИ сам прочитает аннотации и подскажет, какие статьи подходят.
+        <button class="linkbtn" data-go="ai">🤖 Подключить ИИ-помощник</button></div>
+      <div id="rv-ai-on" hidden>
+        <label>Что вы ищете: тема и условия (объект, метод, тип статей)
+          <textarea id="rv-ai-topic" spellcheck="true"></textarea></label>
+        <div class="acts"><button class="linkbtn" id="rv-ai-run">🤖 Спросить ИИ про неотобранные статьи</button>
+          <button id="rv-ai-stop" hidden>⏹ Остановить</button>
+          <button id="rv-ai-accept" hidden title="Советы ИИ станут вашими отметками; любую можно поменять">✓ Принять советы ИИ</button></div>
+        <div class="recognized" id="rv-ai-status" style="margin-top: 6px"></div>
+      </div>
+    </div>
     <div class="card" id="rv-card">
       <div class="rv-nav"><button id="rv-prev">← Назад</button><span id="rv-pos"></span><button id="rv-next">Дальше →</button></div>
       <div id="rv-body"></div>
@@ -525,8 +568,15 @@ https://link.springer.com/article/10.1007/s12393-026-09447-8
   <section id="view-search" class="view" hidden>
     <div id="keys-note"></div>
     <div class="card">
-      <h2><span>1. Ключевые слова</span><small>каждое слово или фраза — с новой строки; лучше по-английски</small>
+      <h2><span>1. Ключевые слова</span><small>каждое слово или фраза — с новой строки, синонимы — в одной строке через «;»; лучше по-английски</small>
         <span class="grow"></span><button id="btn-new-topic" title="Очистить слова, запросы и найденное">🧹 Новая тема</button></h2>
+      <div class="ai-box">
+        <div>🤖 <b>Тема своими словами</b> — ИИ подберёт английские слова и синонимы, программа соберёт из них запросы.</div>
+        <textarea id="ai-topic" spellcheck="true" placeholder="Например: извлечение полифенолов из виноградных выжимок с помощью ультразвука"></textarea>
+        <div class="acts"><button class="linkbtn" id="btn-ai-search">🤖 Подобрать слова с ИИ</button>
+          <span class="recognized" id="ai-search-note"></span></div>
+        <div class="ai-src" id="ai-search-src"></div>
+      </div>
       <textarea id="kw" spellcheck="false" style="min-height: 110px" placeholder="Например:
 grape pomace
 polyphenols
@@ -598,6 +648,29 @@ extraction"></textarea>
         <button class="big-action green" style="width: auto; margin: 0; font-size: 18px; padding: 12px 18px" id="btn-save-list">💾 Сохранить список в inbox</button></div>
       <div id="save-note" style="margin-top: 10px"></div>
     </div>
+  </section>
+
+  <section id="view-ai" class="view" hidden>
+    <div class="card">
+      <h2><span>🤖 ИИ-помощник</span><small>работает на вашем ключе Perplexity</small></h2>
+      <div>Помощник необязательный: программа работает и без него. С ним быстрее начать поиск и отобрать статьи.</div>
+      <ul class="ai-what">
+        <li>✏ <b>Тема своими словами → слова для поиска.</b> Опишите тему как другу, ИИ подберёт английские термины и
+          синонимы, а программа соберёт из них запросы для Scopus, Web of Science и OpenAlex. Кнопка — в окне «🔎 Получить список DOI».</li>
+        <li>📝 <b>Предотбор статей.</b> ИИ читает аннотации и советует: подходит, под вопросом или не подходит, с причиной.
+          Решение всё равно за вами. Кнопка — в окне «📝 Отобрать статьи».</li>
+      </ul>
+      <div class="why-keys">
+        <div><b class="src">Сколько стоит</b> Perplexity списывает деньги со счёта вашего API за каждый запрос: подбор слов —
+          меньше цента, предотбор сотни статей — несколько центов. Программа показывает, сколько потрачено.
+          Автору программы эти деньги не идут.</div>
+        <div><b class="src">Как оплатить</b> Счёт API пополняется картой зарубежного банка или через Apple Pay.
+          Российские карты Perplexity не принимает.</div>
+        <div><b class="src">Что уходит в Perplexity</b> Только тема и названия с аннотациями статей. Ключ хранится только
+          на этом компьютере. <b>Никому не показывайте ключ:</b> по нему тратят ваши деньги.</div>
+      </div>
+    </div>
+    <div class="card" id="ai-steps"></div>
   </section>
 
   <section id="view-keys" class="view" hidden>
@@ -704,6 +777,8 @@ extraction"></textarea>
       <button data-copytext="https://github.com/solzeworot-commits/article-downloader">📋 Скопировать ссылку</button>
       <button id="about-license">📄 Лицензия</button>
       <button id="about-check">🔄 Проверить обновления</button>
+      <button data-link="chat_tg">💬 Чат в Telegram</button>
+      <button data-link="chat_max">💬 Чат в MAX</button>
       <button id="about-donate" hidden>❤ Поблагодарить автора</button>
     </div>
     <h4 class="dn-h">Можно</h4>
@@ -725,7 +800,9 @@ extraction"></textarea>
 <dialog id="dlg-report" style="width: min(780px, calc(100vw - 32px))">
   <div class="head"><h3>🛟 Сообщить о проблеме</h3><button data-close>✕</button></div>
   <div class="body">
-    <h4 class="dn-h" style="margin-top: 0">Частые проблемы — попробуйте сначала</h4>
+    <div class="chat-line">💬 Проще всего — спросить в чате программы, там отвечают автор и другие пользователи:
+      <button class="linkbtn" data-link="chat_tg">Telegram</button> <button class="linkbtn" data-link="chat_max">MAX</button></div>
+    <h4 class="dn-h">Частые проблемы — попробуйте сначала</h4>
     <div class="faq">
     <details><summary>Окно программы не открывается</summary><div>Распакуйте архив целиком (не запускайте из zip) в короткую папку, например <b>C:\Статьи</b>. Если окно всё равно не появляется, запустите <b>scripts\debug_start.bat</b>: он покажет ошибку — её текст пришлите автору.</div></details>
     <details><summary>«Браузер не найден»</summary><div>Нужен Яндекс.Браузер, Microsoft Edge или Google Chrome. Edge уже есть в Windows 10 и 11; если его удалили, поставьте Яндекс.Браузер (browser.yandex.ru) — он ставится без прав администратора.</div></details>
@@ -747,7 +824,16 @@ extraction"></textarea>
       <button id="rp-save">💾 Сохранить отчёт в файл</button>
     </div>
     <p class="recognized" id="rp-note">Кнопка GitHub откроет страницу с готовым текстом — останется нажать «Create» / «Submit new issue»
-      (нужна бесплатная учётная запись GitHub). Нет учётной записи — скопируйте отчёт и отправьте автору любым способом.</p>
+      (нужна бесплатная учётная запись GitHub). Нет учётной записи — скопируйте отчёт и пришлите его в чат программы.</p>
+  </div>
+</dialog>
+
+<dialog id="dlg-chat" style="width: min(520px, calc(100vw - 32px))">
+  <div class="head"><h3>💬 Чат программы</h3><button data-close>✕</button></div>
+  <div class="body">
+    <p style="margin-top: 0">Вопросы, советы и новости программы. Отвечают автор и другие пользователи.</p>
+    <div class="about-acts"><button class="linkbtn" data-link="chat_tg">Telegram</button>
+      <button class="linkbtn" data-link="chat_max">MAX</button></div>
   </div>
 </dialog>
 
@@ -1196,7 +1282,7 @@ function flash(button, ok) {
 }
 
 function show(v) {
-  if (!["home", "download", "search", "keys", "review", "biblio"].includes(v)) v = "home";
+  if (!["home", "download", "search", "keys", "review", "biblio", "ai"].includes(v)) v = "home";
   view = v;
   document.querySelectorAll(".view").forEach((el) => { el.hidden = el.id !== "view-" + v; });
   $("btn-home").hidden = v === "home";
@@ -1204,7 +1290,8 @@ function show(v) {
   try { history.replaceState(null, "", "#" + v); } catch (e) {}
   window.scrollTo(0, 0);
   if (v === "download") loadLists();
-  if (v === "keys") renderKeySteps();
+  if (v === "keys") { if (keyTab === "perplexity") keyTab = "openalex"; renderKeySteps(); }
+  if (v === "ai") { keyTab = "perplexity"; renderKeySteps(); }
   if (v === "search") buildQueriesSoon();
   if (state) renderExtra();
 }
@@ -1242,13 +1329,14 @@ function renderExtra() {
   $("about-donate").hidden = !s.donate;
   renderUpdate(s.update);
   renderApiHub(s.keys);
+  renderAi();
   renderUpdateJob(s.update_job);
   renderKeysNote();
   renderSources();
   renderSearchProgress();
   renderExports();
   if (s.search.version !== searchVer) loadResults();
-  if (view === "keys") renderKeyStatus();
+  if (view === "keys" || view === "ai") renderKeyStatus();
   if (view === "download" && Date.now() - listsAt > 5000) loadLists();
 }
 
@@ -1494,6 +1582,18 @@ const GUIDE = {
         "выделите ключ мышкой и нажмите <kbd>Ctrl</kbd>+<kbd>C</kbd>. Если вместо ключа написано «pending», дождитесь письма " +
         "от Clarivate (обычно от нескольких часов до нескольких дней).", img: ["wos_04_key.jpg"] },
   ] },
+  perplexity: { field: "perplexity", steps: [
+    { t: "Откройте сайт Perplexity и войдите или зарегистрируйтесь: почта, Google или Apple. " +
+        "Сайт обычно открывается из России без VPN.", link: ["perplexity", "👉 Открыть perplexity.ai"] },
+    { t: "Внизу слева нажмите на значок с человечком рядом со своим именем.", img: ["perplexity_01_profile.jpg"] },
+    { t: "В меню выберите <b>«Все настройки»</b>.", img: ["perplexity_02_settings.jpg"] },
+    { t: "Слева внизу, в разделе «Другое», нажмите <b>«API-платформа»</b>.", img: ["perplexity_03_api_platform.jpg"] },
+    { t: "Откроется «perplexity api platform». Сначала пополните счёт: <b>«Добавить кредиты»</b> — для начала хватит " +
+        "нескольких долларов. Потом нажмите <b>«Создать API-ключ»</b> (или слева <b>«Ключи API»</b> → создать).",
+      img: ["perplexity_04_key.jpg"] },
+    { t: "Появится ключ — длинная строка, начинается с <code>pplx-</code>. Скопируйте его кнопкой копирования " +
+        "или выделите мышкой и нажмите <kbd>Ctrl</kbd>+<kbd>C</kbd>. Ключ показывают один раз — если потеряете, создайте новый." },
+  ] },
   openalex: { field: "openalex", steps: [
     { t: "Откройте сайт OpenAlex и нажмите вверху справа <b>«Sign up»</b> (регистрация; если аккаунт уже есть — <b>«Log in»</b>). " +
         "Подойдёт любая почта, это бесплатно.", link: ["openalex", "👉 Открыть openalex.org"] },
@@ -1503,6 +1603,9 @@ const GUIDE = {
 };
 function renderKeySteps() {
   const g = GUIDE[keyTab], done = recall("ad_steps", {});
+  // The AI view and the keys view share one set of key-* elements: only one of them holds it.
+  const box = keyTab === "perplexity" ? $("ai-steps") : $("key-steps");
+  (keyTab === "perplexity" ? $("key-steps") : $("ai-steps")).innerHTML = "";
   document.querySelectorAll("#key-tabs button").forEach((b) => b.classList.toggle("on", b.dataset.ktab === keyTab));
   let html = g.steps.map((st, i) => {
     const id = `${keyTab}-${i}`, acts = [];
@@ -1514,7 +1617,7 @@ function renderKeySteps() {
   }).join("");
   html += `<div class="step final"><div class="n">${g.steps.length + 1}</div><div>
     <div class="t"><b>Вставьте ключ сюда:</b> щёлкните в поле, нажмите <kbd>Ctrl</kbd>+<kbd>V</kbd>, затем «Проверить ключ».</div>
-    <div class="keybox"><input id="key-input" type="password" autocomplete="off" spellcheck="false" placeholder="ключ ${SRC[keyTab]}">
+    <div class="keybox"><input id="key-input" type="password" autocomplete="off" spellcheck="false" placeholder="ключ ${SRC[keyTab] || "Perplexity"}">
       <button id="key-eye" title="Показать или скрыть">👁</button></div>
     ${keyTab === "scopus" ? '<div class="keybox"><input id="key-inst" type="password" autocomplete="off" spellcheck="false" placeholder="insttoken — необязательно, если его дала библиотека"></div>' : ""}
     <div class="acts"><button class="linkbtn" id="key-check">✔ Проверить ключ</button><button id="key-save">Сохранить без проверки</button>
@@ -1526,7 +1629,7 @@ function renderKeySteps() {
       <div class="acts"><button data-copy="inst-letter">📋 Скопировать письмо</button>
         <span class="recognized">Отправьте в библиотеку; если она не поможет — в поддержку Elsevier (dev.elsevier.com → «Support»).</span></div></details>`;
   }
-  $("key-steps").innerHTML = html;
+  box.innerHTML = html;
   $("key-eye").onclick = () => {
     for (const id of ["key-input", "key-inst"]) { const el = $(id); if (el) el.type = el.type === "password" ? "text" : "password"; }
   };
@@ -1554,6 +1657,13 @@ async function checkKey() {
   if (!Object.keys(body).length && !hasKey(keyTab) && keyTab !== "openalex") { showKeyRes(false, "Сначала вставьте ключ в поле (Ctrl+V)."); return; }
   showKeyRes(null, "Проверяю… (до полуминуты)");
   try {
+    if (keyTab === "perplexity") {
+      // Checked and, if it works, saved by the program in one go.
+      const res = await api("/api/ai_check", body);
+      if (res.ok && Object.keys(body).length) { clearKeyInputs(); showKeyRes(true, res.message + " Ключ сохранён."); }
+      else showKeyRes(res.ok, res.message);
+      return;
+    }
     const res = await api("/api/keys_check", { source: keyTab, ...body });
     if (res.ok && Object.keys(body).length) {
       await api("/api/keys_save", body);
@@ -1773,6 +1883,53 @@ async function openDonate() {
 $("home-donate").onclick = openDonate;
 $("home-about").onclick = () => $("dlg-about").showModal();
 $("go-api").onclick = () => show("keys");
+$("go-ai").onclick = () => show("ai");
+$("home-chat").onclick = () => $("dlg-chat").showModal();
+
+// ---- AI helper (v7.6) -----------------------------------------------------------
+let aiBusy = false;
+function aiOn() { return hasKey("perplexity"); }
+function costText(cost) { return cost ? ` Потрачено ≈ $${Number(cost).toFixed(cost < 0.01 ? 4 : 2)}.` : ""; }
+function renderAi() {
+  const chk = state.key_checks && state.key_checks.perplexity, on = aiOn(), bad = on && chk && !chk.ok;
+  $("go-ai").classList.toggle("ok", on && !bad);
+  $("go-ai").classList.toggle("warn", !!bad);
+  $("ai-bar-state").textContent = !on ? "ВЫКЛ" : bad ? "⚠" : "ВКЛ ✓";
+  $("ai-bar-sub").textContent = !on ? "не подключён — нажмите, чтобы подключить"
+    : bad ? "ключ не работает: " + chk.message : "подключён: подбирает слова для поиска и помогает отобрать статьи";
+  if (!aiBusy) $("btn-ai-search").textContent = on ? "🤖 Подобрать слова с ИИ" : "🤖 Подключить ИИ-помощник";
+  $("rv-ai-off").hidden = on;
+  $("rv-ai-on").hidden = !on;
+}
+async function aiSearch() {
+  if (!aiOn()) { show("ai"); return; }
+  const topic = $("ai-topic").value.trim(), note = $("ai-search-note"), btn = $("btn-ai-search");
+  if (topic.length < 3) { note.textContent = "Опишите тему хотя бы парой слов."; return; }
+  store("ad_ai_topic", topic);
+  aiBusy = true; btn.disabled = true; btn.textContent = "⏳ ИИ думает… (до минуты)";
+  note.textContent = ""; $("ai-search-src").innerHTML = "";
+  try {
+    const res = await api("/api/ai_search", { topic });
+    if (res.error) { note.innerHTML = `<span style="color: var(--red)">${esc(res.error)}</span>`; return; }
+    $("kw").value = res.lines.join("\n");
+    $("f-match").value = "all";
+    qDirty = { scopus: false, wos: false };
+    $("hints").innerHTML = "";
+    store("ad_search", searchParams());
+    buildQueries();
+    note.innerHTML = "✓ Слова — в поле ниже: каждая строка — одно понятие с синонимами через «;». " +
+      "Проверьте их, ИИ может ошибаться." + costText(res.cost);
+    const src = (res.sources || []).filter((x) => /^https?:\/\//.test(x.url || ""));
+    $("ai-search-src").innerHTML = (res.note ? `🤖 ${esc(res.note)}<br>` : "") + (src.length ? "Где ИИ смотрел: " +
+      src.map((x) => `<a href="${esc(x.url)}" target="_blank" rel="noopener">${esc(x.title || x.url)}</a>`).join(" · ") : "");
+  } catch (e) {
+    note.textContent = "Не получилось: " + e.message;
+  } finally {
+    aiBusy = false; btn.disabled = false; renderAi();
+  }
+}
+$("btn-ai-search").onclick = aiSearch;
+$("ai-topic").value = recall("ad_ai_topic", "");
 function renderApiHub(keys) {
   const ok = !!(keys && keys.openalex && keys.wos);
   $("go-api").classList.toggle("ok", ok);
@@ -1886,7 +2043,7 @@ document.addEventListener("click", (e) => {
 // ===== v7.0: literature review — screening, reference list, PRISMA ============
 const H = { headers: { "X-Token": TOKEN } };
 const DEC_LABEL = { include: "✓ подходит", maybe: "? под вопросом", exclude: "✗ не подходит", "": "не отобрана" };
-const RV = { list: "", records: [], cur: "", filter: "undecided", keywords: [], timer: 0 };
+const RV = { list: "", records: [], cur: "", filter: "undecided", keywords: [], timer: 0, aiJob: {}, aiTopicFor: "" };
 const BB = { list: "", timer: 0, scopeTouched: false };
 
 async function inboxFiles() {
@@ -1919,9 +2076,13 @@ async function refreshReview() {
   let d;
   try { d = await (await fetch("/api/review?list=" + encodeURIComponent(RV.list), H)).json(); } catch (e) { return; }
   if (d.error) { $("rv-status").textContent = d.error; return; }
-  RV.records = d.records; RV.keywords = d.keywords || []; RV.job = d.job || {};
+  RV.records = d.records; RV.keywords = d.keywords || []; RV.job = d.job || {}; RV.aiJob = d.ai_job || {};
+  if (RV.aiTopicFor !== RV.list) {
+    RV.aiTopicFor = RV.list;
+    $("rv-ai-topic").value = d.ai_topic || recall("ad_ai_topic", "") || RV.keywords.join(", ");
+  }
   renderReview();
-  if (RV.job.running && view === "review") RV.timer = setTimeout(refreshReview, 1500);
+  if ((RV.job.running || RV.aiJob.running) && view === "review") RV.timer = setTimeout(refreshReview, 1500);
 }
 function rvVisible() {
   return RV.records.filter((r) => RV.filter === "all" || (RV.filter === "undecided" ? !r.decision : r.decision === RV.filter));
@@ -1936,7 +2097,22 @@ function renderReview() {
   $("rv-status").innerHTML = j.running ? `⏳ Загружаю аннотации и данные статей: ${j.done} из ${j.total}…`
     : (j.error ? `<span style="color: var(--red)">${esc(j.error)}</span>` : (all.length ? "" : "В этом списке нет DOI."));
   document.querySelectorAll("#rv-filter button").forEach((b) => b.classList.toggle("on", b.dataset.rvf === RV.filter));
+  renderReviewAi();
   renderReviewCard();
+}
+function renderReviewAi() {
+  const j = RV.aiJob || {}, adv = RV.records.filter((r) => r.ai), open = adv.filter((r) => !r.decision);
+  $("rv-ai-run").hidden = !!j.running;
+  $("rv-ai-stop").hidden = !j.running;
+  $("rv-ai-accept").hidden = !!j.running || !open.length;
+  $("rv-ai-accept").textContent = `✓ Принять советы ИИ: ${open.length}`;
+  const c = (k) => adv.filter((r) => r.ai.verdict === k).length;
+  let txt = j.running ? `⏳ ИИ читает аннотации: ${j.done} из ${j.total}…`
+    : (j.error ? `<span style="color: var(--red)">${esc(j.error)}</span>` : "");
+  if (adv.length) txt += (txt ? "<br>" : "") + `Советы ИИ: ✓ подходит — <b>${c("include")}</b>, ` +
+    `? под вопросом — <b>${c("maybe")}</b>, ✗ не подходит — <b>${c("exclude")}</b>.`;
+  if (j.cost) txt += costText(j.cost);
+  $("rv-ai-status").innerHTML = txt;
 }
 function highlight(text) {
   let out = esc(text);
@@ -1972,6 +2148,8 @@ function renderReviewCard() {
   $("rv-body").innerHTML = `<h3 id="rv-title">${esc(r.title || r.doi)}</h3>` +
     `<div class="rv-meta">${who ? esc(who) + "<br>" : ""}${esc(where)}${where ? " · " : ""}` +
     `<button class="link" data-doi="${esc(r.doi)}">открыть статью ↗</button> ${badge}</div>` +
+    (r.ai ? `<div class="rv-ai-hint ${esc(r.ai.verdict)}">🤖 ИИ советует: <b>${DEC_LABEL[r.ai.verdict] || ""}</b>` +
+      `${r.ai.why ? " — " + esc(r.ai.why) : ""}</div>` : "") +
     `<div class="rv-abstract">${abstract}</div>`;
 }
 function rvMove(step) {
@@ -2004,6 +2182,19 @@ document.addEventListener("keydown", (e) => {
   e.preventDefault();
 });
 $("rv-list").onchange = () => selectReview($("rv-list").value);
+$("rv-ai-run").onclick = async () => {
+  const topic = $("rv-ai-topic").value.trim();
+  store("ad_ai_topic", topic);
+  const res = await api("/api/ai_screen", { list: RV.list, topic });
+  if (res.error) { $("rv-ai-status").innerHTML = `<span style="color: var(--red)">${esc(res.error)}</span>`; return; }
+  if (res.nothing) {
+    $("rv-ai-status").textContent = "Спрашивать нечего: у всех неотобранных статей уже есть совет ИИ или ещё загружаются аннотации.";
+    return;
+  }
+  refreshReview();
+};
+$("rv-ai-stop").onclick = () => api("/api/ai_screen_stop", { list: RV.list });
+$("rv-ai-accept").onclick = async () => { await api("/api/ai_accept", { list: RV.list }); refreshReview(); };
 $("rv-prev").onclick = () => rvMove(-1);
 $("rv-next").onclick = () => rvMove(1);
 $("rv-save").onclick = async () => {
