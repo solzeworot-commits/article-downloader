@@ -554,6 +554,43 @@ https://github.com/solzeworot-commits/article-downloader/releases/download/porta
 - **Логотип** (вариант C «DOI → PDF») нарисован и выбран автором, но в программу **не**
   встроен: автор попросил подождать. Картинки — у автора; `icon.ico` пока старый.
 
+## 2о. Версия 7.7: ИИ-помощник на выбор из пяти сервисов
+
+- Автор попросил выбор: **Perplexity, ChatGPT (OpenAI), Claude (Anthropic), GigaChat (Сбер), YandexGPT
+  (Яндекс)**. Ключ у каждого пользователя свой; поля в `keys.json`: `perplexity`, `openai`, `anthropic`,
+  `gigachat`, `yandex` + `yandex_folder` (`ai.KEY_FIELDS`). Какой сервис работает — `settings.json`
+  `ai_provider` (ставится после успешной «Проверить ключ» или кнопкой «Пусть помощник работает через …»);
+  если выбранного ключа нет — первый сервис с ключом (`app.ai_service()`), `state.ai = {provider, title}`.
+- `ai_helper.py` переписан: `ask(provider, keys, …)`, `check_key(provider, keys)`,
+  `suggest_search(provider, keys, topic)`, `screen(provider, keys, articles, topic)`; общий разбор ошибок
+  (`region` — страна не обслуживается, `no_money`, `bad_key`, `quota`, `cert` — нет сертификата Минцифры).
+  - **OpenAI:** `POST /v1/chat/completions`; модель — самая новая `gpt-N-mini` из `GET /v1/models` (иначе
+    gpt-4.1-mini / gpt-4o-mini / gpt-5-mini); `reasoning_effort: low`, `max_completion_tokens`,
+    `response_format` json_schema strict. Нет денег — 429 `insufficient_quota`; Россия — 403
+    `unsupported_country_region_territory`.
+  - **Anthropic:** `POST /v1/messages`, `anthropic-version: 2026-10-21`, модель `claude-opus-5-5`
+    (по умолчанию из руководства Claude API; в 10–40 раз дороже Haiku 5.5 — если автор захочет дешевле,
+    поменять `ANTHROPIC_MODELS`), `output_config: {effort: "low", format: json_schema}`, `fallbacks: "default"`
+    с бетой `server-side-fallback-2026-07-01` (при 400 про beta/fallbacks — повтор без них), `stop_reason:
+    "refusal"` — понятная ошибка. Цена в строке «Потрачено» — по токенам ($4 / $20 за 1M). Нет денег —
+    400 «credit balance is too low».
+  - **GigaChat:** «Ключ авторизации» → токен на 30 минут (`POST ngw.devices.sberbank.ru:9443/api/v2/oauth`,
+    `RqUID`, scope `GIGACHAT_API_PERS`, при ошибке про scope — B2B, CORP), потом
+    `POST gigachat.devices.sberbank.ru/api/v1/chat/completions`; модели GigaChat-2-Pro → GigaChat-2 → GigaChat
+    (402 — следующая). Сертификат Сбера выдан Минцифры: без него в хранилище Windows — сообщение со ссылкой
+    на gosuslugi.ru/crt. **На настоящем ключе не проверялось.**
+  - **YandexGPT:** `POST llm.api.cloud.yandex.net/foundationModels/v1/completion`, `Authorization: Api-Key`,
+    `x-folder-id`, `modelUri gpt://<folder>/yandexgpt/latest` (запасной `yandexgpt-lite/latest`). 403 —
+    подсказка про роль `ai.languageModels.user`. **На настоящем ключе не проверялось.**
+- Окно: вкладки сервисов на экране помощника (`AI_TABS`, `AI_INFO` — где работает и чем платить), шаги со
+  скриншотами автора для ChatGPT (`openai_0*.jpg`) и Claude (`claude_0*.jpg`); у GigaChat и YandexGPT — шаги
+  без картинок. **На скриншотах удалены списки чатов и артефактов, размыты имя, почта, баланс; на скрине
+  входа OpenAI настоящие имя, почта и фото заменены на «Your Name / you@example.com» и силуэт; ключи
+  закрашены целиком.** При замене скриншотов делать так же.
+- Тест `tests/ai_test.py`: поддельные серверы всех пяти сервисов — правильный и неверный ключ, пустой счёт,
+  регион (OpenAI), выбор модели OpenAI, отказ (Claude), повтор без беты (Claude), другой scope и модель
+  без оплаты (GigaChat), нет ID каталога и нет роли (YandexGPT).
+
 ## 3. Что проверено в 6.0 (Linux, Chromium в Xvfb, поддельное издательство)
 
 Настоящие сайты издательств из среды сборки были закрыты сетью, поэтому всё
@@ -594,7 +631,8 @@ https://github.com/solzeworot-commits/article-downloader/releases/download/porta
    - подпись «access provided by …» — только подсказка, распознаётся эвристикой.
 3. Код скачивания — это v5.24, он работал у пользователя. В v6 менялись только запуск
    браузера и оболочка вокруг. Поиск `title:` в v6 не проверялся.
-4. **ИИ-помощник на настоящем ключе Perplexity проверен только частично** (из среды сборки API
+4. **ИИ-помощник 7.7: GigaChat и YandexGPT на настоящих ключах не проверялись; Claude и ChatGPT — тоже
+   (форматы — по документации). Perplexity проверен только частично** (из среды сборки API
    закрыт): в 7.6 автор получил 403 `chat_completions_not_available` от старого адреса —
    исправлено в 7.6.1. Ещё проверить: ответ Agent API на ключ, код и текст ошибки при пустом
    счёте, принимает ли `fast-search` `response_format`, сколько реально стоит предотбор 100 статей.

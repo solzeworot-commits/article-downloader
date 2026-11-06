@@ -1,4 +1,4 @@
-﻿ARTICLE DOWNLOADER, portable version 7.6.2
+﻿ARTICLE DOWNLOADER, portable version 7.7
 ========================================
 
 Runs on any computer with Windows 10 or 11. Nothing to install: Python and everything
@@ -49,17 +49,20 @@ You can also drop a DOI list file onto the icon: downloading starts at once.
 AI HELPER (OPTIONAL)
 --------------------
 The «🤖 AI helper» bar under the four buttons: red — not connected, green — connected.
-It works on your own Perplexity API key:
+It works on your own key of one of five services (tabs in the helper window): Perplexity,
+ChatGPT (OpenAI), Claude (Anthropic), GigaChat (Sber) or YandexGPT (Yandex). OpenAI and
+Anthropic do not serve users in Russia; GigaChat and YandexGPT take Russian cards.
+What it does:
   • «Topic in your own words» in «🔎 Get a DOI list»: describe the topic as you would to
     a friend, the AI picks English terms and synonyms, the program builds the queries;
   • «🤖 AI pre-screening» in «📝 Screen articles»: the AI reads the abstracts and says
     whether each article fits, with a reason. You still decide; «✓ Accept the AI advice»
     turns the advice into marks, and you can change any of them.
-To connect: click the bar and follow the steps with screenshots (sign up at
-perplexity.ai → All settings → API platform → top up the balance → create a key → paste
-it into the program). Picking words costs less than a cent, pre-screening a hundred
-articles a few cents; the money goes to Perplexity, not to the author. Only the topic and
-the titles with abstracts go to Perplexity; the key stays on this computer.
+To connect: click the bar, choose the service tab and follow the steps with
+screenshots (sign up → top up the API balance → create a key → paste it into the program
+→ «Check the key»). Picking words costs less than a cent, pre-screening a hundred articles
+from a few cents; the money goes to the service, not to the author. Only the topic and the
+titles with abstracts go to the service; the key stays on this computer.
 
 
 FIRST START ON A NEW COMPUTER: INSTITUTIONAL SIGN-IN

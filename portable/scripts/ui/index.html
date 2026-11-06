@@ -361,6 +361,8 @@
   .rv-ai-hint.exclude { background: #fef2f2; border-color: #fca5a5; }
   #rv-ai-topic { min-height: 48px; font-size: 15px; font-family: inherit; margin-top: 4px; }
   .ai-what li { margin: 6px 0; }
+  .ai-info { background: var(--blue-soft); border-radius: 10px; padding: 10px 14px; margin-bottom: 8px; }
+  #ai-use-line { margin-bottom: 10px; min-height: 4px; }
 
   @media (max-width: 640px) {
     .home-buttons { grid-template-columns: 1fr; }
@@ -401,7 +403,7 @@
       <button class="api-hub" id="go-api" title="Шаг 1: бесплатные ключи API — без них поиск статей часто не работает">
         <span class="step-n">1</span><b id="api-hub-label">API</b><small id="api-hub-sub">получить ключи</small></button>
     </div>
-    <button class="ai-bar" id="go-ai" title="ИИ-помощник на вашем ключе Perplexity: подбирает слова для поиска и помогает отобрать статьи">
+    <button class="ai-bar" id="go-ai" title="ИИ-помощник на вашем ключе (Perplexity, ChatGPT, Claude, GigaChat или YandexGPT): подбирает слова для поиска и помогает отобрать статьи">
       <span class="ai-ico">🤖</span><span class="ai-txt"><b>ИИ-помощник</b><small id="ai-bar-sub">не подключён — нажмите, чтобы подключить</small></span>
       <span class="ai-state" id="ai-bar-state">ВЫКЛ</span></button>
     <div class="home-small">
@@ -660,7 +662,7 @@ extraction"></textarea>
 
   <section id="view-ai" class="view" hidden>
     <div class="card">
-      <h2><span>🤖 ИИ-помощник</span><small>работает на вашем ключе Perplexity</small></h2>
+      <h2><span>🤖 ИИ-помощник</span><small>работает на вашем ключе — выберите сервис ниже</small></h2>
       <div>Помощник необязательный: программа работает и без него. С ним быстрее начать поиск и отобрать статьи.</div>
       <ul class="ai-what">
         <li>✏ <b>Тема своими словами → слова для поиска.</b> Опишите тему как другу, ИИ подберёт английские термины и
@@ -669,14 +671,18 @@ extraction"></textarea>
           Решение всё равно за вами. Кнопка — в окне «📝 Отобрать статьи».</li>
       </ul>
       <div class="why-keys">
-        <div><b class="src">Сколько стоит</b> Perplexity списывает деньги со счёта вашего API за каждый запрос: подбор слов —
-          меньше цента, предотбор сотни статей — несколько центов. Программа показывает, сколько потрачено.
-          Автору программы эти деньги не идут.</div>
-        <div><b class="src">Как оплатить</b> Счёт API пополняется картой зарубежного банка или через Apple Pay.
-          Российские карты Perplexity не принимает.</div>
-        <div><b class="src">Что уходит в Perplexity</b> Только тема и названия с аннотациями статей. Ключ хранится только
+        <div><b class="src">Сколько стоит</b> Деньги за каждый запрос списывает выбранный сервис со счёта вашего API:
+          подбор слов — меньше цента, предотбор сотни статей — от нескольких центов. Автору программы эти деньги не идут.</div>
+        <div><b class="src">Что уходит в сервис</b> Только тема и названия с аннотациями статей. Ключ хранится только
           на этом компьютере. <b>Никому не показывайте ключ:</b> по нему тратят ваши деньги.</div>
       </div>
+    </div>
+    <div class="tabs" id="ai-tabs">
+      <button data-aitab="perplexity">Perplexity <span id="at-perplexity"></span></button>
+      <button data-aitab="openai">ChatGPT <span id="at-openai"></span></button>
+      <button data-aitab="anthropic">Claude <span id="at-anthropic"></span></button>
+      <button data-aitab="gigachat">GigaChat <span id="at-gigachat"></span></button>
+      <button data-aitab="yandex">YandexGPT (Алиса) <span id="at-yandex"></span></button>
     </div>
     <div class="card" id="ai-steps"></div>
   </section>
@@ -1252,6 +1258,15 @@ $("btn-restart-browser").onclick = () => api("/api/restart_browser");
 
 // ===== v6.1: screens, lists in inbox, DOI search, key guide ===================
 const SRC = { scopus: "Scopus", wos: "Web of Science", openalex: "OpenAlex", export: "экспорт" };
+const AI_TABS = ["perplexity", "openai", "anthropic", "gigachat", "yandex"];
+const AI_TITLE = { perplexity: "Perplexity", openai: "ChatGPT", anthropic: "Claude", gigachat: "GigaChat", yandex: "YandexGPT" };
+const AI_INFO = {
+  perplexity: "✅ Работает из России. Оплата: зарубежная карта или Apple Pay. Сам ищет в интернете — лучше всех подбирает слова для поиска.",
+  openai: "⛔ Из России не работает: OpenAI закрыл доступ. Оплата: зарубежная карта. Подбор слов — меньше цента.",
+  anthropic: "⛔ Из России не работает: Anthropic закрыл доступ. Оплата: зарубежная карта. Модель Claude Opus 5.5 сильная, но дороже: предотбор сотни статей — примерно 30–50 центов.",
+  gigachat: "✅ Работает в России, оплата российской картой, для физлиц есть бесплатный пакет (Freemium). Нужны сертификаты Минцифры (шаг 4).",
+  yandex: "✅ Работает в России, оплата российской картой через Yandex Cloud. Понадобятся ключ и ID каталога.",
+};
 let view = "home", searchVer = 0, records = [], selected = new Set(), qDirty = { scopus: false, wos: false };
 let searchMode = null, keyTab = "openalex", listsAt = 0, chooseBusy = false, loadingResults = false, searchMsg = "";
 
@@ -1288,8 +1303,8 @@ function show(v) {
   try { history.replaceState(null, "", "#" + v); } catch (e) {}
   window.scrollTo(0, 0);
   if (v === "download") loadLists();
-  if (v === "keys") { if (keyTab === "perplexity") keyTab = "openalex"; renderKeySteps(); }
-  if (v === "ai") { keyTab = "perplexity"; renderKeySteps(); }
+  if (v === "keys") { if (AI_TABS.includes(keyTab)) keyTab = "openalex"; renderKeySteps(); }
+  if (v === "ai") { keyTab = (state && state.ai && state.ai.provider) || recall("ad_aitab", "perplexity"); renderKeySteps(); }
   if (v === "search") buildQueriesSoon();
   if (state) renderExtra();
 }
@@ -1592,6 +1607,48 @@ const GUIDE = {
     { t: "Появится ключ — длинная строка, начинается с <code>pplx-</code>. Скопируйте его кнопкой копирования " +
         "или выделите мышкой и нажмите <kbd>Ctrl</kbd>+<kbd>C</kbd>. Ключ показывают один раз — если потеряете, создайте новый." },
   ] },
+  openai: { field: "openai", steps: [
+    { t: "Откройте сайт OpenAI Platform и войдите: почта, Google, Apple, Microsoft или телефон. Аккаунт тот же, что в ChatGPT, " +
+        "но у API свой счёт — подписка ChatGPT Plus сюда не относится.", link: ["openai_keys", "👉 Открыть platform.openai.com"],
+      img: ["openai_01_login.jpg"] },
+    { t: "Пополните счёт API: слева внизу <b>«Go to Billing»</b> → <b>«Add credits»</b>. Для начала хватит нескольких долларов.",
+      link: ["openai_billing", "👉 Открыть Billing"] },
+    { t: "Слева выберите <b>«API Keys»</b> и нажмите вверху справа <b>«Create new secret key»</b>.", img: ["openai_02_keys.jpg"] },
+    { t: "<b>Name</b>: <code>ArticleDownloader</code>; <b>Срок действия</b>: <b>«Никогда»</b> — иначе ключ со временем перестанет " +
+        "работать. Нажмите <b>«Create secret key»</b>.", copy: "ArticleDownloader", img: ["openai_03_create.jpg"] },
+    { t: "Появится ключ — начинается с <code>sk-</code>. Нажмите <b>«Copy»</b>. Ключ показывают один раз — если потеряете, создайте новый.",
+      img: ["openai_04_copy.jpg"] },
+  ] },
+  anthropic: { field: "anthropic", steps: [
+    { t: "Войдите в Claude (claude.ai), нажмите внизу слева на своё имя и выберите <b>«Получить ключи API»</b> — откроется " +
+        "Claude Console. Можно сразу кнопкой ниже.", link: ["anthropic_keys", "👉 Открыть Claude Console"], img: ["claude_01_menu.jpg"] },
+    { t: "Пополните счёт API: <b>Billing</b> → <b>«Buy credits»</b>; баланс виден вверху справа. Подписка Claude Pro или Max " +
+        "сюда не относится — у API свой счёт.", link: ["anthropic_billing", "👉 Открыть Billing"] },
+    { t: "В разделе <b>«Ключи API»</b> нажмите <b>«Создать ключ»</b>.", img: ["claude_02_keys.jpg"] },
+    { t: "Если появится окно про «федерацию удостоверений», нажмите внизу <b>«Продолжить через API-ключ»</b>.",
+      img: ["claude_03_api_key.jpg"] },
+    { t: "<b>Имя</b>: <code>ArticleDownloader</code>; <b>Истекает</b>: самый долгий срок (если есть «Никогда» — его), иначе " +
+        "через месяц ключ перестанет работать. Нажмите <b>«Создать ключ»</b>.", copy: "ArticleDownloader", img: ["claude_04_create.jpg"] },
+    { t: "Нажмите <b>«Копировать ключ»</b> — ключ начинается с <code>sk-ant-</code>. Его показывают один раз.", img: ["claude_05_copy.jpg"] },
+  ] },
+  gigachat: { field: "gigachat", steps: [
+    { t: "Откройте страницу GigaChat API для разработчиков и войдите по Сбер ID.", link: ["gigachat", "👉 Открыть developers.sber.ru"] },
+    { t: "Создайте проект <b>GigaChat API</b> для физических лиц: тариф <b>Freemium</b> — бесплатный пакет токенов." },
+    { t: "В настройках проекта нажмите <b>«Получить ключ»</b> и скопируйте <b>«Ключ авторизации»</b> (Authorization Key) — " +
+        "длинную строку из латинских букв и цифр." },
+    { t: "Если программа напишет про сертификат: установите сертификаты Минцифры (Госуслуги, вариант для Windows) и " +
+        "перезапустите программу.", link: ["gosuslugi_crt", "👉 Сертификаты Минцифры"] },
+  ] },
+  yandex: { field: "yandex", steps: [
+    { t: "Откройте консоль Yandex Cloud, войдите по Яндекс ID и создайте платёжный аккаунт: оплата российской картой, " +
+        "новым пользователям обычно дают стартовый грант.", link: ["yandex_cloud", "👉 Открыть console.yandex.cloud"] },
+    { t: "Откройте свой каталог (обычно «default») и скопируйте его <b>ID</b> — строку вида <code>b1g…</code> вверху страницы. " +
+        "Он понадобится во втором поле внизу." },
+    { t: "В каталоге: <b>«Сервисные аккаунты»</b> → <b>«Создать»</b>, имя <code>article-downloader</code>, роль " +
+        "<code>ai.languageModels.user</code>.", copy: "ai.languageModels.user" },
+    { t: "Откройте этот сервисный аккаунт → <b>«Создать новый ключ»</b> → <b>«Создать API-ключ»</b> и скопируйте " +
+        "<b>секретный ключ</b>: его показывают один раз." },
+  ] },
   openalex: { field: "openalex", steps: [
     { t: "Откройте сайт OpenAlex и нажмите вверху справа <b>«Sign up»</b> (регистрация; если аккаунт уже есть — <b>«Log in»</b>). " +
         "Подойдёт любая почта, это бесплатно.", link: ["openalex", "👉 Открыть openalex.org"] },
@@ -1602,10 +1659,13 @@ const GUIDE = {
 function renderKeySteps() {
   const g = GUIDE[keyTab], done = recall("ad_steps", {});
   // The AI view and the keys view share one set of key-* elements: only one of them holds it.
-  const box = keyTab === "perplexity" ? $("ai-steps") : $("key-steps");
-  (keyTab === "perplexity" ? $("key-steps") : $("ai-steps")).innerHTML = "";
+  const isAi = AI_TABS.includes(keyTab);
+  const box = isAi ? $("ai-steps") : $("key-steps");
+  (isAi ? $("key-steps") : $("ai-steps")).innerHTML = "";
   document.querySelectorAll("#key-tabs button").forEach((b) => b.classList.toggle("on", b.dataset.ktab === keyTab));
-  let html = g.steps.map((st, i) => {
+  document.querySelectorAll("#ai-tabs button").forEach((b) => b.classList.toggle("on", b.dataset.aitab === keyTab));
+  let html = isAi ? `<div class="ai-info">${AI_INFO[keyTab]}</div><div id="ai-use-line"></div>` : "";
+  html += g.steps.map((st, i) => {
     const id = `${keyTab}-${i}`, acts = [];
     if (st.link) acts.push(`<button class="linkbtn" data-link="${st.link[0]}">${st.link[1]}</button>`);
     if (st.copy) acts.push(`<button data-copytext="${esc(st.copy)}">📋 Скопировать «${esc(st.copy)}»</button>`);
@@ -1615,9 +1675,10 @@ function renderKeySteps() {
   }).join("");
   html += `<div class="step final"><div class="n">${g.steps.length + 1}</div><div>
     <div class="t"><b>Вставьте ключ сюда:</b> щёлкните в поле, нажмите <kbd>Ctrl</kbd>+<kbd>V</kbd>, затем «Проверить ключ».</div>
-    <div class="keybox"><input id="key-input" type="password" autocomplete="off" spellcheck="false" placeholder="ключ ${SRC[keyTab] || "Perplexity"}">
+    <div class="keybox"><input id="key-input" type="password" autocomplete="off" spellcheck="false" placeholder="ключ ${SRC[keyTab] || AI_TITLE[keyTab]}">
       <button id="key-eye" title="Показать или скрыть">👁</button></div>
     ${keyTab === "scopus" ? '<div class="keybox"><input id="key-inst" type="password" autocomplete="off" spellcheck="false" placeholder="insttoken — необязательно, если его дала библиотека"></div>' : ""}
+    ${keyTab === "yandex" ? '<div class="keybox"><input id="key-inst" type="text" autocomplete="off" spellcheck="false" placeholder="ID каталога (folder ID), например b1g…"></div>' : ""}
     <div class="acts"><button class="linkbtn" id="key-check">✔ Проверить ключ</button><button id="key-save">Сохранить без проверки</button>
       <span id="key-saved" class="recognized"></span></div>
     <div class="check-res" id="key-res"></div></div></div>`;
@@ -1638,7 +1699,7 @@ function renderKeySteps() {
 function keyBody() {
   const body = {}, value = $("key-input").value.trim(), inst = $("key-inst");
   if (value) body[GUIDE[keyTab].field] = value;
-  if (inst && inst.value.trim()) body.scopus_insttoken = inst.value.trim();
+  if (inst && inst.value.trim()) body[keyTab === "yandex" ? "yandex_folder" : "scopus_insttoken"] = inst.value.trim();
   return body;
 }
 function showKeyRes(ok, text) {
@@ -1655,9 +1716,9 @@ async function checkKey() {
   if (!Object.keys(body).length && !hasKey(keyTab) && keyTab !== "openalex") { showKeyRes(false, "Сначала вставьте ключ в поле (Ctrl+V)."); return; }
   showKeyRes(null, "Проверяю… (до полуминуты)");
   try {
-    if (keyTab === "perplexity") {
-      // Checked and, if it works, saved by the program in one go.
-      const res = await api("/api/ai_check", body);
+    if (AI_TABS.includes(keyTab)) {
+      // Checked and, if it works, saved and chosen by the program in one go.
+      const res = await api("/api/ai_check", { provider: keyTab, ...body });
       if (res.ok && Object.keys(body).length) { clearKeyInputs(); showKeyRes(true, res.message + " Ключ сохранён."); }
       else showKeyRes(res.ok, res.message);
       return;
@@ -1684,6 +1745,7 @@ async function saveKey() {
 async function deleteKey() {
   const body = { [GUIDE[keyTab].field]: null };
   if (keyTab === "scopus") body.scopus_insttoken = null;
+  if (keyTab === "yandex") body.yandex_folder = null;
   await api("/api/keys_save", body);
   showKeyRes(null, "Ключ удалён.");
 }
@@ -1692,12 +1754,24 @@ function renderKeyStatus() {
     const chk = state.key_checks[src];
     $("kt-" + src).textContent = state.keys[src] ? (chk && !chk.ok ? "⚠" : "✓") : "";
   }
+  const active = state.ai ? state.ai.provider : "";
+  for (const p of AI_TABS) {
+    const chk = state.key_checks[p];
+    $("at-" + p).textContent = state.keys[p] ? (p === active ? "★" : (chk && !chk.ok ? "⚠" : "✓")) : "";
+  }
   const el = $("key-saved");
   if (!el) return;
   const k = state.keys[GUIDE[keyTab].field];
-  el.innerHTML = k ? `Сохранён: <b>${esc(k)}</b>${keyTab === "scopus" && state.keys.scopus_insttoken ? " + insttoken" : ""} <button class="link" id="key-del">удалить</button>`
+  el.innerHTML = k ? `Сохранён: <b>${esc(k)}</b>${keyTab === "scopus" && state.keys.scopus_insttoken ? " + insttoken" : ""}` +
+      `${keyTab === "yandex" && state.keys.yandex_folder ? " + ID каталога" : ""} <button class="link" id="key-del">удалить</button>`
     : "Ключ ещё не сохранён.";
   if ($("key-del")) $("key-del").onclick = deleteKey;
+  const use = $("ai-use-line");
+  if (use) {
+    use.innerHTML = !k ? "" : keyTab === active ? "★ Помощник сейчас работает через этот сервис."
+      : `<button class="linkbtn" id="ai-use">✓ Пусть помощник работает через ${esc(AI_TITLE[keyTab])}</button>`;
+    if ($("ai-use")) $("ai-use").onclick = async () => { await api("/api/ai_use", { provider: keyTab }); };
+  }
 }
 
 // ---- wiring ---------------------------------------------------------------------
@@ -1750,6 +1824,7 @@ document.addEventListener("click", async (e) => {
   if (t.dataset.copy) flash(t, await copyText($(t.dataset.copy).textContent));
   if (t.dataset.copytext) flash(t, await copyText(t.dataset.copytext));
   if (t.dataset.ktab) { keyTab = t.dataset.ktab; renderKeySteps(); }
+  if (t.dataset.aitab) { keyTab = t.dataset.aitab; store("ad_aitab", keyTab); renderKeySteps(); }
   if (t.dataset.mode) setMode(t.dataset.mode);
   if (t.dataset.act === "open-inbox") api("/api/open_inbox");
 });
@@ -1885,15 +1960,17 @@ $("go-ai").onclick = () => show("ai");
 
 // ---- AI helper (v7.6) -----------------------------------------------------------
 let aiBusy = false;
-function aiOn() { return hasKey("perplexity"); }
+function aiOn() { return !!(state && state.ai && state.ai.provider); }
 function costText(cost) { return cost ? ` Потрачено ≈ $${Number(cost).toFixed(cost < 0.01 ? 4 : 2)}.` : ""; }
 function renderAi() {
-  const chk = state.key_checks && state.key_checks.perplexity, on = aiOn(), bad = on && chk && !chk.ok;
+  const on = aiOn(), title = on ? state.ai.title : "";
+  const chk = on && state.key_checks ? state.key_checks[state.ai.provider] : null, bad = on && chk && !chk.ok;
   $("go-ai").classList.toggle("ok", on && !bad);
   $("go-ai").classList.toggle("warn", !!bad);
   $("ai-bar-state").textContent = !on ? "ВЫКЛ" : bad ? "⚠" : "ВКЛ ✓";
   $("ai-bar-sub").textContent = !on ? "не подключён — нажмите, чтобы подключить"
-    : bad ? "ключ не работает: " + chk.message : "подключён: подбирает слова для поиска и помогает отобрать статьи";
+    : bad ? title + ": ключ не работает — " + chk.message
+    : "подключён: " + title + " — подбирает слова для поиска и помогает отобрать статьи";
   if (!aiBusy) $("btn-ai-search").textContent = on ? "🤖 Подобрать слова с ИИ" : "🤖 Подключить ИИ-помощник";
   $("rv-ai-off").hidden = on;
   $("rv-ai-on").hidden = !on;

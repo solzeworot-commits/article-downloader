@@ -74,7 +74,7 @@ REPORT_PATH = ROOT / "Отчёт.csv"
 BIBLIO_DIR = ROOT / "Список литературы"
 
 UI_PORT = 17865
-APP_VERSION = "7.6.2"
+APP_VERSION = "7.7"
 APP_AUTHOR = "Bucaneiro"
 OFFICIAL_URL = "https://github.com/solzeworot-commits/article-downloader"
 DOWNLOAD_URL = OFFICIAL_URL + "/releases/tag/portable-latest"
@@ -107,6 +107,13 @@ GUIDE_LINKS = {
     "wos_starter": "https://developer.clarivate.com/apis/wos-starter",
     "openalex": "https://openalex.org/",
     "perplexity": "https://www.perplexity.ai/",
+    "openai_keys": "https://platform.openai.com/api-keys",
+    "openai_billing": "https://platform.openai.com/settings/organization/billing/overview",
+    "anthropic_keys": "https://console.anthropic.com/settings/keys",
+    "anthropic_billing": "https://console.anthropic.com/settings/billing",
+    "gigachat": "https://developers.sber.ru/portal/products/gigachat-api",
+    "gosuslugi_crt": "https://www.gosuslugi.ru/crt",
+    "yandex_cloud": "https://console.yandex.cloud/",
     "chat_tg": "https://t.me/ArticleDownloaderChat",
     "chat_max": "https://max.ru/join/_ADhfiFX_Bf37RsP1VR8hDHUdFgj_im_R5DqDx4Iseo",
     "official": DOWNLOAD_URL,
@@ -157,6 +164,7 @@ DEFAULT_SETTINGS = {
     "pdf_dir": "",
     "desktop_shortcut": True,
     "lang": "",            # "" = by the Windows language
+    "ai_provider": "",     # the AI helper's service (ai_helper.PROVIDERS)
     "bases": {b[0]: True for b in BASES},
 }
 
@@ -1172,17 +1180,28 @@ def start_lookup(list_name: str):
     threading.Thread(target=run, daemon=True).start()
 
 
-def ai_key() -> str:
-    return ds.load_keys().get("perplexity", "")
+def ai_service(keys: dict | None = None) -> tuple[str, dict]:
+    """The AI helper's service and the keys: the chosen one, else the first with a key; "" without keys."""
+    keys = keys if keys is not None else ds.load_keys()
+    chosen = S.settings.get("ai_provider") or ""
+    if chosen in ai.PROVIDERS and keys.get(chosen):
+        return chosen, keys
+    return next((p for p in ai.PROVIDERS if keys.get(p)), ""), keys
+
+
+def set_ai_service(provider: str):
+    with S.lock:
+        S.settings["ai_provider"] = provider
+        write_json_atomic(SETTINGS_PATH, S.settings)
 
 
 def start_ai_screening(list_name: str, topic: str) -> dict:
     """Ask the AI about every undecided article with an abstract that has no advice yet."""
     data = get_review(list_name)
     name = data["list"]
-    key = ai_key()
-    if not key:
-        return {"error": tr("ИИ-помощник не подключён: вставьте ключ Perplexity (кнопка «🤖 ИИ-помощник» на главной).")}
+    provider, keys = ai_service()
+    if not provider:
+        return {"error": tr("ИИ-помощник не подключён: вставьте ключ (кнопка «🤖 ИИ-помощник» на главной).")}
     topic = re.sub(r"\s+", " ", str(topic or "")).strip()
     if len(topic) < 3:
         return {"error": tr("Напишите, что вы ищете: тема и что должно быть в статье.")}
@@ -1211,7 +1230,7 @@ def start_ai_screening(list_name: str, topic: str) -> dict:
                         break
                     batch = [{"doi": d, "title": data["records"][d].get("title", ""),
                               "abstract": data["records"][d].get("abstract", "")} for d in chunk]
-                advice, cost = ai.screen(key, batch, topic, lang)
+                advice, cost = ai.screen(provider, keys, batch, topic, lang)
                 with S.lock:
                     for doi, item in advice.items():
                         data["records"][doi]["ai"] = item
@@ -1560,7 +1579,10 @@ def public_state(known_version: int) -> dict:
             "update": S.update,
             "update_job": dict(S.update_job),
         }
-        data["keys"] = ds.keys_status(ds.load_keys())
+        keys = ds.load_keys()
+        data["keys"] = ds.keys_status(keys)
+        provider, _ = ai_service(keys)
+        data["ai"] = {"provider": provider, "title": ai.PROVIDERS.get(provider, "")}
         if known_version != S.items_version:
             data["items"] = [
                 {k: i.get(k, "") for k in ("id", "query", "status", "file",
@@ -1757,19 +1779,33 @@ def handle_api(path: str, body: dict) -> dict:
 
     if path == "/api/ai_search":
         try:
-            return ai.suggest_search(ai_key(), body.get("topic") or "", i18n.LANG)
+            provider, keys = ai_service()
+            return ai.suggest_search(provider, keys, body.get("topic") or "", i18n.LANG)
         except ai.AIError as exc:
             return {"error": exc.message, "kind": exc.kind}
 
     if path == "/api/ai_check":
-        key = str(body.get("perplexity") or "").strip() or ai_key()
-        result = ai.check_key(key) | {"at": time.strftime("%H:%M")}
-        if result["ok"] and str(body.get("perplexity") or "").strip():
-            ds.save_keys({"perplexity": key})
-        app_log(f"AI key check: {result['kind']}")
+        provider = body.get("provider") or "perplexity"
+        if provider not in ai.PROVIDERS:
+            return {"error": tr("Неизвестный ИИ-помощник.")}
+        typed = {f: str(body[f]).strip() for f in ai.KEY_FIELDS[provider] if str(body.get(f) or "").strip()}
+        keys = ds.load_keys() | typed
+        result = ai.check_key(provider, keys) | {"at": time.strftime("%H:%M")}
+        if result["ok"]:
+            if typed:
+                ds.save_keys(typed)
+            set_ai_service(provider)
+        app_log(f"AI key check ({provider}): {result['kind']}")
         with S.lock:
-            S.key_checks["perplexity"] = result
+            S.key_checks[provider] = result
         return result
+
+    if path == "/api/ai_use":
+        provider = body.get("provider")
+        if provider not in ai.PROVIDERS or not ds.load_keys().get(provider):
+            return {"error": tr("Сначала вставьте и проверьте ключ этого сервиса.")}
+        set_ai_service(provider)
+        return {"provider": provider}
 
     if path == "/api/review_save_selected":
         try:
@@ -1899,7 +1935,7 @@ def handle_api(path: str, body: dict) -> dict:
     if path == "/api/keys_save":
         ds.save_keys({k: body[k] for k in ds.KEY_FIELDS if k in body})
         with S.lock:
-            for source in ("scopus", "wos", "openalex", "perplexity"):
+            for source in ("scopus", "wos", "openalex", *ai.PROVIDERS):
                 if source in body or (source == "scopus" and "scopus_insttoken" in body):
                     S.key_checks.pop(source, None)
         return {"keys": ds.keys_status(ds.load_keys())}

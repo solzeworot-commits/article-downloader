@@ -9,7 +9,11 @@
 
 Подробная инструкция лежит внутри: «КАК ПОЛЬЗОВАТЬСЯ.txt».
 
-## 🆕 Новое в версии 7.6
+## 🆕 Новое в версии 7.7
+
+- **🤖 ИИ-помощник на выбор:** Perplexity, ChatGPT, Claude, GigaChat или YandexGPT (Алиса) — вкладки в окне помощника, у каждого сервиса пошаговая инструкция. Из России работают Perplexity, GigaChat и YandexGPT (два последних — с оплатой российской картой); ChatGPT и Claude в России не работают.
+
+## Новое в версии 7.6
 
 - **🤖 ИИ-помощник** (по желанию, на вашем ключе Perplexity): по теме, описанной своими словами, подбирает английские слова и синонимы для поиска; при отборе читает аннотации и подсказывает, подходит ли статья. Плашка на главной: красная — не подключён, зелёная — подключён. Инструкция со скриншотами — внутри программы.
 - **💬 Чат программы** — кнопки Telegram и MAX внизу главного окна: вопросы, советы, новости. [Telegram](https://t.me/ArticleDownloaderChat) · [MAX](https://max.ru/join/_ADhfiFX_Bf37RsP1VR8hDHUdFgj_im_R5DqDx4Iseo)
@@ -22,5 +26,5 @@
 
 A free Windows program for literature reviews: finds articles in Scopus, Web of Science and OpenAlex, helps screen them, downloads the PDFs through your university's subscription and builds the reference list. Click **ArticleDownloader_Portable.zip** under **Assets**, unpack it to a short folder such as `C:\Articles`, open `ArticleDownloader` and double-click **«СКАЧАТЬ СТАТЬИ»** (= "download articles"). The window speaks English when Windows is not in Russian; the **🌐 EN / RU** button switches the language. Instructions inside: «HOW TO USE.txt».
 
-**New in 7.6:** an optional 🤖 AI helper on your own Perplexity key (search terms from a topic in your own words, abstract pre-screening) and the program's chat in [Telegram](https://t.me/ArticleDownloaderChat) and MAX.
+**New in 7.7:** the AI helper works with your own key of Perplexity, ChatGPT, Claude, GigaChat or YandexGPT. **New in 7.6:** an optional 🤖 AI helper (search terms from a topic in your own words, abstract pre-screening) and the program's chat in [Telegram](https://t.me/ArticleDownloaderChat) and MAX.
 
