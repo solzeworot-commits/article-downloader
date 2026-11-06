@@ -1,7 +1,7 @@
 # -*- coding: utf-8 -*-
 # © 2026 Bucaneiro. Бесплатная программа; условия — в файле ЛИЦЕНЗИЯ.txt.
 """
-AI helper on the user's own Perplexity API key (v7.6).
+AI helper on the user's own Perplexity API key (v7.6, Agent API since 7.6.1).
 
 Each user registers at Perplexity, tops up the API balance and pastes the key
 into the program; it lives in keys.json with the other keys and is sent only to
@@ -16,10 +16,14 @@ Two jobs:
                            exclude) with a short reason. It is only advice:
                            the decision stays with the user.
 
-The client speaks the Sonar chat completions API (POST /chat/completions,
-model "sonar") and falls back to the Agent API (POST /v1/responses, preset
-"fast-search") when that answers 404/410, i.e. once Perplexity retires it.
-Shapes follow the official perplexityai Python SDK 0.42 (July 2026).
+The client speaks the Agent API (POST /v1/responses, preset "fast-search"),
+with a JSON schema for the answers that the program parses. Perplexity
+retired Sonar chat completions in autumn 2026: they answer 403
+"chat_completions_not_available" (seen with a real key in November 2026).
+The old endpoint (POST /chat/completions, model "sonar") is kept only as a
+fallback in case the Agent API answers 404. A server that refuses the
+response_format is asked again without it. Shapes follow the official
+perplexityai Python SDK 0.42 (July 2026).
 ARTICLE_AI_CHAT_URL and ARTICLE_AI_AGENT_URL override the endpoints for tests.
 """
 from __future__ import annotations
@@ -41,8 +45,12 @@ SCREEN_BATCH = 10
 ABSTRACT_CHARS = 1600
 VERDICTS = ("include", "maybe", "exclude")
 
-# Which endpoint answered last time: "chat" or "agent".
-_endpoint = {"name": "chat"}
+# Which endpoint answered last time ("agent" or "chat") and the optional
+# parameters a server refused (they are not sent again).
+_endpoint = {"name": "agent", "refused": set()}
+OPTIONAL = ("response_format", "language_preference", "max_output_tokens", "max_tokens", "search_mode")
+# Words of an answer that say "this endpoint is gone, use the other one".
+GONE_MARKERS = ("chat_completions_not_available", "/v1/responses", "agent api", "migrate-from-sonar")
 
 
 class AIError(Exception):
@@ -139,29 +147,62 @@ def _agent_answer(data: dict) -> dict:
     return {"text": "".join(texts), "sources": sources, "cost": cost}
 
 
+def _gone(name: str, status: int, data: dict | None, raw: str) -> bool:
+    """The endpoint does not exist (any more): 404, or the old one sending people to the Agent API."""
+    if status in (404, 405, 410):
+        return True
+    detail = _error_text(data, raw).lower()
+    return name == "chat" and status in (400, 403) and any(m in detail for m in GONE_MARKERS)
+
+
+def _refused_params(body: dict, status: int, data: dict | None, raw: str) -> list[str]:
+    """Optional parameters a 400/422 answer complains about."""
+    if status not in (400, 422):
+        return []
+    detail = _error_text(data, raw).lower()
+    names = [k for k in OPTIONAL if k in body and k in detail]
+    if "response_format" in body and "response_format" not in names and ("json_schema" in detail or "schema" in detail):
+        names.append("response_format")
+    return names
+
+
 def ask(key: str, instructions: str, text: str, *, search: bool = True, max_tokens: int = 1200,
-        lang: str = "ru", timeout: float = 120) -> dict:
-    """One question. {"text", "sources": [{"title", "url"}], "cost": dollars or None}."""
+        lang: str = "ru", timeout: float = 120, schema: tuple[str, dict] | None = None) -> dict:
+    """One question. {"text", "sources": [{"title", "url"}], "cost": dollars or None}.
+    schema: (name, JSON schema) of the answer, sent as response_format."""
     key = (key or "").strip()
     if not key:
         raise AIError("no_key", tr("ИИ-помощник не подключён: вставьте ключ Perplexity (кнопка «🤖 ИИ-помощник» на главной)."))
     chat_url = os.environ.get("ARTICLE_AI_CHAT_URL") or CHAT_URL
     agent_url = os.environ.get("ARTICLE_AI_AGENT_URL") or AGENT_URL
+    fmt = {"type": "json_schema", "json_schema": {"name": schema[0], "schema": schema[1]}} if schema else None
+    agent_body = {"preset": AGENT_PRESET, "instructions": instructions, "input": text,
+                  "max_output_tokens": max_tokens, "language_preference": lang}
     chat_body = {"model": CHAT_MODEL, "max_tokens": max_tokens, "language_preference": lang,
                  "messages": [{"role": "system", "content": instructions}, {"role": "user", "content": text}]}
     if search:
         chat_body["search_mode"] = "academic"
     else:
         chat_body["disable_search"] = True
-    agent_body = {"preset": AGENT_PRESET, "instructions": instructions, "input": text,
-                  "max_output_tokens": max_tokens, "language_preference": lang}
 
-    order = ["chat", "agent"] if _endpoint["name"] == "chat" else ["agent", "chat"]
+    order = ["agent", "chat"] if _endpoint["name"] == "agent" else ["chat", "agent"]
     for i, name in enumerate(order):
-        url, body = (chat_url, chat_body) if name == "chat" else (agent_url, agent_body)
+        url, body = (agent_url, dict(agent_body)) if name == "agent" else (chat_url, dict(chat_body))
+        if fmt:
+            body["response_format"] = fmt
+        for field in _endpoint["refused"]:
+            body.pop(field, None)
         status, data, raw = _post(url, key, body, timeout)
-        # 404/410: this endpoint is gone (Perplexity retires the old one); try the other.
-        if status in (404, 405, 410) and i == 0:
+        for _ in range(3):
+            refused = _refused_params(body, status, data, raw)
+            if not refused:
+                break
+            for field in refused:
+                _endpoint["refused"].add(field)
+                body.pop(field, None)
+            status, data, raw = _post(url, key, body, timeout)
+        # This endpoint is gone (Perplexity moved Sonar to the Agent API): try the other one.
+        if _gone(name, status, data, raw):
             continue
         if status >= 400 or data is None:
             if data is None and status < 400:
@@ -175,13 +216,14 @@ def ask(key: str, instructions: str, text: str, *, search: bool = True, max_toke
 def _json_part(text: str):
     """The JSON object or array in an answer, without ```json fences or chatter."""
     text = re.sub(r"```(?:json)?", "", text or "").strip()
-    for opener, closer in (("{", "}"), ("[", "]")):
-        start, end = text.find(opener), text.rfind(closer)
-        if start != -1 and end > start:
-            try:
-                return json.loads(text[start:end + 1])
-            except ValueError:
-                continue
+    for candidate in (text, re.sub(r"\s*\[\d+(?:\s*,\s*\d+)*\]", "", text)):
+        for opener, closer in (("{", "}"), ("[", "]")):
+            start, end = candidate.find(opener), candidate.rfind(closer)
+            if start != -1 and end > start:
+                try:
+                    return json.loads(candidate[start:end + 1])
+                except ValueError:
+                    continue
     raise AIError("bad_answer", tr("ИИ ответил не по форме. Нажмите кнопку ещё раз."))
 
 
@@ -190,14 +232,40 @@ def _json_part(text: str):
 # ---------------------------------------------------------------------------
 
 def check_key(key: str) -> dict:
-    """A tiny request without web search (well under a cent)."""
+    """A tiny request (well under a cent)."""
     try:
-        answer = ask(key, "Reply with the single word OK.", "ping", search=False, max_tokens=5, timeout=40)
+        answer = ask(key, "Reply with the single word OK. Do not search the web.", "ping", search=False,
+                     max_tokens=32, timeout=60)
     except AIError as exc:
         return {"ok": False, "kind": exc.kind, "message": exc.message}
     return {"ok": True, "kind": "ok", "message": tr("Ключ работает ✓ (Perplexity отвечает)"),
             "cost": answer.get("cost")}
 
+
+SEARCH_SCHEMA = ("search_concepts", {
+    "type": "object",
+    "properties": {
+        "concepts": {"type": "array", "items": {"type": "array", "items": {"type": "string"}}},
+        "note": {"type": "string"},
+    },
+    "required": ["concepts", "note"],
+})
+
+SCREEN_SCHEMA = ("screening", {
+    "type": "object",
+    "properties": {
+        "papers": {"type": "array", "items": {
+            "type": "object",
+            "properties": {
+                "id": {"type": "integer"},
+                "verdict": {"type": "string", "enum": list(VERDICTS)},
+                "why": {"type": "string"},
+            },
+            "required": ["id", "verdict", "why"],
+        }},
+    },
+    "required": ["papers"],
+})
 
 SEARCH_INSTRUCTIONS = """You help a researcher build a literature search in Scopus, Web of Science and OpenAlex.
 The researcher describes the topic in their own words, often in Russian. Look at how real papers on this topic
@@ -218,7 +286,7 @@ def suggest_search(key: str, topic: str, lang: str = "ru") -> dict:
         raise AIError("bad_answer", tr("Опишите тему хотя бы парой слов."))
     lang_name = "Russian" if lang == "ru" else "English"
     answer = ask(key, SEARCH_INSTRUCTIONS.replace("{lang_name}", lang_name), topic[:1500], search=True,
-                 max_tokens=700, lang=lang)
+                 max_tokens=700, lang=lang, schema=SEARCH_SCHEMA)
     data = _json_part(answer["text"])
     concepts = data.get("concepts") if isinstance(data, dict) else data
     lines = []
@@ -242,7 +310,7 @@ def suggest_search(key: str, topic: str, lang: str = "ru") -> dict:
 
 SCREEN_INSTRUCTIONS = """You help a researcher pre-screen papers for a literature review by title and abstract.
 Judge every paper only by the text given; do not search the web. Reply with JSON only, no other text:
-[{"id": 1, "verdict": "include", "why": "..."}, ...]
+{"papers": [{"id": 1, "verdict": "include", "why": "..."}, ...]}
 - verdict: "include" (clearly on the topic), "maybe" (partly, or the abstract is missing or unclear),
   "exclude" (off the topic, wrong object or wrong kind of publication);
 - why: at most 15 words in {lang_name}, concrete (what the paper is about and why it fits or not);
@@ -257,7 +325,7 @@ def screen(key: str, articles: list[dict], topic: str, lang: str = "ru") -> tupl
         abstract = re.sub(r"\s+", " ", str(art.get("abstract") or "")).strip()[:ABSTRACT_CHARS] or "(no abstract)"
         parts.append(f"Paper {i}\nTitle: {str(art.get('title') or '').strip()[:400]}\nAbstract: {abstract}\n")
     answer = ask(key, SCREEN_INSTRUCTIONS.replace("{lang_name}", lang_name), "\n".join(parts), search=False,
-                 max_tokens=80 * len(articles) + 200, lang=lang)
+                 max_tokens=80 * len(articles) + 200, lang=lang, schema=SCREEN_SCHEMA)
     data = _json_part(answer["text"])
     if isinstance(data, dict):
         data = data.get("papers") or data.get("results") or [data]

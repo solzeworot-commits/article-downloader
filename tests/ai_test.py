@@ -1,8 +1,9 @@
-"""AI helper on a fake Perplexity (v7.6): python ai_test.py <portable/scripts>
+"""AI helper on a fake Perplexity (v7.6.1): python ai_test.py <portable/scripts>
 
-The fake answers like the Sonar chat completions API and, once "retired",
-only like the Agent API (/v1/responses), in the shapes of the official
-perplexityai SDK. Keys: pplx-good works, pplx-bad is rejected (401),
+The fake behaves like Perplexity in November 2026: the Agent API
+(/v1/responses) answers, the old Sonar chat completions answer 403
+"chat_completions_not_available" (the text a real key got). Shapes follow the
+official perplexityai SDK. Keys: pplx-good works, pplx-bad is rejected (401),
 pplx-broke has no money (402 with a credits message).
 """
 import json
@@ -26,22 +27,25 @@ sys.path.insert(0, sys.argv[1])
 import ai_helper as ai  # noqa: E402
 import doi_search as ds  # noqa: E402
 
-FAKE = {"retired": False, "calls": []}
+FAKE = {"chat_retired": True, "agent_missing": False, "no_schema": False, "no_lang": False, "calls": []}
+RETIRED = {"error": {"message": "Sonar is now the Agent API. Use /v1/responses instead of /v1/sonar. Migrate here: "
+                                "https://docs.perplexity.ai/docs/agent-api/migrate-from-sonar/overview",
+                     "type": "chat_completions_not_available", "code": 403}}
 
 
 def answer_for(system: str, user: str) -> str:
     if "single word OK" in system:
         return "OK"
     if "literature search" in system:
-        # Chatter and a fence around the JSON, as models like to do.
+        # Chatter, a fence and a citation mark around the JSON, as models like to do.
         return ('Here you go:\n```json\n{"concepts": [["grape pomace", "grape marc", "winery waste"], '
                 '["polyphenols", "phenolic compounds*"], ["ultrasound-assisted extraction", "AND sonication"]], '
-                '"note": "Синонимы выжимок важны."}\n```')
+                '"note": "Синонимы выжимок важны."} [1]\n```')
     if "pre-screen" in system:
         n = len(re.findall(r"^Paper \d+$", user, re.M))
         verdicts = ["include", "exclude", "maybe"]
-        return json.dumps([{"id": i, "verdict": verdicts[(i - 1) % 3], "why": f"причина {i}"} for i in range(1, n + 1)],
-                          ensure_ascii=False)
+        return json.dumps({"papers": [{"id": i, "verdict": verdicts[(i - 1) % 3], "why": f"причина {i}"}
+                                      for i in range(1, n + 1)]}, ensure_ascii=False)
     return "?"
 
 
@@ -61,15 +65,20 @@ class Handler(BaseHTTPRequestHandler):
         body = json.loads(self.rfile.read(int(self.headers["Content-Length"])))
         FAKE["calls"].append((self.path, body))
         key = self.headers.get("Authorization", "").removeprefix("Bearer ")
-        if self.path == "/chat/completions" and FAKE["retired"]:
+        if self.path == "/chat/completions" and FAKE["chat_retired"]:
+            return self.send(403, RETIRED)
+        if self.path == "/v1/responses" and FAKE["agent_missing"]:
             return self.send(404, {"error": {"message": "Not Found"}})
         if key == "pplx-bad":
             return self.send(401, {"error": {"message": "Invalid API key", "type": "invalid_api_key"}})
         if key == "pplx-broke":
             return self.send(402, {"error": {"message": "Insufficient credits", "type": "insufficient_quota"}})
+        if "language_preference" in body and FAKE["no_lang"]:
+            return self.send(400, {"error": {"message": "Unknown parameter: language_preference"}})
+        if "response_format" in body and FAKE["no_schema"]:
+            return self.send(400, {"error": {"message": "response_format is not supported with presets"}})
         if self.path == "/chat/completions":
-            system = body["messages"][0]["content"]
-            text = answer_for(system, body["messages"][1]["content"])
+            text = answer_for(body["messages"][0]["content"], body["messages"][1]["content"])
             return self.send(200, {
                 "id": "x", "created": 1, "model": body["model"], "object": "chat.completion",
                 "choices": [{"index": 0, "message": {"role": "assistant", "content": text},
@@ -78,6 +87,7 @@ class Handler(BaseHTTPRequestHandler):
                 "usage": {"prompt_tokens": 10, "completion_tokens": 5, "total_tokens": 15,
                           "cost": {"input_tokens_cost": 0, "output_tokens_cost": 0, "total_cost": 0.0061}}})
         if self.path == "/v1/responses":
+            assert body["preset"] == ai.AGENT_PRESET and body["input"] and body["instructions"], body
             text = answer_for(body["instructions"], body["input"])
             return self.send(200, {
                 "id": "r", "created_at": 1, "model": "xai/grok", "object": "response", "status": "completed",
@@ -93,11 +103,18 @@ class Handler(BaseHTTPRequestHandler):
 server = ThreadingHTTPServer(("127.0.0.1", PORT), Handler)
 threading.Thread(target=server.serve_forever, daemon=True).start()
 
-# --- the key -----------------------------------------------------------------
+
+def paths_since(n):
+    return [c[0] for c in FAKE["calls"][n:]]
+
+
+# --- the key, on the Agent API; the retired chat API is not even asked ------
+n = len(FAKE["calls"])
 res = ai.check_key("pplx-good")
 assert res["ok"], res
-assert FAKE["calls"][-1][1].get("disable_search") is True, "the key check must not pay for a web search"
-assert not ai.check_key("pplx-bad")["ok"] and ai.check_key("pplx-bad")["kind"] == "bad_key"
+assert paths_since(n) == ["/v1/responses"], paths_since(n)
+res = ai.check_key("pplx-bad")
+assert not res["ok"] and res["kind"] == "bad_key", res
 res = ai.check_key("pplx-broke")
 assert res["kind"] == "no_money", res
 assert ai.check_key("")["kind"] == "no_key"
@@ -111,8 +128,9 @@ assert ds.load_keys()["perplexity"] == ""
 res = ai.suggest_search("pplx-good", "извлечение полифенолов из виноградных выжимок ультразвуком")
 assert res["lines"] == ["grape pomace; grape marc; winery waste", "polyphenols; phenolic compounds",
                         "ultrasound-assisted extraction; sonication"], res["lines"]
-assert res["note"] and res["sources"][0]["url"] == "https://example.org/p" and res["cost"] == 0.0061
-assert FAKE["calls"][-1][1].get("search_mode") == "academic"
+assert res["note"] and res["sources"][0]["url"] == "https://example.org/b" and res["cost"] == 0.002
+sent = FAKE["calls"][-1][1]
+assert sent["response_format"]["json_schema"]["name"] == "search_concepts", sent
 q = ds.build_queries({"keywords": "\n".join(res["lines"]), "doc_type": "all"})
 assert q["scopus"] == ('TITLE-ABS-KEY(("grape pomace" OR "grape marc" OR "winery waste") AND '
                        '(polyphenols OR "phenolic compounds") AND ("ultrasound-assisted extraction" OR sonication))'), q
@@ -130,18 +148,40 @@ advice, cost = ai.screen("pplx-good", batch, "grape pomace polyphenols")
 assert [advice[f"10.1/{i}"]["verdict"] for i in range(1, 6)] == ["include", "exclude", "maybe", "include", "exclude"]
 assert advice["10.1/3"]["why"] == "причина 3" and cost > 0
 sent = FAKE["calls"][-1][1]
-assert sent.get("disable_search") is True and "(no abstract)" in sent["messages"][1]["content"]
-assert len(sent["messages"][1]["content"]) < 6000, "long abstracts are cut"
+assert sent["response_format"]["json_schema"]["name"] == "screening"
+assert "(no abstract)" in sent["input"] and len(sent["input"]) < 6000, "long abstracts are cut"
 
-# --- the chat API retired: the Agent API takes over -------------------------
-FAKE["retired"] = True
-res = ai.suggest_search("pplx-good", "grape pomace polyphenols")
-assert res["lines"][0].startswith("grape pomace") and res["sources"][0]["url"] == "https://example.org/b", res
-assert FAKE["calls"][-1][0] == "/v1/responses" and FAKE["calls"][-1][1]["preset"] == ai.AGENT_PRESET
+# --- a server that refuses response_format is asked again without it -------
+FAKE["no_schema"] = True
 n = len(FAKE["calls"])
-ai.check_key("pplx-good")
-assert len(FAKE["calls"]) == n + 1, "after the switch the Agent API is asked first"
+res = ai.suggest_search("pplx-good", "grape pomace polyphenols")
+assert res["lines"][0].startswith("grape pomace"), res
+assert ["response_format" in c[1] for c in FAKE["calls"][n:]] == [True, False]
+n = len(FAKE["calls"])
+ai.suggest_search("pplx-good", "grape pomace polyphenols")
+assert len(FAKE["calls"]) == n + 1 and "response_format" not in FAKE["calls"][-1][1], "remembered"
+FAKE["no_schema"] = False
+FAKE["no_lang"] = True
+assert ai.check_key("pplx-good")["ok"] and "language_preference" not in FAKE["calls"][-1][1]
+FAKE["no_lang"] = False
+
+# --- no Agent API (404): the old chat API takes over, and back ---------------
+FAKE["agent_missing"], FAKE["chat_retired"] = True, False
+res = ai.suggest_search("pplx-good", "grape pomace polyphenols")
+assert res["sources"][0]["url"] == "https://example.org/p" and FAKE["calls"][-1][0] == "/chat/completions"
+assert FAKE["calls"][-1][1].get("search_mode") == "academic"
+assert ai.check_key("pplx-good")["ok"] and FAKE["calls"][-1][1].get("disable_search") is True
+FAKE["agent_missing"], FAKE["chat_retired"] = False, True
+n = len(FAKE["calls"])
+res = ai.check_key("pplx-good")
+assert res["ok"], res
+assert paths_since(n) == ["/chat/completions", "/v1/responses"], paths_since(n)
 assert ai.check_key("pplx-broke")["kind"] == "no_money"
+
+# --- both gone: a clear message, not "wrong key" -----------------------------
+FAKE["agent_missing"] = True
+res = ai.check_key("pplx-good")
+assert res["kind"] == "other" and "404" in res["message"], res
 
 server.shutdown()
 print("ai tests: OK")

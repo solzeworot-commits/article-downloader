@@ -508,13 +508,18 @@ https://github.com/solzeworot-commits/article-downloader/releases/download/porta
   пополняется зарубежной картой или Apple Pay — российские карты Stripe не пропускает).
   Ключ лежит в `keys.json` рядом с остальными (поле `perplexity` в `ds.KEY_FIELDS`), уходит
   только на api.perplexity.ai и в журнал не пишется.
-- **`portable/scripts/ai_helper.py`.** Клиент на `urllib` без SDK. Основной адрес — Sonar chat
-  completions (`POST /chat/completions`, модель `sonar`, `search_mode: academic` для подбора
-  слов, `disable_search: true` для проверки ключа и предотбора — без платы за веб-поиск).
-  Если он отвечает 404/405/410 (Perplexity объявила о переводе на Agent API), программа сама
-  переходит на `POST /v1/responses` с `preset: fast-search` и дальше спрашивает его первым.
+- **`portable/scripts/ai_helper.py`.** Клиент на `urllib` без SDK. В 7.6 основным был Sonar chat
+  completions, но **на настоящем ключе (ноябрь 2026) Perplexity ответила 403
+  `chat_completions_not_available`: «Sonar is now the Agent API. Use /v1/responses»**, а 7.6
+  ждала 404 и показала «не принял ключ». С **7.6.1** основной адрес — Agent API
+  `POST /v1/responses` с `preset: fast-search` и `response_format` (json_schema) для ответов,
+  которые программа разбирает. Старый `/chat/completions` (модель `sonar`) остался запасным:
+  на него программа идёт, только если Agent API ответит 404; ответ старого адреса со словами
+  про Agent API считается «адрес закрыт». Необязательные параметры (`response_format`,
+  `language_preference`, `max_output_tokens`…), на которые сервер жалуется ошибкой 400/422,
+  убираются, и запрос повторяется; программа это запоминает до перезапуска.
   Форматы взяты из официального SDK `perplexityai` 0.42 (июль 2026); живую документацию из
-  среды сборки открыть не удалось, на настоящем ключе **ещё не проверено** (см. раздел 4).
+  среды сборки открыть не удалось.
   Ошибки: 401 → неверный ключ, 402 или слова credit/balance/insufficient/quota → «нет денег
   на счёте», 429 → подождать, 5xx → позже. Стоимость берётся из `usage.cost.total_cost`.
 - **Подбор слов** (`suggest_search`): тема своими словами → 2–4 понятия, у каждого до 6
@@ -588,10 +593,10 @@ https://github.com/solzeworot-commits/article-downloader/releases/download/porta
    - подпись «access provided by …» — только подсказка, распознаётся эвристикой.
 3. Код скачивания — это v5.24, он работал у пользователя. В v6 менялись только запуск
    браузера и оболочка вокруг. Поиск `title:` в v6 не проверялся.
-4. **ИИ-помощник 7.6 не проверен на настоящем ключе Perplexity** (из среды сборки API
-   закрыт). Проверить: какой адрес отвечает (`/chat/completions` или уже только
-   `/v1/responses`), код и текст ошибки при пустом счёте, выдаёт ли `fast-search` JSON без
-   лишнего текста, сколько реально стоит предотбор 100 статей.
+4. **ИИ-помощник на настоящем ключе Perplexity проверен только частично** (из среды сборки API
+   закрыт): в 7.6 автор получил 403 `chat_completions_not_available` от старого адреса —
+   исправлено в 7.6.1. Ещё проверить: ответ Agent API на ключ, код и текст ошибки при пустом
+   счёте, принимает ли `fast-search` `response_format`, сколько реально стоит предотбор 100 статей.
 
 ## 5. Известные ограничения и идеи
 
