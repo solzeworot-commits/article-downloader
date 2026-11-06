@@ -76,7 +76,7 @@ REPORT_PATH = ROOT / "Отчёт.csv"
 BIBLIO_DIR = ROOT / "Список литературы"
 
 UI_PORT = 17865
-APP_VERSION = "8.0"
+APP_VERSION = "8.1"
 APP_AUTHOR = "Bucaneiro"
 OFFICIAL_URL = "https://github.com/solzeworot-commits/article-downloader"
 DOWNLOAD_URL = OFFICIAL_URL + "/releases/tag/portable-latest"
@@ -167,6 +167,8 @@ DEFAULT_SETTINGS = {
     "desktop_shortcut": True,
     "lang": "",            # "" = by the Windows language
     "ai_provider": "",     # the AI helper's service (ai_helper.PROVIDERS)
+    "window": None,        # {"w", "h"} the user resized the program window to
+    "screen": None,        # {"w", "h", "x", "y"} the screen's work area the window reported (CSS pixels)
     "bases": {b[0]: True for b in BASES},
 }
 
@@ -1707,15 +1709,50 @@ def open_path(path: Path):
                          stderr=subprocess.DEVNULL)
 
 
+def work_area() -> dict | None:
+    """The screen without the taskbar: what the window reported last time, else Windows' own figure."""
+    screen = S.settings.get("screen")
+    if isinstance(screen, dict) and screen.get("w", 0) > 300 and screen.get("h", 0) > 300:
+        return {k: int(screen.get(k) or 0) for k in ("w", "h", "x", "y")}
+    if os.name == "nt":
+        try:
+            import ctypes
+            from ctypes import wintypes
+            rect = wintypes.RECT()
+            # SPI_GETWORKAREA; this process is not DPI aware, so the figures are scaled like the browser's.
+            if ctypes.windll.user32.SystemParametersInfoW(0x0030, 0, ctypes.byref(rect), 0):
+                return {"w": rect.right - rect.left, "h": rect.bottom - rect.top, "x": rect.left, "y": rect.top}
+        except Exception:
+            pass
+    return None
+
+
+def window_geometry() -> tuple[int, int, int, int] | None:
+    """(width, height, x, y) of the program window: the user's own size, else nearly the whole screen."""
+    area = work_area()
+    if not area:
+        return None
+    saved = S.settings.get("window")
+    if isinstance(saved, dict) and saved.get("w") and saved.get("h"):
+        w, h = min(int(saved["w"]), area["w"]), min(int(saved["h"]), area["h"])
+    else:
+        w, h = min(1400, area["w"] - 40), area["h"] - 16
+    w, h = max(w, 640), max(h, 480)
+    return w, h, area["x"] + max(0, (area["w"] - w) // 2), area["y"] + max(0, (area["h"] - h) // 2)
+
+
 def open_ui_window(url: str):
     if os.environ.get("ARTICLE_UI_NO_WINDOW") == "1":
         return
     try:
         import article_downloader as ad
+        geometry = window_geometry()
+        size = ([f"--window-size={geometry[0]},{geometry[1]}", f"--window-position={geometry[2]},{geometry[3]}"]
+                if geometry else ["--window-size=1120,760"])
         for kind in ("edge", "chrome", "yandex"):
             exe = ad.find_browser_exe(kind)
             if exe:
-                subprocess.Popen([exe, f"--app={url}", "--window-size=1120,760"],
+                subprocess.Popen([exe, f"--app={url}", *size],
                                  stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
                 return
     except Exception as exc:
@@ -2203,6 +2240,24 @@ def handle_api(path: str, body: dict) -> dict:
 
     if path == "/api/report":
         return problem_report(body)
+
+    if path == "/api/window_info":
+        # The window tells the size of the screen (CSS pixels) and, after the user resized it, its own size.
+        changed = False
+        with S.lock:
+            screen = body.get("screen")
+            if isinstance(screen, dict):
+                clean = {k: int(screen.get(k) or 0) for k in ("w", "h", "x", "y")}
+                if clean["w"] > 300 and clean["h"] > 300 and clean != S.settings.get("screen"):
+                    S.settings["screen"], changed = clean, True
+            window = body.get("window")
+            if isinstance(window, dict) and int(window.get("w") or 0) >= 640 and int(window.get("h") or 0) >= 480:
+                S.settings["window"], changed = {"w": int(window["w"]), "h": int(window["h"])}, True
+            if body.get("reset"):
+                S.settings["window"], changed = None, True
+            if changed:
+                write_json_atomic(SETTINGS_PATH, S.settings)
+        return {}
 
     if path == "/api/set_lang":
         lang = i18n.set_lang(str(body.get("lang") or ""))
