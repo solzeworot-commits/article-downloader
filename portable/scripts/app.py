@@ -24,6 +24,7 @@ from __future__ import annotations
 
 import base64
 import csv
+import hashlib
 import html
 import json
 import os
@@ -37,6 +38,7 @@ import traceback
 import webbrowser
 import zipfile
 from collections import Counter, deque
+from datetime import date, timedelta
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from io import BytesIO
 from pathlib import Path
@@ -69,6 +71,8 @@ PYTHON_DIR = ROOT / "python"
 LOGS = ROOT / "logs"
 INBOX = ROOT / "inbox"
 SETTINGS_PATH = ROOT / "settings.json"
+TOPICS_PATH = INBOX / "_подробно" / "_темы.json"   # «🔔 Новое по теме»: the remembered searches
+TOPIC_DAYS = 30                                    # remind after this many days
 QUEUE_PATH = LOGS / "queue.json"
 TOKEN_PATH = LOGS / ".ui_token"
 APP_LOG = LOGS / "app.log"
@@ -77,7 +81,7 @@ PDF_TEXT_CACHE = ROOT / "logs" / "pdf_text"      # the pages of the PDFs, for «
 BIBLIO_DIR = ROOT / "Список литературы"
 
 UI_PORT = 17865
-APP_VERSION = "8.4"
+APP_VERSION = "8.5"
 APP_AUTHOR = "Bucaneiro"
 OFFICIAL_URL = "https://github.com/solzeworot-commits/article-downloader"
 DOWNLOAD_URL = OFFICIAL_URL + "/releases/tag/portable-latest"
@@ -420,6 +424,9 @@ class State:
         self.search = {"running": False, "progress": {}, "error": "",
                        "version": 0, "summary": None}
         self.search_records: list[dict] = []
+        self.search_asked: dict = {}              # the params and sources of the last API search
+        self.topics: list[dict] | None = None     # loaded from TOPICS_PATH on first use
+        self.topic_jobs: dict[str, dict] = {}     # topic id -> «проверить новое» progress
         self.export_since = 0.0
         self.key_checks: dict[str, dict] = {}
         self.list_cache: dict[str, tuple] = {}
@@ -997,6 +1004,7 @@ def start_search(params: dict, sources: list[str]):
         if S.search["running"]:
             return
         S.search.update(running=True, error="", progress={s: {"done": 0, "of": 0} for s in sources})
+        S.search_asked = {"params": dict(params), "sources": list(sources)}
     keys = ds.load_keys()
 
     def progress(source, done, of):
@@ -1861,6 +1869,142 @@ def search_meta(body: dict, saved: list[dict]) -> dict:
     return meta
 
 
+# ---- «🔔 Новое по теме» (v8.5) ------------------------------------------------------
+
+TOPIC_PARAMS = ("keywords", "match", "field", "year_from", "year_to", "doc_type", "max_results", "scopus_query", "wos_query")
+
+
+def topic_key(keywords) -> str:
+    return "\n".join(sorted("; ".join(g).lower() for g in ds._groups(keywords)))
+
+
+def load_topics() -> list[dict]:
+    """The remembered searches; called with S.lock held."""
+    if S.topics is None:
+        try:
+            data = json.loads(TOPICS_PATH.read_text(encoding="utf-8"))
+            S.topics = [t for t in data if isinstance(t, dict) and t.get("id")] if isinstance(data, list) else []
+        except (OSError, ValueError):
+            S.topics = []
+    return S.topics
+
+
+def save_topics():
+    TOPICS_PATH.parent.mkdir(parents=True, exist_ok=True)
+    write_json_atomic(TOPICS_PATH, S.topics or [])
+
+
+def remember_topic(params: dict, sources: list[str], found: list[dict], list_name: str):
+    """A saved API search becomes a topic: in a month the program offers to look for what is new."""
+    key = topic_key(params.get("keywords") or "")
+    if not key or not sources:
+        return
+    today = time.strftime("%Y-%m-%d")
+    with S.lock:
+        topics = load_topics()
+        topic = next((t for t in topics if t.get("key") == key), None)
+        if topic is None:
+            topic = {"id": hashlib.sha1(key.encode("utf-8")).hexdigest()[:10], "key": key, "created": today, "seen": []}
+            topics.append(topic)
+        topic["title"] = " · ".join("; ".join(g) for g in ds._groups(params.get("keywords") or ""))[:160]
+        topic["params"] = {k: str(params[k]) for k in TOPIC_PARAMS if params.get(k)}
+        topic["sources"] = sorted(set(topic.get("sources") or []) | set(sources))
+        topic["seen"] = sorted(set(topic.get("seen") or []) | {r["doi"] for r in found})
+        topic["checked"], topic["list"] = today, list_name
+        topic.pop("snooze", None)
+        save_topics()
+
+
+def _days_since(day: str) -> int:
+    try:
+        return (date.today() - date.fromisoformat(str(day))).days
+    except ValueError:
+        return 0
+
+
+def topics_state() -> list[dict]:
+    with S.lock:
+        out = []
+        for t in load_topics():
+            days = _days_since(t.get("checked", ""))
+            job = {k: v for k, v in (S.topic_jobs.get(t["id"]) or {}).items()}
+            out.append({"id": t["id"], "title": t.get("title", ""), "checked": t.get("checked", ""), "days": days,
+                        "sources": [ds.SOURCE_TITLES.get(x, x) for x in t.get("sources") or []],
+                        "due": days >= TOPIC_DAYS and _days_since(t.get("snooze", "1970-01-01")) >= 0,
+                        "last_new": t.get("last_new"), "last_list": t.get("last_list", ""), "job": job})
+        return out
+
+
+def recheck_params(params: dict, checked: str) -> dict:
+    """The search of a topic narrowed to the recent years: from the year before the last check, no upper year."""
+    params = dict(params)
+    try:
+        last = date.fromisoformat(str(checked)).year
+    except ValueError:
+        last = date.today().year - 1
+    params["year_from"] = str(max(ds._year(params.get("year_from")) or 0, last - 1))
+    params["year_to"] = ""
+    return params
+
+
+def check_topic(topic_id: str) -> dict:
+    """Search the topic again and save the articles that were not found before as a new list."""
+    with S.lock:
+        topic = next((t for t in load_topics() if t["id"] == topic_id), None)
+        if topic is None:
+            return {"error": tr("Тема не найдена.")}
+        job = S.topic_jobs.get(topic_id)
+        if job and job["running"]:
+            return {}
+        params = recheck_params(topic.get("params") or {}, topic.get("checked", ""))
+        sources = [x for x in topic.get("sources") or [] if x in ds.SOURCE_TITLES]
+        seen = set(topic.get("seen") or [])
+        job = {"running": True, "error": "", "new": 0, "found": 0, "list": "", "failed": []}
+        S.topic_jobs[topic_id] = job
+
+    def run():
+        try:
+            result = ds.run_search(params, sources, ds.load_keys())
+            per = result["per_source"]
+            failed = [f"{ds.SOURCE_TITLES.get(k, k)}: {v.get('message', '')}" for k, v in per.items() if not v.get("ok")]
+            if not any(v.get("ok") for v in per.values()):
+                with S.lock:
+                    job["error"] = " ".join(failed) or tr("Поиск не удался.")
+                return
+            new = [r for r in result["records"] if r["doi"] not in seen]
+            name = ""
+            if new:
+                saved = ds.save_list(INBOX, tr("новое") + "_" + ds.query_slug(params), new)
+                name = saved.name
+                counts = Counter(ds.SOURCE_TITLES.get(src, src) for r in new for src in r.get("sources") or [])
+                rv.save_meta(INBOX, name, {"created": time.strftime("%Y-%m-%d %H:%M"), "topic": topic_id,
+                                           "keywords": ds._terms(params.get("keywords") or ""),
+                                           "per_source": dict(counts) or {tr("Новое по теме"): len(new)},
+                                           "unique": len(new), "saved": len(new), "deselected": 0,
+                                           "no_doi": 0, "duplicates": max(0, sum(counts.values()) - len(new))})
+            with S.lock:
+                topic["seen"] = sorted(seen | {r["doi"] for r in result["records"]})
+                topic["checked"] = time.strftime("%Y-%m-%d")
+                topic["last_new"], topic["last_list"] = len(new), name
+                topic.pop("snooze", None)
+                save_topics()
+                job.update(new=len(new), found=len(result["records"]), list=name, failed=failed)
+            app_log(f"Topic {topic_id}: {len(result['records'])} found, {len(new)} new" + (f" -> {name}" if name else ""))
+        except ds.SearchError as exc:
+            with S.lock:
+                job["error"] = exc.message
+        except Exception as exc:
+            app_log(f"Topic check error: {exc}\n{traceback.format_exc()}")
+            with S.lock:
+                job["error"] = tr("Проверка не удалась: {error}", error=exc)
+        finally:
+            with S.lock:
+                job["running"] = False
+
+    threading.Thread(target=run, daemon=True).start()
+    return {}
+
+
 def browser_search_url(source: str, query: str) -> str:
     if source == "scopus":
         return SCOPUS_RESULTS_URL + quote(query, safe="")
@@ -2106,6 +2250,8 @@ def public_state(known_version: int) -> dict:
         data["keys"] = ds.keys_status(keys)
         provider, _ = ai_service(keys)
         data["ai"] = {"provider": provider, "title": ai.PROVIDERS.get(provider, "")}
+        data["topics_due"] = [{"id": t["id"], "title": t["title"], "days": t["days"]}
+                              for t in topics_state() if t["due"]]
         if known_version != S.items_version:
             data["items"] = [
                 {k: i.get(k, "") for k in ("id", "query", "status", "file",
@@ -2523,7 +2669,35 @@ def handle_api(path: str, body: dict) -> dict:
         saved = ds.save_list(INBOX, str(body.get("slug") or tr("список")), records)
         rv.save_meta(INBOX, saved.name, search_meta(body, records))
         app_log(f"Saved list {saved.name}: {len(records)} DOI")
-        return {"name": saved.name, "count": len(records)}
+        with S.lock:
+            asked = dict(S.search_asked) if (S.search.get("summary") or {}).get("from") == "api" else {}
+            found = list(S.search_records)
+        remembered = False
+        if asked.get("sources"):
+            try:
+                remember_topic(asked["params"], asked["sources"], found, saved.name)
+                remembered = True
+            except Exception as exc:
+                app_log(f"Topic not remembered: {exc}")
+        return {"name": saved.name, "count": len(records), "topic": remembered}
+
+    if path in ("/api/topics", "/api/topic_check", "/api/topic_later", "/api/topic_forget"):
+        tid = str(body.get("id") or "")
+        if path == "/api/topic_check":
+            res = check_topic(tid)
+            if res.get("error"):
+                return res
+        elif path in ("/api/topic_later", "/api/topic_forget"):
+            with S.lock:
+                topics = load_topics()
+                if path == "/api/topic_forget":
+                    S.topics = [t for t in topics if t["id"] != tid]
+                else:
+                    for t in topics:
+                        if t["id"] == tid:
+                            t["snooze"] = (date.today() + timedelta(days=7)).isoformat()
+                save_topics()
+        return {"topics": topics_state()}
 
     if path == "/api/browser_search":
         source = body.get("source")

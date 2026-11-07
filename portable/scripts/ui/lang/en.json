@@ -839,7 +839,31 @@
   "Черновик плана обзора": "Draft outline of the review",
   "Чего не хватает в литературе:": "What the literature lacks:",
   "· мест: ": "· places: ",
-  "например: экстракция полифенолов из виноградных выжимок": "for example: extraction of polyphenols from grape pomace"
+  "например: экстракция полифенолов из виноградных выжимок": "for example: extraction of polyphenols from grape pomace",
+  "<br>🔔 Тема запомнена: через месяц программа напомнит проверить новые статьи.": "<br>🔔 The topic is remembered: in a month the program will remind you to check for new articles.",
+  "Программа запоминает каждый сохранённый поиск по ключам API и через месяц напоминает на главной проверить новые статьи. «Проверить новое» ищет заново и показывает только статьи, которых не было в прошлых результатах, — они сохраняются отдельным списком.": "The program remembers every search through the API keys that you saved and in a month reminds you on the home screen to check for new articles. «Check for new» searches again and shows only the articles that were not in the earlier results — they are saved as a separate list.",
+  "🔔 Мои темы": "🔔 My topics",
+  "что нового вышло с прошлого поиска": "what has come out since the last search",
+  "🔔 Сохранённый поиск программа запоминает: через месяц она напомнит на главной проверить, что вышло нового, и покажет только новые статьи.": "🔔 The program remembers a saved search: in a month it reminds you on the home screen to check what is new and shows only the new articles.",
+  "📝 Отобрать": "📝 Screen",
+  "🔔 Проверить новое": "🔔 Check for new",
+  "Не напоминать об этой теме": "Do not remind me about this topic",
+  "✕ Забыть": "✕ Forget",
+  "Последний поиск: ": "Last search: ",
+  "<b>Что нового по теме?</b> «": "<b>What is new on the topic?</b> «",
+  "» — последний поиск ": "» — last searched ",
+  " дн. назад. ": " days ago. ",
+  "Программа поищет заново и покажет только новые статьи.": "The program searches again and shows only the new articles.",
+  " Тем, которые пора проверить: ": " Topics due for a check: ",
+  "Позже": "Later",
+  "<br><span style=\"color: var(--red)\">Не ответили: ": "<br><span style=\"color: var(--red)\">Did not answer: ",
+  "Новых статей нет: всё, что нашлось (": "No new articles: everything found (",
+  "), вы уже видели.": ") you have already seen.",
+  "⏳ Ищу новые статьи…": "⏳ Looking for new articles…",
+  "Новых статей: <b>": "New articles: <b>",
+  "</b> — сохранены списком <b>inbox\\": "</b> — saved as the list <b>inbox\\",
+  " дн. назад)": " days ago)",
+  " (сегодня)": " (today)"
  },
  "messages": {
   "экспорт": "export",
@@ -984,6 +1008,11 @@
   "Составлен ИИ-помощником {date} по {n} статьям. Это черновик: проверьте, что статьи на своих местах, и перестройте под свою работу.": "Made by the AI helper on {date} from {n} articles. It is a draft: check that the articles are in the right places and rework it for your text.",
   "Чего не хватает в литературе": "What the literature lacks",
   "план обзора": "review outline",
-  "Для плана нужно хотя бы две статьи.": "An outline needs at least two articles."
+  "Для плана нужно хотя бы две статьи.": "An outline needs at least two articles.",
+  "Тема не найдена.": "Topic not found.",
+  "Поиск не удался.": "The search failed.",
+  "новое": "new",
+  "Новое по теме": "New on the topic",
+  "Проверка не удалась: {error}": "The check failed: {error}"
  }
 }

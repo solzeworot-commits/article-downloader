@@ -74,6 +74,8 @@ jobs:
           if ($LASTEXITCODE) { throw "citations_test: поиск по ссылкам, отозванные статьи" }
           & $py -E -s -X utf8 tests\pdf_search_test.py (Join-Path $app "scripts")
           if ($LASTEXITCODE) { throw "pdf_search_test: поиск по тексту PDF, план обзора" }
+          & $py -E -s -X utf8 tests\topics_test.py (Join-Path $app "scripts")
+          if ($LASTEXITCODE) { throw "topics_test: новое по теме" }
           & $py -E -s -X utf8 tests\table_test.py (Join-Path $app "scripts")
           if ($LASTEXITCODE) { throw "table_test: таблица по статьям" }
           & $py -E -s -X utf8 tests\ai_test.py (Join-Path $app "scripts")
