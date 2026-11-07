@@ -73,10 +73,11 @@ QUEUE_PATH = LOGS / "queue.json"
 TOKEN_PATH = LOGS / ".ui_token"
 APP_LOG = LOGS / "app.log"
 REPORT_PATH = ROOT / "Отчёт.csv"
+PDF_TEXT_CACHE = ROOT / "logs" / "pdf_text"      # the pages of the PDFs, for «🔍 Поиск по тексту статей»
 BIBLIO_DIR = ROOT / "Список литературы"
 
 UI_PORT = 17865
-APP_VERSION = "8.3"
+APP_VERSION = "8.4"
 APP_AUTHOR = "Bucaneiro"
 OFFICIAL_URL = "https://github.com/solzeworot-commits/article-downloader"
 DOWNLOAD_URL = OFFICIAL_URL + "/releases/tag/portable-latest"
@@ -430,6 +431,8 @@ class State:
         self.style_jobs: dict[str, dict] = {}    # list file name -> journal style formatting progress
         self.style_failed: dict[tuple, set] = {} # (list, style) -> DOIs doi.org could not format
         self.table_jobs: dict[str, dict] = {}    # list file name -> AI table progress
+        self.find_jobs: dict[str, dict] = {}     # list file name -> search in the text of the PDFs
+        self.outline_jobs: dict[str, dict] = {}  # list file name -> AI draft outline of the review
 
         self.browser = {}
         self.update: dict | None = None    # support.check_update()
@@ -1592,6 +1595,196 @@ def table_rows(name: str, scope: str, columns) -> dict:
     return {"columns": columns, "rows": rows, "total": len(recs), "job": job}
 
 
+def short_ref(rec: dict) -> str:
+    """"Silva et al., 2020" — how an article is named in the search results and the outline."""
+    authors = rec.get("authors") or []
+    who = ""
+    if authors:
+        who = authors[0].get("family", "") + (" et al." if len(authors) > 2 else
+                                              (" & " + authors[1].get("family", "") if len(authors) == 2 else ""))
+    return ", ".join(x for x in (who.strip(), str(rec.get("year") or "")) if x) or rec.get("doi", "")
+
+
+def scope_records(data: dict, scope: str) -> list[str]:
+    keep = BIBLIO_SCOPES.get(scope, ("include",))
+    return [d for d in data["order"] if keep is None or data["records"][d].get("decision") in keep]
+
+
+# ---- «🔍 Поиск по тексту статей» (v8.4) ------------------------------------------
+
+def start_pdf_find(name: str, scope: str, query: str) -> dict:
+    data = get_review(name)
+    terms = pt.query_terms(query)
+    if not terms:
+        return {"error": tr("Напишите, что искать: слово или несколько слов.")}
+    with S.lock:
+        old = S.find_jobs.get(data["list"])
+        if old and old["running"]:
+            old["stop"] = True                       # a new query replaces the old one
+        recs = {d: dict(data["records"][d]) for d in scope_records(data, scope)}
+        items = [dict(i) for i in S.items]
+    if not recs:
+        return {"error": tr("В списке нет статей для поиска — выберите выше «все статьи списка».")}
+    pdfs = pt.find_pdfs(list(recs), pdf_dir(), REPORT_PATH, items)
+    if not pdfs:
+        return {"error": tr("У этих статей ещё нет скачанных PDF — скачайте их на шаге «⬇ Скачать статьи».")}
+    job = {"running": True, "done": 0, "total": len(pdfs), "query": str(query), "terms": terms, "results": [],
+           "places": 0, "no_pdf": len(recs) - len(pdfs), "no_text": 0, "error": "", "stop": False}
+    with S.lock:
+        S.find_jobs[data["list"]] = job
+
+    def run():
+        try:
+            for doi, path in pdfs.items():
+                if job["stop"]:
+                    break
+                pages = pt.pdf_pages(path, PDF_TEXT_CACHE)
+                hits, count = pt.search_pages(pages, terms) if pages else ([], 0)
+                with S.lock:
+                    job["done"] += 1
+                    job["no_text"] += 0 if pages else 1
+                    if count:
+                        rec = recs[doi]
+                        job["results"].append({"doi": doi, "title": rec.get("title") or doi, "ref": short_ref(rec),
+                                               "count": count, "hits": hits})
+                        job["results"].sort(key=lambda r: -r["count"])
+                        job["places"] += count
+        except Exception as exc:
+            app_log(f"PDF search error: {exc}\n{traceback.format_exc()}")
+            with S.lock:
+                job["error"] = tr("Поиск прервался: {error}", error=exc)
+        finally:
+            with S.lock:
+                job["running"] = False
+
+    threading.Thread(target=run, daemon=True).start()
+    return {}
+
+
+def open_pdf(doi: str, page: int = 0) -> dict:
+    """The PDF of an article; at the page found when a browser can show it (file:///…#page=N)."""
+    doi = ds.normalize_doi(doi)
+    with S.lock:
+        items = [dict(i) for i in S.items]
+    path = pt.find_pdfs([doi], pdf_dir(), REPORT_PATH, items).get(doi) if doi else None
+    if not path:
+        return {"error": tr("PDF этой статьи не найден в папке с PDF.")}
+    if page > 0 and os.name == "nt":
+        try:
+            import article_downloader as ad
+            for kind in ("edge", "chrome", "yandex"):
+                exe = ad.find_browser_exe(kind)
+                if exe:
+                    subprocess.Popen([exe, path.resolve().as_uri() + f"#page={page}"],
+                                     stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+                    return {}
+        except Exception as exc:
+            app_log(f"PDF at a page not opened: {exc}")
+    open_path(path)
+    return {}
+
+
+# ---- «📝 План обзора» (v8.4) --------------------------------------------------------
+
+def _summary(rec: dict) -> str:
+    table = rec.get("table") or {}
+    return "; ".join(f"{c}: {v}" for c, v in zip(table.get("columns") or [], table.get("cells") or [])
+                     if v and v != "—")
+
+
+def start_outline(name: str, scope: str, topic: str) -> dict:
+    data = get_review(name)
+    provider, keys = ai_service()
+    if not provider:
+        return {"error": tr("ИИ-помощник не подключён: вставьте ключ (кнопка «🤖 ИИ-помощник» на главной).")}
+    with S.lock:
+        job = S.outline_jobs.get(data["list"])
+        if job and job["running"]:
+            return {}
+        dois = [d for d in scope_records(data, scope) if data["records"][d].get("found") is not None]
+        papers = [{"title": data["records"][d].get("title") or d, "year": data["records"][d].get("year", ""),
+                   "abstract": data["records"][d].get("abstract", ""), "summary": _summary(data["records"][d])}
+                  for d in dois]
+    if len(dois) < 2:
+        return {"error": tr("Для плана нужно хотя бы две статьи: отметьте их «✓ Подходит» или выберите выше «все статьи списка».")}
+    topic = str(topic or "").strip()[:1500]
+    job = {"running": True, "error": "", "cost": 0.0, "count": min(len(dois), ai.OUTLINE_MAX)}
+    with S.lock:
+        S.outline_jobs[data["list"]] = job
+    lang = i18n.LANG
+
+    def run():
+        try:
+            result, cost = ai.outline(provider, keys, topic, papers, lang)
+            with S.lock:
+                data["outline"] = {
+                    "topic": topic, "made": time.strftime("%Y-%m-%d %H:%M"), "provider": provider,
+                    "sections": [{"title": sec["title"], "about": sec["about"], "dois": [dois[i] for i in sec["papers"]]}
+                                 for sec in result["sections"]],
+                    "gaps": result["gaps"], "count": job["count"]}
+                job["cost"] = cost
+                rv.save_review(INBOX, data)
+            app_log(f"Outline of {data['list']}: {len(result['sections'])} sections, cost ${cost:.4f}")
+        except ai.AIError as exc:
+            with S.lock:
+                job["error"] = exc.message
+        except Exception as exc:
+            app_log(f"Outline error: {exc}\n{traceback.format_exc()}")
+            with S.lock:
+                job["error"] = tr("План не получился: {error}", error=exc)
+        finally:
+            with S.lock:
+                job["running"] = False
+
+    threading.Thread(target=run, daemon=True).start()
+    return {}
+
+
+def outline_state(name: str) -> dict:
+    data = get_review(name)
+    meta = rv.load_meta(INBOX, data["list"])
+    with S.lock:
+        job = dict(S.outline_jobs.get(data["list"]) or {})
+        plan = data.get("outline")
+        out = None
+        if plan:
+            placed = set()
+            sections = []
+            for sec in plan.get("sections") or []:
+                papers = []
+                for doi in sec.get("dois") or []:
+                    rec = data["records"].get(doi)
+                    if rec:
+                        placed.add(doi)
+                        papers.append({"doi": doi, "ref": short_ref(rec), "title": rec.get("title") or doi})
+                sections.append({"title": sec.get("title", ""), "about": sec.get("about", ""), "papers": papers})
+            out = {"topic": plan.get("topic", ""), "made": plan.get("made", ""), "sections": sections,
+                   "gaps": plan.get("gaps", ""), "count": plan.get("count", 0)}
+    hint = (plan or {}).get("topic") or meta.get("ai_topic") or ", ".join(meta.get("keywords") or [])
+    return {"job": job, "outline": out, "topic": hint}
+
+
+def save_outline(name: str) -> Path:
+    state = outline_state(name)
+    plan = state["outline"]
+    if not plan:
+        raise ValueError(tr("Сначала составьте план."))
+    blocks = [("title", tr("Черновик плана обзора") + (f": {plan['topic']}" if plan["topic"] else "")),
+              ("note", tr("Составлен ИИ-помощником {date} по {n} статьям. Это черновик: проверьте, что статьи на своих "
+                          "местах, и перестройте под свою работу.", date=plan["made"], n=plan["count"]))]
+    for i, sec in enumerate(plan["sections"], 1):
+        blocks.append(("h", f"{i}. {sec['title']}"))
+        if sec["about"]:
+            blocks.append(("p", sec["about"]))
+        blocks += [("li", f"{p['ref']} — {p['title']}") for p in sec["papers"]]
+    if plan["gaps"]:
+        blocks += [("h", tr("Чего не хватает в литературе")), ("p", plan["gaps"])]
+    BIBLIO_DIR.mkdir(parents=True, exist_ok=True)
+    path = BIBLIO_DIR / f"{Path(name).stem} ({tr('план обзора')}).docx"
+    cs.outline_docx(path, blocks)
+    return path
+
+
 def save_table(name: str, scope: str, columns) -> Path:
     t = table_rows(name, scope, columns)
     BIBLIO_DIR.mkdir(parents=True, exist_ok=True)
@@ -2206,6 +2399,33 @@ def handle_api(path: str, body: dict) -> dict:
             return table_rows(name, scope, columns)
         except FileNotFoundError:
             return {"error": tr("Список не найден в папке inbox.")}
+
+    if path in ("/api/pdf_find", "/api/pdf_find_state", "/api/outline_start", "/api/outline", "/api/outline_save"):
+        try:
+            name = body.get("list")
+            if path == "/api/pdf_find":
+                return start_pdf_find(name, body.get("scope") or "included", str(body.get("q") or ""))
+            if path == "/api/pdf_find_state":
+                with S.lock:
+                    job = S.find_jobs.get(Path(str(name or "")).name) or {}
+                    return {"job": {k: (list(v) if isinstance(v, list) else v) for k, v in job.items() if k != "stop"}}
+            if path == "/api/outline_start":
+                return start_outline(name, body.get("scope") or "included", str(body.get("topic") or ""))
+            if path == "/api/outline_save":
+                try:
+                    return {"name": save_outline(name).name}
+                except ValueError as exc:
+                    return {"error": str(exc)}
+            return outline_state(name)
+        except FileNotFoundError:
+            return {"error": tr("Список не найден в папке inbox.")}
+
+    if path == "/api/open_pdf":
+        try:
+            page = int(body.get("page") or 0)
+        except (TypeError, ValueError):
+            page = 0
+        return open_pdf(str(body.get("doi") or ""), page)
 
     if path == "/api/csl_search":
         return {"styles": cs.csl_search(str(body.get("q") or ""))}

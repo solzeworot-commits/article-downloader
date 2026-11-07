@@ -617,6 +617,75 @@ def extract_table(provider: str, keys: dict, columns: list[str], title: str, tex
     return cells, float(answer["cost"] or 0)
 
 
+OUTLINE_SCHEMA = ("review_outline", {
+    "type": "object",
+    "properties": {
+        "sections": {"type": "array", "items": {
+            "type": "object",
+            "properties": {"title": {"type": "string"}, "about": {"type": "string"},
+                           "papers": {"type": "array", "items": {"type": "integer"}}},
+            "required": ["title", "about", "papers"],
+            "additionalProperties": False}},
+        "gaps": {"type": "string"},
+    },
+    "required": ["sections", "gaps"],
+    "additionalProperties": False,
+})
+
+OUTLINE_INSTRUCTIONS = """You help a researcher plan the text of a literature review.
+Below are the papers selected for the review: a number, the title, the year and the abstract or a summary.
+Propose the structure of the main body of the review (no Introduction and no Conclusions): 4 to 8 sections
+in a logical order, each with
+- "title": a short section heading in {lang_name};
+- "about": one or two sentences in {lang_name} on what the section discusses or compares, based on these papers;
+- "papers": the numbers of the papers to discuss in it. Put every paper in at least one section.
+Also "gaps": one to three sentences in {lang_name} on what these papers do not cover (research gaps).
+Use only the papers given; do not search the web and do not invent papers. Reply with JSON only:
+{"sections": [{"title": "...", "about": "...", "papers": [1, 4]}], "gaps": "..."}"""
+OUTLINE_MAX = 200
+
+
+def outline(provider: str, keys: dict, topic: str, papers: list[dict], lang: str = "ru") -> tuple[dict, float]:
+    """papers: [{"title", "year", "abstract", "summary"}] -> ({"sections": [{"title", "about", "papers": [i]}],
+    "gaps"}, cost); the paper numbers are indexes into the given list."""
+    papers = papers[:OUTLINE_MAX]
+    if len(papers) < 2:
+        raise AIError("bad_answer", tr("Для плана нужно хотя бы две статьи."))
+    per = 700 if len(papers) <= 40 else 400 if len(papers) <= 80 else 220 if len(papers) <= 140 else 0
+    lang_name = "Russian" if lang == "ru" else "English"
+    parts = [f"What the review is about: {str(topic or '').strip()[:1500] or '(see the papers)'}", ""]
+    for i, paper in enumerate(papers, 1):
+        line = f"Paper {i}: {str(paper.get('title') or '').strip()[:300]} ({paper.get('year') or 'n.d.'})"
+        summary = re.sub(r"\s+", " ", str(paper.get("summary") or "")).strip()
+        abstract = re.sub(r"\s+", " ", str(paper.get("abstract") or "")).strip()
+        if per and (summary or abstract):
+            line += "\n" + (summary or abstract)[:per]
+        parts.append(line)
+    answer = ask(provider, keys, OUTLINE_INSTRUCTIONS.replace("{lang_name}", lang_name), "\n".join(parts),
+                 search=False, max_tokens=min(6000, 700 + 25 * len(papers)), lang=lang, timeout=300,
+                 schema=OUTLINE_SCHEMA)
+    data = _json_part(answer["text"])
+    sections = []
+    for sec in (data.get("sections") if isinstance(data, dict) else None) or []:
+        if not isinstance(sec, dict) or not str(sec.get("title") or "").strip():
+            continue
+        nums = []
+        for n in sec.get("papers") or []:
+            try:
+                n = int(n)
+            except (TypeError, ValueError):
+                continue
+            if 1 <= n <= len(papers) and n - 1 not in nums:
+                nums.append(n - 1)
+        sections.append({"title": re.sub(r"\s+", " ", str(sec["title"])).strip()[:200],
+                         "about": re.sub(r"\s+", " ", str(sec.get("about") or "")).strip()[:800],
+                         "papers": nums})
+    if not sections:
+        raise AIError("bad_answer", tr("ИИ ответил не по форме. Нажмите кнопку ещё раз."))
+    gaps = re.sub(r"\s+", " ", str(data.get("gaps") or "")).strip()[:1200]
+    return {"sections": sections, "gaps": gaps}, float(answer["cost"] or 0)
+
+
 SCREEN_INSTRUCTIONS = """You help a researcher pre-screen papers for a literature review by title and abstract.
 Judge every paper only by the text given; do not search the web. Reply with JSON only, no other text:
 {"papers": [{"id": 1, "verdict": "include", "why": "..."}, ...]}

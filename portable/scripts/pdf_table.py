@@ -9,10 +9,16 @@ modest price. The AI helper (ai_helper.extract_table) fills the user's
 columns from it; an article without a PDF is read by its abstract. to_xlsx()
 writes the table as an Excel file with zipfile alone: inline strings, a bold
 header, wrapped text, no extra library.
+
+v8.4: pdf_pages() gives the text page by page (cached on disk) and
+search_pages() finds where all the words of a query stand close together —
+«🔍 Поиск по тексту статей», without AI.
 """
 from __future__ import annotations
 
 import csv
+import hashlib
+import json
 import os
 import re
 import zipfile
@@ -46,6 +52,102 @@ def pdf_text(path: Path, max_chars: int = MAX_CHARS) -> str:
     text = re.sub(r"[ \t]+", " ", text)
     text = re.sub(r"\n\s*\n+", "\n", text).strip()
     return text[:max_chars]
+
+
+# ---------------------------------------------------------------------------
+# search in the text of the PDFs (v8.4)
+# ---------------------------------------------------------------------------
+
+SEARCH_PAGES = 80
+NEAR = 300                 # the words of a query must stand within this many characters of each other
+
+
+def _page_text(text: str) -> str:
+    text = re.sub(r"(\w)-\s*\n\s*(\w)", r"\1\2", text or "")       # words hyphenated at the end of a line
+    return re.sub(r"\s+", " ", text).strip()
+
+
+def pdf_pages(path: Path, cache_dir: Path | None = None) -> list[str]:
+    """The text of every page, the reference list cut off; [] when the PDF has no text layer.
+    The pages are kept in cache_dir (by the path, size and time of the file), so a second search is instant."""
+    path = Path(path)
+    try:
+        st = path.stat()
+    except OSError:
+        return []
+    key = hashlib.sha1(f"{path.resolve()}|{st.st_size}|{int(st.st_mtime)}|1".encode("utf-8", "replace")).hexdigest()
+    cached = cache_dir / f"{key}.json" if cache_dir else None
+    if cached and cached.is_file():
+        try:
+            return json.loads(cached.read_text(encoding="utf-8"))
+        except (OSError, ValueError):
+            pass
+    from pypdf import PdfReader
+    raw = []
+    try:
+        for page in PdfReader(str(path)).pages[:SEARCH_PAGES]:
+            try:
+                raw.append(page.extract_text() or "")
+            except Exception:
+                raw.append("")
+    except Exception:
+        raw = []
+    # The reference list: the last such heading on a page in the second half; the pages after it go too.
+    for i in range(len(raw) - 1, -1, -1):
+        if i < len(raw) * 0.4:
+            break
+        found = list(REFERENCES_RE.finditer("\n" + raw[i] + "\n"))
+        if found:
+            raw = raw[:i] + [raw[i][:max(0, found[-1].start() - 1)]]
+            break
+    pages = [_page_text(t) for t in raw]
+    if not any(pages):
+        pages = []
+    if cached:
+        try:
+            cached.parent.mkdir(parents=True, exist_ok=True)
+            cached.write_text(json.dumps(pages, ensure_ascii=False), encoding="utf-8")
+        except OSError:
+            pass
+    return pages
+
+
+def query_terms(query: str) -> list[str]:
+    """The words of a query in lower case; a phrase in quotes is one term."""
+    terms = []
+    for quoted, angled, word in re.findall(r'"([^"]+)"|«([^»]+)»|(\S+)', str(query or "")):
+        term = re.sub(r"\s+", " ", quoted or angled or word).strip().strip(".,;:!?()[]{}'\"«»").lower()
+        if len(term) >= 2 and term not in terms:
+            terms.append(term)
+    return terms[:8]
+
+
+def search_pages(pages: list[str], terms: list[str], max_hits: int = 3, near: int = NEAR) -> tuple[list[dict], int]:
+    """([{"page", "snippet"}], number of places) where all the terms stand within `near` characters."""
+    if not terms:
+        return [], 0
+    hits, count = [], 0
+    for number, text in enumerate(pages, 1):
+        low = text.lower()
+        rarest = min(terms, key=low.count)
+        start = 0
+        while True:
+            pos = low.find(rarest, start)
+            if pos < 0:
+                break
+            a, b = max(0, pos - near), pos + len(rarest) + near
+            if all(t in low[a:b] for t in terms):
+                count += 1
+                if len(hits) < max_hits:
+                    s0 = max(0, pos - 160)
+                    s0 = low.rfind(" ", 0, s0) + 1 if s0 else 0
+                    s1 = low.find(" ", min(len(text), pos + 240))
+                    s1 = len(text) if s1 < 0 else s1
+                    hits.append({"page": number, "snippet": ("…" if s0 else "") + text[s0:s1] + ("…" if s1 < len(text) else "")})
+                start = b                       # one place per stretch of text
+            else:
+                start = pos + len(rarest)
+    return hits, count
 
 
 def sanitized(doi: str) -> str:

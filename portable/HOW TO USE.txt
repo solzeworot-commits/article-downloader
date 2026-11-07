@@ -1,4 +1,4 @@
-﻿ARTICLE DOWNLOADER, portable version 8.3
+﻿ARTICLE DOWNLOADER, portable version 8.4
 ========================================
 
 Runs on any computer with Windows 10 or 11. Nothing to install: Python and everything
@@ -49,7 +49,13 @@ HOW TO USE
    it for Word (.docx) or as text (.txt). Also files for Zotero / EndNote / Mendeley (.ris)
    and LaTeX (.bib). «📊 Table of the articles» (with the AI helper): the AI reads the
    downloaded PDFs (or the abstracts when there is no PDF) and fills the columns — object,
-   method, conditions, results; you can change them; saved for Excel (.xlsx). A PRISMA flow diagram
+   method, conditions, results; you can change them; saved for Excel (.xlsx).
+   «🔍 Search the text of the articles»: write what you are looking for (for example,
+   ultrasound 40 kHz) and the program shows which downloaded PDFs say it and on which page;
+   the «📄 p. N» button opens the PDF at that page. No AI, free.
+   «📝 Review outline» (with the AI helper): the AI proposes the sections of the review,
+   sorts the articles into them and says what the literature lacks; copy it into Word or save .docx.
+   A PRISMA flow diagram
    with numbers (as a picture — for the «Materials and methods» section). The files are
    in the «Список литературы» folder.
 
