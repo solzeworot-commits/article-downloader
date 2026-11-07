@@ -50,6 +50,7 @@ import cite_styles as cs
 import pdf_table as pt
 import doi_search as ds
 import i18n
+import osutil
 import review as rv
 import support as sp
 from i18n import tr
@@ -81,15 +82,17 @@ PDF_TEXT_CACHE = ROOT / "logs" / "pdf_text"      # the pages of the PDFs, for «
 BIBLIO_DIR = ROOT / "Список литературы"
 
 UI_PORT = 17865
-APP_VERSION = "8.5"
+APP_VERSION = "8.6"
 APP_AUTHOR = "Bucaneiro"
 OFFICIAL_URL = "https://github.com/solzeworot-commits/article-downloader"
 DOWNLOAD_URL = OFFICIAL_URL + "/releases/tag/portable-latest"
-# The Windows build publishes version.json next to the zip; checked at start.
+# The Windows build publishes version.json next to the zip, the Mac build (v8.6)
+# version-mac.json next to its own zip; checked at start.
+_RELEASE = OFFICIAL_URL + "/releases/download/portable-latest/"
 UPDATE_URL = (os.environ.get("ARTICLE_UPDATE_URL")
-              or OFFICIAL_URL + "/releases/download/portable-latest/version.json")
+              or _RELEASE + ("version-mac.json" if osutil.IS_MAC else "version.json"))
 ISSUES_URL = OFFICIAL_URL + "/issues/new"
-UPDATE_ZIP_URL = OFFICIAL_URL + "/releases/download/portable-latest/ArticleDownloader_Portable.zip"
+UPDATE_ZIP_URL = _RELEASE + ("ArticleDownloader_Mac.zip" if osutil.IS_MAC else "ArticleDownloader_Portable.zip")
 # ЛИЦЕНЗИЯ.txt is written by the build; a source checkout has LICENSE.
 LICENSE_FILES = (ROOT / "ЛИЦЕНЗИЯ.txt", ROOT.parent / "LICENSE")
 NO_WINDOW = getattr(subprocess, "CREATE_NO_WINDOW", 0)
@@ -945,7 +948,14 @@ def queue_list_file(path: Path) -> dict:
 
 
 def choose_file_dialog() -> str:
-    """The Windows "Open" dialog in inbox\\; the chosen path or ""."""
+    """The Windows "Open" dialog (the Finder one on a Mac) in inbox\\; the chosen path or ""."""
+    if osutil.IS_MAC:
+        INBOX.mkdir(parents=True, exist_ok=True)
+        try:
+            return osutil.mac_choose_file(tr("Выберите файл со списком DOI"), INBOX)
+        except Exception as exc:
+            app_log(f"File dialog failed: {exc}")
+            return ""
     if os.name != "nt":
         return ""
     INBOX.mkdir(parents=True, exist_ok=True)
@@ -1677,7 +1687,7 @@ def open_pdf(doi: str, page: int = 0) -> dict:
     path = pt.find_pdfs([doi], pdf_dir(), REPORT_PATH, items).get(doi) if doi else None
     if not path:
         return {"error": tr("PDF этой статьи не найден в папке с PDF.")}
-    if page > 0 and os.name == "nt":
+    if page > 0 and (os.name == "nt" or osutil.IS_MAC):
         try:
             import article_downloader as ad
             for kind in ("edge", "chrome", "yandex"):
@@ -2079,12 +2089,12 @@ def start_update() -> dict:
             dest = Path(tempfile.gettempdir()) / "ArticleDownloader_update.zip"
             app_log(f"Update to {up.get('latest')}: downloading")
             sp.download_update(up.get("zip") or UPDATE_ZIP_URL, dest, up.get("sha256", ""), progress)
-            if os.name != "nt" or os.environ.get("ARTICLE_UPDATE_DRY_RUN") == "1":
+            if not (os.name == "nt" or osutil.IS_MAC) or os.environ.get("ARTICLE_UPDATE_DRY_RUN") == "1":
                 app_log("Update downloaded and checked (no installation here)")
                 with S.lock:
                     S.update_job.update(state="downloaded")
                 return
-            sp.start_updater(dest, ROOT, os.getpid())
+            sp.start_updater(dest, ROOT, os.getpid(), sys.executable)
             app_log("Updater started; closing for the update")
             with S.lock:
                 S.update_job.update(state="restarting")
@@ -2116,7 +2126,7 @@ def problem_report(body: dict) -> dict:
         path = sp.save_report(LOGS, text)
         app_log(f"Problem report saved: {path.name}")
         if os.environ.get("ARTICLE_UI_NO_WINDOW") != "1":
-            if os.name == "nt":
+            if os.name == "nt" or osutil.IS_MAC:
                 sp.show_in_folder(path)
             else:
                 open_path(LOGS)
@@ -2129,11 +2139,7 @@ def problem_report(body: dict) -> dict:
 # ---------------------------------------------------------------------------
 
 def open_path(path: Path):
-    if os.name == "nt":
-        os.startfile(str(path))
-    else:
-        subprocess.Popen(["xdg-open", str(path)], stdout=subprocess.DEVNULL,
-                         stderr=subprocess.DEVNULL)
+    osutil.open_path(path)
 
 
 def work_area() -> dict | None:
@@ -2240,7 +2246,8 @@ def public_state(known_version: int) -> dict:
             "search": {k: v for k, v in S.search.items()},
             "key_checks": dict(S.key_checks),
             "exports": recent_exports(),
-            "native_dialog": os.name == "nt",
+            "native_dialog": os.name == "nt" or osutil.IS_MAC,
+            "platform": "mac" if osutil.IS_MAC else ("windows" if os.name == "nt" else "other"),
             "donate": bool(load_donate()),
             "version": APP_VERSION,
             "update": S.update,
@@ -2893,14 +2900,8 @@ class Handler(BaseHTTPRequestHandler):
 
 def message_box(text: str):
     app_log(text)
-    if os.name == "nt":
-        try:
-            import ctypes
-            ctypes.windll.user32.MessageBoxW(None, text, tr("Загрузчик статей"), 0x10)
-            return
-        except Exception:
-            pass
-    print(text, file=sys.stderr)
+    if not osutil.alert(text, tr("Загрузчик статей")):
+        print(text, file=sys.stderr)
 
 
 def running_copy() -> dict | None:

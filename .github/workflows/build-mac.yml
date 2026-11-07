@@ -1,0 +1,171 @@
+# The Mac beta (v8.6): builds the program on a real Mac, checks it there and,
+# after the Windows build has published the "portable-latest" release, adds
+# ArticleDownloader_Mac.zip and version-mac.json to it. A push only builds and
+# checks; publishing happens after a successful Windows build (workflow_run).
+name: Сборка для Mac (бета)
+
+on:
+  push:
+    branches: [main, "claude/**"]
+    paths:
+      - "portable/**"
+      - "tools/**"
+      - "tests/**"
+      - ".github/workflows/build-mac.yml"
+  workflow_run:
+    workflows: ["Портативная сборка для Windows"]
+    types: [completed]
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+concurrency:
+  group: ${{ github.event_name == 'workflow_run' && 'mac-publish' || format('mac-{0}', github.ref) }}
+  cancel-in-progress: false
+
+jobs:
+  mac:
+    if: github.event_name != 'workflow_run' || (github.event.workflow_run.conclusion == 'success' && github.event.workflow_run.event != 'pull_request')
+    runs-on: macos-latest
+    env:
+      PYTHONUTF8: "1"
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          ref: ${{ github.event.workflow_run.head_sha || github.sha }}
+
+      - uses: actions/setup-python@v7
+        with:
+          python-version: "3.13"
+
+      - name: Собрать программу для Mac
+        env:
+          GITHUB_TOKEN: ${{ github.token }}
+        run: python tools/build_portable_mac.py --out dist
+
+      - name: Распаковать как Finder и проверить встроенный Python
+        run: |
+          DEST="$HOME/Downloads/Проверка распаковки"
+          mkdir -p "$DEST"
+          ditto -x -k dist/ArticleDownloader_Mac.zip "$DEST"
+          APP="$DEST/ArticleDownloader"
+          echo "APP=$APP" >> "$GITHUB_ENV"
+          test -f "$APP/ЛИЦЕНЗИЯ.txt" || { echo "в архиве нет ЛИЦЕНЗИЯ.txt"; exit 1; }
+          test -x "$APP/СКАЧАТЬ СТАТЬИ.command" || { echo "запускалка не исполняемая"; exit 1; }
+          test ! -e "$APP/СКАЧАТЬ СТАТЬИ.bat" || { echo "в архиве для Mac лишний .bat"; exit 1; }
+          "$APP/python/arm64/bin/python3" -E -s -c "import playwright, psutil, pypdf, greenlet, ssl, sqlite3, qrcode; print('Python для Apple (arm64): всё на месте')"
+          test -x "$APP/python/arm64/lib/python3.13/site-packages/playwright/driver/node" || { echo "node без права запуска"; exit 1; }
+          file "$APP/python/x86_64/bin/python3.13" | grep -q x86_64 || { echo "нет Python для Intel"; exit 1; }
+          # Intel: through Rosetta when the runner has it (not every image does).
+          if arch -x86_64 /usr/bin/true 2>/dev/null; then
+            arch -x86_64 "$APP/python/x86_64/bin/python3" -E -s -c "import playwright, psutil, pypdf, greenlet, ssl; print('Python для Intel (x86_64): всё на месте')"
+          else
+            echo "Rosetta нет — Python для Intel проверен только по типу файла"
+          fi
+          # HTTPS with the Mac's root certificates (osutil points OpenSSL at /etc/ssl/cert.pem).
+          env -u SSL_CERT_FILE "$APP/python/arm64/bin/python3" -E -s -c "import sys; sys.path.insert(0, sys.argv[1]); import osutil, urllib.request; print('HTTPS:', urllib.request.urlopen('https://api.openalex.org/works?per-page=1', timeout=60).status)" "$APP/scripts" || { echo "HTTPS не работает"; exit 1; }
+          du -sh "$APP" dist/ArticleDownloader_Mac.zip
+
+      - name: Тесты встроенным Python
+        run: |
+          PY="$APP/python/arm64/bin/python3"
+          SCRIPTS="$APP/scripts"
+          for t in parse search review donate support styles window citations pdf_search topics table ai i18n; do
+            echo "== $t"
+            "$PY" -E -s -X utf8 "tests/${t}_test.py" "$SCRIPTS" || { echo "тест $t не прошёл"; exit 1; }
+          done
+          "$PY" -E -s -X utf8 tests/download_stats_test.py
+
+      - name: Запустить программу через «СКАЧАТЬ СТАТЬИ.command»
+        run: |
+          export ARTICLE_UI_NO_WINDOW=1
+          export ARTICLE_UPDATE_URL="http://127.0.0.1:9/version-mac.json"
+          # Mark the folder "from the internet" like a real download: the launcher clears it.
+          xattr -w com.apple.quarantine "0081;00000000;Safari;" "$APP/python/arm64/bin/python3.13" || true
+          "$APP/СКАЧАТЬ СТАТЬИ.command"
+          ok=""
+          for i in $(seq 1 30); do
+            sleep 2
+            if curl -s http://127.0.0.1:17865/api/ping | grep -q ArticleDownloader; then ok=1; break; fi
+          done
+          if [ -z "$ok" ]; then cat "$APP/logs/app.log" "$APP/logs/start.log" 2>/dev/null; echo "окно программы не ответило"; exit 1; fi
+          if xattr "$APP/python/arm64/bin/python3.13" | grep -q quarantine; then echo "пометка «из интернета» не снята"; exit 1; fi
+          TOK="$(cat "$APP/logs/.ui_token")"
+          curl -s -H "X-Token: $TOK" "http://127.0.0.1:17865/api/state?v=0" | python3 -c "import json,sys; s=json.load(sys.stdin); print('Программа отвечает. Браузер:', s['browser'].get('title'), s['browser'].get('error') or '', '| система:', s.get('platform'), '| язык:', s.get('lang'))"
+          curl -s -X POST -H "X-Token: $TOK" -H "Content-Type: application/json" -d "{}" http://127.0.0.1:17865/api/quit > /dev/null
+          # The next step starts it again: wait until this copy has really closed.
+          for i in $(seq 1 30); do curl -s -m 2 http://127.0.0.1:17865/api/ping > /dev/null || break; sleep 1; done
+
+      - name: Автообновление (этот же архив под видом версии 99.0)
+        run: |
+          SITE="$RUNNER_TEMP/update-site"
+          mkdir -p "$SITE"
+          cp dist/ArticleDownloader_Mac.zip "$SITE/"
+          HASH="$(shasum -a 256 dist/ArticleDownloader_Mac.zip | cut -d' ' -f1)"
+          printf '{"version": "99.0", "sha256": "%s", "zip": "http://127.0.0.1:8765/ArticleDownloader_Mac.zip"}' "$HASH" > "$SITE/version-mac.json"
+          python3 -m http.server 8765 --bind 127.0.0.1 --directory "$SITE" > /dev/null 2>&1 &
+          WEB=$!
+          # The program asks for version-mac.json right at start: the server must be up by then.
+          for i in $(seq 1 30); do curl -s -m 2 -o /dev/null http://127.0.0.1:8765/version-mac.json && break; sleep 1; done
+          curl -s -m 10 -o /dev/null -w "сервер обновлений отвечает за %{time_total} с\n" http://127.0.0.1:8765/version-mac.json
+          "$APP/python/arm64/bin/python3" -E -s -c "import time, urllib.request; t = time.time(); r = urllib.request.urlopen('http://127.0.0.1:8765/version-mac.json', timeout=30); print('встроенный Python получил ответ', r.status, 'за', round(time.time() - t, 2), 'с')"
+          MARKER="$APP/HOW TO USE.txt"
+          rm "$MARKER"
+          export ARTICLE_UI_NO_WINDOW=1
+          export ARTICLE_UPDATE_URL="http://127.0.0.1:8765/version-mac.json"
+          "$APP/СКАЧАТЬ СТАТЬИ.command"
+          for i in $(seq 1 30); do sleep 2; curl -s http://127.0.0.1:17865/api/ping | grep -q ArticleDownloader && break; done
+          TOK="$(cat "$APP/logs/.ui_token")"
+          for i in $(seq 1 20); do
+            sleep 1
+            NEWER="$(curl -s -H "X-Token: $TOK" "http://127.0.0.1:17865/api/state?v=0" | python3 -c "import json,sys; print((json.load(sys.stdin).get('update') or {}).get('newer'))" || true)"
+            [ "$NEWER" = "True" ] && break
+          done
+          echo "Программа видит новую версию: $NEWER"
+          if [ "$NEWER" != "True" ]; then
+            tail -20 "$APP/logs/app.log" "$APP/logs/start.log" 2>/dev/null
+            echo "программа не увидела новую версию"; exit 1
+          fi
+          curl -s -X POST -H "X-Token: $TOK" -H "Content-Type: application/json" -d "{}" http://127.0.0.1:17865/api/update_now > /dev/null
+          back=""
+          for i in $(seq 1 90); do
+            sleep 2
+            if grep -q "program started again" "$APP/logs/update.log" 2>/dev/null && [ -f "$MARKER" ]; then
+              if curl -s http://127.0.0.1:17865/api/ping | grep -q ArticleDownloader; then back=1; break; fi
+            fi
+          done
+          cat "$APP/logs/update.log" 2>/dev/null
+          tail -12 "$APP/logs/app.log" 2>/dev/null
+          if [ -z "$back" ] || ! grep -q "updated (rsync)" "$APP/logs/update.log"; then echo "автообновление не прошло"; exit 1; fi
+          echo "Автообновление прошло: файлы заменены, программа открылась снова"
+          TOK="$(cat "$APP/logs/.ui_token")"
+          curl -s -X POST -H "X-Token: $TOK" -H "Content-Type: application/json" -d "{}" http://127.0.0.1:17865/api/quit > /dev/null
+          kill $WEB 2>/dev/null || true
+          for i in $(seq 1 30); do curl -s -m 2 http://127.0.0.1:17865/api/ping > /dev/null || break; sleep 1; done
+
+      - name: Проба браузера загрузчика (Chrome на Mac)
+        continue-on-error: true
+        run: |
+          PY="$APP/python/arm64/bin/python3"
+          DL="$APP/scripts/article_downloader.py"
+          export ARTICLE_BROWSER=chrome
+          export ARTICLE_PROFILE_DIR="$RUNNER_TEMP/chrome-profile"
+          "$PY" -E -s -X utf8 "$DL" --open "https://example.com/"
+          curl -s http://127.0.0.1:9223/json/version | python3 -c "import json,sys; print('Браузер загрузчика:', json.load(sys.stdin).get('Browser'))"
+          "$PY" -E -s -X utf8 "$DL" --restart-browser
+
+      - name: Выложить архив для Mac на страницу Releases
+        if: github.event_name == 'workflow_run'
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          VERSION="$(python3 -c "import re,pathlib; print(re.search(r'APP_VERSION = \"([^\"]+)\"', pathlib.Path('portable/scripts/app.py').read_text(encoding='utf-8')).group(1))")"
+          HASH="$(shasum -a 256 dist/ArticleDownloader_Mac.zip | cut -d' ' -f1)"
+          printf '{"version": "%s", "published": "%s", "sha256": "%s", "zip": "https://github.com/%s/releases/download/portable-latest/ArticleDownloader_Mac.zip"}' \
+            "$VERSION" "$(date +%Y-%m-%d)" "$HASH" "$GITHUB_REPOSITORY" > dist/version-mac.json
+          cat dist/version-mac.json
+          # The Windows build has just (re)created the release; wait for it if needed.
+          for i in $(seq 1 30); do gh release view portable-latest > /dev/null 2>&1 && break; sleep 10; done
+          gh release upload portable-latest dist/ArticleDownloader_Mac.zip dist/version-mac.json --clobber
+          echo "Mac $VERSION, SHA-256: $HASH"

@@ -748,6 +748,38 @@ https://github.com/solzeworot-commits/article-downloader/releases/download/porta
   запомнена». В инструкции (шаг 2) — строка про это. «Планы» в окне благодарности: следующая цель — свой сервер.
 - Тест `tests/topics_test.py` (импорт `app`, временная папка inbox, поддельный OpenAlex).
 
+## 2ч. Версия 8.6: Mac (бета)
+
+- `portable/scripts/osutil.py` — всё, что различается у Windows и Mac: `user_data_dir()` (ключи и профиль
+  браузера загрузчика: `%LOCALAPPDATA%\ArticleDownloader`, на Mac `~/Library/Application Support/ArticleDownloader`;
+  заданный `LOCALAPPDATA` главнее везде — так тесты и стенд), `mac_browser()` (Yandex / Microsoft Edge / Google
+  Chrome .app в `/Applications` или `~/Applications`), `open_path`/`reveal` (`open`, `open -R`), `alert` (osascript),
+  `mac_choose_file` (окно Finder вместо PowerShell-диалога), `mac_language` (`defaults read -g AppleLanguages`).
+  При импорте на Mac ставит `SSL_CERT_FILE=/etc/ssl/cert.pem`: OpenSSL встроенного Python иначе не видит
+  корневые сертификаты, и не работает ни один HTTPS-запрос.
+- `article_downloader.find_browser_exe` на Mac берёт `.app`; имена процессов Mac добавлены в остановку браузера
+  загрузчика; `doi_search.keys_path` и профиль браузера — через `user_data_dir`. `app.py`: `UPDATE_URL` →
+  `version-mac.json`, `UPDATE_ZIP_URL` → `ArticleDownloader_Mac.zip`; состояние отдаёт `platform`.
+- Автообновление на Mac — `support.UPDATER_SH` (bash): ждёт выхода программы, `ditto -x -k` (сохраняет права и
+  ссылки встроенного Python), снимает карантин, `rsync -a` поверх папки (папки пользователя не трогает), запускает
+  программу тем же Python. В `update.log` — «updated (rsync)».
+- Сборка: `tools/build_portable_mac.py` (на Mac): два CPython из python-build-standalone (`install_only_stripped`,
+  новейший 3.13 по релизу через API GitHub) — `python/arm64` и `python/x86_64`, в каждый `pip install --target` с
+  `--platform macosx_11_0_<arch>` (playwright, psutil, pypdf, qrcode; права на `driver/node` сохраняются); из
+  стандартной библиотеки убраны test, tkinter, idlelib и т. п. Запускалка `СКАЧАТЬ СТАТЬИ.command` (снимает
+  карантин со своей папки, выбирает Python по `uname -m`, запускает `scripts/app.py` через nohup и пишет
+  `logs/start.log`), «КАК ЗАПУСТИТЬ НА MAC.txt». Архив `ArticleDownloader_Mac.zip` — через `ditto` (~130 МБ:
+  в нём по Node от Playwright на каждый процессор). `.bat` в Mac-архив не кладётся.
+- `.github/workflows/build-mac.yml` (macos-latest, Apple silicon): при push — сборка, распаковка как Finder,
+  проверка обоих Python (Intel — через Rosetta, если есть), HTTPS, все тесты встроенным Python, запуск через
+  `.command` с пометкой карантина, автообновление «под видом 99.0», проба Chrome. После успешной Windows-сборки
+  (`workflow_run`, только с главной ветки — так устроен GitHub) — публикует `ArticleDownloader_Mac.zip` и
+  `version-mac.json` в тот же релиз `portable-latest` (`gh release upload --clobber`). Windows-сборка пересоздаёт
+  релиз, поэтому архив для Mac появляется через 10–15 минут после неё.
+- Подписи Apple нет (99 $ в год): при первом запуске «Всё равно открыть» в настройках безопасности; без вопросов —
+  командой `curl … && ditto -x -k …` из README. Живой проверки на Mac пока не было: бета, отзывы — через
+  «Сообщить о проблеме». Счётчик скачиваний (`tools/download_stats.py`) архив для Mac пока не считает.
+
 ## 3. Что проверено в 6.0 (Linux, Chromium в Xvfb, поддельное издательство)
 
 Настоящие сайты издательств из среды сборки были закрыты сетью, поэтому всё

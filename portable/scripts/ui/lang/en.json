@@ -163,7 +163,6 @@
   "Наведите камеру телефона на QR-код — откроется страница скачивания.": "Point a phone camera at the QR code to open the download page.",
   "📋 Скопировать ссылку": "📋 Copy the link",
   "Готовое сообщение": "Ready message",
-  "Бесплатная программа для обзора литературы: находит статьи в Scopus, Web of Science и OpenAlex, помогает отобрать нужные, сама скачивает PDF через подписку университета и делает список литературы по ГОСТ. Работает на Windows без установки.": "A free program for literature reviews: finds articles in Scopus, Web of Science and OpenAlex, helps screen them, downloads the PDFs through your university's subscription by itself and builds the reference list. Runs on Windows without installation.",
   "📋 Скопировать сообщение со ссылкой": "📋 Copy the message with the link",
   "ВКонтакте": "VK",
   "✉ Почта": "✉ E-mail",
@@ -863,7 +862,10 @@
   "Новых статей: <b>": "New articles: <b>",
   "</b> — сохранены списком <b>inbox\\": "</b> — saved as the list <b>inbox\\",
   " дн. назад)": " days ago)",
-  " (сегодня)": " (today)"
+  " (сегодня)": " (today)",
+  "Бесплатная программа для обзора литературы: находит статьи в Scopus, Web of Science и OpenAlex, помогает отобрать нужные, сама скачивает PDF через подписку университета и делает список литературы по ГОСТ. Работает на Windows и Mac без установки.": "A free program for literature reviews: finds articles in Scopus, Web of Science and OpenAlex, helps screen them, downloads the PDFs through your university's subscription by itself and builds the reference list. Runs on Windows and Mac without installation.",
+  " На Mac пришлите файл ": " On a Mac, send the ",
+  " из папки программы.": " file from the program folder."
  },
  "messages": {
   "экспорт": "export",
