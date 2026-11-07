@@ -94,7 +94,8 @@ jobs:
           TOK="$(cat "$APP/logs/.ui_token")"
           curl -s -H "X-Token: $TOK" "http://127.0.0.1:17865/api/state?v=0" | python3 -c "import json,sys; s=json.load(sys.stdin); print('Программа отвечает. Браузер:', s['browser'].get('title'), s['browser'].get('error') or '', '| система:', s.get('platform'), '| язык:', s.get('lang'))"
           curl -s -X POST -H "X-Token: $TOK" -H "Content-Type: application/json" -d "{}" http://127.0.0.1:17865/api/quit > /dev/null
-          sleep 3
+          # The next step starts it again: wait until this copy has really closed.
+          for i in $(seq 1 30); do curl -s -m 2 http://127.0.0.1:17865/api/ping > /dev/null || break; sleep 1; done
 
       - name: Автообновление (этот же архив под видом версии 99.0)
         run: |
@@ -118,7 +119,10 @@ jobs:
             [ "$NEWER" = "True" ] && break
           done
           echo "Программа видит новую версию: $NEWER"
-          [ "$NEWER" = "True" ] || { echo "программа не увидела новую версию"; exit 1; }
+          if [ "$NEWER" != "True" ]; then
+            tail -20 "$APP/logs/app.log" "$APP/logs/start.log" 2>/dev/null
+            echo "программа не увидела новую версию"; exit 1
+          fi
           curl -s -X POST -H "X-Token: $TOK" -H "Content-Type: application/json" -d "{}" http://127.0.0.1:17865/api/update_now > /dev/null
           back=""
           for i in $(seq 1 90); do
@@ -134,7 +138,7 @@ jobs:
           TOK="$(cat "$APP/logs/.ui_token")"
           curl -s -X POST -H "X-Token: $TOK" -H "Content-Type: application/json" -d "{}" http://127.0.0.1:17865/api/quit > /dev/null
           kill $WEB 2>/dev/null || true
-          sleep 3
+          for i in $(seq 1 30); do curl -s -m 2 http://127.0.0.1:17865/api/ping > /dev/null || break; sleep 1; done
 
       - name: Проба браузера загрузчика (Chrome на Mac)
         continue-on-error: true
