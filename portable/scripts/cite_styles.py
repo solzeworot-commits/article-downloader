@@ -458,6 +458,27 @@ def to_docx(path: Path, heading: str, items: list[dict]):
         runs += "".join(_run(t, f) for t, f in _segments_from_html(item["html"]))
         paras.append('<w:p><w:pPr><w:spacing w:after="120"/><w:ind w:left="360" w:hanging="360"/></w:pPr>'
                      f"{runs}</w:p>")
+    _write_docx(path, paras)
+
+
+def outline_docx(path: Path, blocks: list[tuple[str, str]]):
+    """A .docx of plain blocks: ("title" | "h" | "p" | "li" | "note", text) — the draft outline of a review."""
+    paras = []
+    for kind, text in blocks:
+        if kind == "title":
+            paras.append(f'<w:p><w:pPr><w:spacing w:after="240"/></w:pPr>{_run(text, "b")}</w:p>')
+        elif kind == "h":
+            paras.append(f'<w:p><w:pPr><w:keepNext/><w:spacing w:before="240" w:after="80"/></w:pPr>{_run(text, "b")}</w:p>')
+        elif kind == "li":
+            paras.append(f'<w:p><w:pPr><w:spacing w:after="40"/><w:ind w:left="567" w:hanging="283"/></w:pPr>{_run("• " + text, "")}</w:p>')
+        elif kind == "note":
+            paras.append(f'<w:p><w:pPr><w:spacing w:before="240" w:after="80"/></w:pPr>{_run(text, "i")}</w:p>')
+        else:
+            paras.append(f'<w:p><w:pPr><w:spacing w:after="80"/></w:pPr>{_run(text, "")}</w:p>')
+    _write_docx(path, paras)
+
+
+def _write_docx(path: Path, paras: list[str]):
     document = ('<?xml version="1.0" encoding="UTF-8" standalone="yes"?>'
                 '<w:document xmlns:w="http://schemas.openxmlformats.org/wordprocessingml/2006/main"><w:body>'
                 + "".join(paras) +

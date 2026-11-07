@@ -344,6 +344,20 @@
   .bb-list li { margin-bottom: 6px; }
   ul.bb-list { list-style: none; padding-left: 12px; }
   #tb-cols { min-height: 116px; font-size: 15px; font-family: inherit; margin-top: 4px; }
+  .fd-row { display: flex; gap: 10px; flex-wrap: wrap; }
+  .fd-row input { flex: 1 1 280px; font-size: 16px; padding: 9px 12px; border-radius: 10px; border: 1px solid var(--line); }
+  .fd-art { border: 1px solid var(--line); border-radius: 12px; padding: 10px 14px; margin-top: 10px; }
+  .fd-art .recognized { font-size: 13px; }
+  .fd-hit { display: flex; gap: 10px; align-items: flex-start; margin-top: 8px; font-size: 14px; line-height: 1.5; }
+  .fd-hit button { flex: none; padding: 3px 10px; font-size: 13px; }
+  .fd-hit mark, .ol-plan mark { background: #fde68a; padding: 0 2px; border-radius: 3px; }
+  #ol-topic { min-height: 56px; font-size: 15px; font-family: inherit; margin-top: 4px; }
+  .ol-plan { margin: 12px 0 0; padding-left: 24px; }
+  .ol-plan > li { margin-bottom: 14px; }
+  .ol-plan > li > b { font-size: 17px; }
+  .ol-plan .about { color: var(--muted); margin: 3px 0 4px; font-size: 15px; }
+  .ol-plan ul { margin: 2px 0; padding-left: 20px; font-size: 14px; }
+  .ol-gaps { background: var(--amber-soft); border: 1px solid #fcd34d; border-radius: 12px; padding: 10px 14px; margin-top: 6px; }
   .tb-wrap { max-height: 460px; overflow: auto; border: 1px solid var(--line); border-radius: 10px; margin-top: 10px; }
   .tb-wrap:empty { display: none; }
   #tb-table { border-collapse: collapse; font-size: 13px; min-width: 100%; }
@@ -663,6 +677,14 @@ https://link.springer.com/article/10.1007/s12393-026-09447-8
       <div id="bb-saved" class="recognized" style="margin-top: 8px"></div>
       <div class="recognized" style="margin-top: 6px" id="bb-hint"></div>
     </div>
+    <div class="card" id="fd-card">
+      <h2><span>🔍 Поиск по тексту статей</span><small>где в скачанных PDF написано то, что вам нужно</small></h2>
+      <div class="fd-row"><input id="fd-q" spellcheck="false" autocomplete="off" placeholder="например: ultrasound 40 kHz">
+        <button class="linkbtn" id="fd-run">🔍 Найти</button></div>
+      <div class="recognized" style="margin-top: 6px">Ищет в скачанных PDF статей из списка выше («Какие статьи»). Все слова должны стоять рядом, в одном абзаце; фразу целиком возьмите в кавычки: "deep eutectic". Часть слова тоже находит: extract — и extraction. Без ИИ, бесплатно.</div>
+      <div class="recognized" id="fd-status" style="margin-top: 8px"></div>
+      <div id="fd-result"></div>
+    </div>
     <div class="card" id="tb-card">
       <h2><span>📊 Таблица по статьям</span><small>ИИ читает скачанные PDF (или аннотации) и заполняет столбцы — для обзора и Excel</small></h2>
       <div id="tb-off">Нужен ИИ-помощник: он прочитает каждую статью и заполнит таблицу.
@@ -678,6 +700,20 @@ https://link.springer.com/article/10.1007/s12393-026-09447-8
           примерно 1–5 центов (у Claude Opus — дороже), по аннотации — меньше цента. Проверяйте цифры по статьям:
           ИИ может ошибаться.</div>
         <div class="tb-wrap" id="tb-wrap"></div>
+      </div>
+    </div>
+    <div class="card" id="ol-card">
+      <h2><span>📝 План обзора</span><small>ИИ предложит разделы и разложит по ним ваши статьи — черновик для текста</small></h2>
+      <div id="ol-off">Нужен ИИ-помощник: он прочитает аннотации отобранных статей и предложит разделы обзора.
+        <button class="linkbtn" data-go="ai">🤖 Подключить ИИ-помощник</button></div>
+      <div id="ol-on" hidden>
+        <label>Тема обзора — одной-двумя фразами
+          <textarea id="ol-topic" spellcheck="true" placeholder="например: экстракция полифенолов из виноградных выжимок"></textarea></label>
+        <div class="acts"><button class="linkbtn" id="ol-run">🤖 Составить план</button>
+          <button id="ol-copy" hidden>📋 Скопировать план</button><button id="ol-save" hidden>💾 Для Word (.docx)</button></div>
+        <div class="recognized" id="ol-status" style="margin-top: 6px"></div>
+        <div class="recognized" style="margin-top: 4px">Берутся статьи из списка выше («Какие статьи»): аннотации, а если вы составили таблицу — и её ячейки. План стоит несколько центов. Это черновик: ИИ может ошибаться — проверьте, что статьи на своих местах.</div>
+        <div id="ol-plan"></div>
       </div>
     </div>
     <div class="card">
@@ -984,6 +1020,7 @@ extraction"></textarea>
 
     <h4>5. 📚 Список литературы и схема PRISMA</h4>
     <p>Готовый список литературы по ГОСТ, APA, Vancouver или в стиле нужного журнала (около 11 000 журналов) — скопировать в Word или сохранить файлом.</p>
+    <p>Там же <b>«🔍 Поиск по тексту статей»</b>: напишите, что ищете (например, «ultrasound 40 kHz»), — программа покажет, в каких скачанных PDF и на какой странице это написано. Без ИИ, бесплатно.</p>
     <p><b>PRISMA</b> — международный стандарт: схема показывает, сколько статей нашли в базах, сколько отсеяли и почему и сколько вошло в обзор. Рецензенты журналов и диссертационные советы требуют её в систематических обзорах: по ней видно, что литература отобрана честно, а не «какие нашлись». Программа считает цифры сама по вашим отметкам на шаге 3 — сохраните схему картинкой и вставьте в раздел «Материалы и методы».</p>
 
     <h4>🤖 ИИ-помощник — по желанию</h4>
@@ -992,7 +1029,8 @@ extraction"></textarea>
       <li>тема своими словами → готовые слова и синонимы для поиска;</li>
       <li>предотбор: ИИ читает аннотации и советует, какие статьи подходят;</li>
       <li>перевод аннотаций на русский;</li>
-      <li>таблица по скачанным статьям (объект, метод, условия, результаты) для Excel.</li>
+      <li>таблица по скачанным статьям (объект, метод, условия, результаты) для Excel;</li>
+      <li>план обзора: разделы и какие статьи в какой раздел — черновик для текста.</li>
     </ul>
     <p>Нужен ваш ключ одного из сервисов: Perplexity, ChatGPT, Claude, GigaChat или YandexGPT. Запросы стоят центы.</p>
     <div class="about-acts"><button class="linkbtn" data-guide="ai">🤖 Подключить ИИ-помощник</button></div>
@@ -2656,6 +2694,8 @@ async function loadBiblio() {
       "пишется полное название. Курсив и жирный сохраняются при копировании в Word и в файле .docx.";
   renderPrisma(d.prisma);
   loadTable();
+  loadFind();
+  loadOutline();
   if (((d.job && d.job.running) || (sj && sj.running)) && view === "biblio") BB.timer = setTimeout(loadBiblio, 2000);
 }
 function prismaLines(p) {
@@ -2815,6 +2855,109 @@ $("tb-save").onclick = async () => {
     : `💾 Сохранено: <b>Список литературы\\${esc(res.name)}</b>`;
 };
 $("bb-save-txt").onclick = () => saveBiblio("txt");
+
+// ---- search in the text of the PDFs (v8.4) -------------------------------------------
+const FD = { timer: 0, list: "" };
+function fdMark(text, terms) {
+  let out = esc(text);
+  const list = [...terms].sort((a, b) => b.length - a.length).map((t) => esc(t).replace(/[.*+?^${}()|[\]\\]/g, "\\$&"));
+  if (list.length) out = out.replace(new RegExp(`(${list.join("|")})`, "gi"), "<mark>$1</mark>");
+  return out;
+}
+async function loadFind() {
+  clearTimeout(FD.timer);
+  if (!BB.list) return;
+  if (FD.list !== BB.list) { FD.list = BB.list; $("fd-status").textContent = ""; $("fd-result").innerHTML = ""; }
+  let res;
+  try { res = await api("/api/pdf_find_state", { list: BB.list }); } catch (e) { return; }
+  const j = res.job || {};
+  if (!j.query) return;
+  let txt = "";
+  if (j.running) txt = `⏳ Ищу в PDF: ${j.done} / ${j.total}… Первый раз программа читает PDF дольше, потом — сразу.`;
+  else if (j.error) txt = `<span style="color: var(--red)">${esc(j.error)}</span>`;
+  else if (j.results.length) txt = `Нашлось мест: <b>${j.places}</b>, статей: <b>${j.results.length}</b> из ${j.total}.`;
+  else txt = "Ничего не нашлось. Попробуйте меньше слов или часть слова (extract найдёт и extraction).";
+  if (!j.running && j.no_pdf) txt += ` Без скачанного PDF: ${j.no_pdf}.`;
+  if (!j.running && j.no_text) txt += ` PDF без текста (скан, только картинки): ${j.no_text}.`;
+  $("fd-status").innerHTML = txt;
+  $("fd-result").innerHTML = j.results.map((r) => `<div class="fd-art"><b>${esc(r.ref)}</b> — ${esc(r.title)}` +
+    ` <span class="recognized">· мест: ${r.count}</span>` +
+    r.hits.map((h) => `<div class="fd-hit"><button data-pdf="${esc(r.doi)}" data-page="${h.page}" title="Открыть PDF на этой странице">📄 стр. ${h.page}</button>` +
+      `<span>${fdMark(h.snippet, j.terms || [])}</span></div>`).join("") +
+    (r.count > r.hits.length ? `<div class="recognized" style="margin-top: 6px">…и ещё мест в этой статье: ${r.count - r.hits.length}</div>` : "") +
+    `</div>`).join("");
+  if (j.running && view === "biblio") FD.timer = setTimeout(loadFind, 800);
+}
+async function runFind() {
+  const q = $("fd-q").value.trim();
+  if (!q) { $("fd-q").focus(); return; }
+  const res = await api("/api/pdf_find", { list: BB.list, scope: $("bb-scope").value, q });
+  if (res.error) { $("fd-status").innerHTML = `<span style="color: var(--red)">${esc(res.error)}</span>`; $("fd-result").innerHTML = ""; return; }
+  loadFind();
+}
+$("fd-run").onclick = runFind;
+$("fd-q").addEventListener("keydown", (e) => { if (e.key === "Enter") { e.preventDefault(); runFind(); } });
+$("fd-result").addEventListener("click", async (e) => {
+  const b = e.target.closest("button[data-pdf]");
+  if (!b) return;
+  const res = await api("/api/open_pdf", { doi: b.dataset.pdf, page: Number(b.dataset.page) || 0 });
+  if (res.error) flash(b, false);
+});
+
+// ---- the draft outline of the review (v8.4) ------------------------------------------
+const OL = { timer: 0, topicFor: "", plan: null };
+function olText(plan) {
+  const lines = [`Черновик плана обзора${plan.topic ? ": " + plan.topic : ""}`, ""];
+  plan.sections.forEach((s, i) => {
+    lines.push(`${i + 1}. ${s.title}`);
+    if (s.about) lines.push(s.about);
+    s.papers.forEach((p) => lines.push(`   • ${p.ref} — ${p.title}`));
+    lines.push("");
+  });
+  if (plan.gaps) lines.push("Чего не хватает в литературе:", plan.gaps);
+  return lines.join("\n");
+}
+function olHtml(plan) {
+  return `<p><b>Черновик плана обзора${plan.topic ? ": " + esc(plan.topic) : ""}</b></p>` +
+    plan.sections.map((s, i) => `<p><b>${i + 1}. ${esc(s.title)}</b><br>${esc(s.about)}</p><ul>` +
+      s.papers.map((p) => `<li>${esc(p.ref)} — ${esc(p.title)}</li>`).join("") + `</ul>`).join("") +
+    (plan.gaps ? `<p><b>Чего не хватает в литературе:</b> ${esc(plan.gaps)}</p>` : "");
+}
+async function loadOutline() {
+  clearTimeout(OL.timer);
+  const on = aiOn();
+  $("ol-off").hidden = on; $("ol-on").hidden = !on;
+  if (!BB.list) return;
+  let res;
+  try { res = await api("/api/outline", { list: BB.list }); } catch (e) { return; }
+  if (res.error) { $("ol-status").textContent = res.error; return; }
+  if (OL.topicFor !== BB.list) { OL.topicFor = BB.list; $("ol-topic").value = res.topic || ""; }
+  const j = res.job || {}, plan = res.outline;
+  OL.plan = plan;
+  $("ol-run").hidden = !!j.running;
+  $("ol-run").textContent = plan ? "🤖 Составить план заново" : "🤖 Составить план";
+  $("ol-copy").hidden = $("ol-save").hidden = !plan || !!j.running;
+  let txt = j.running ? `⏳ ИИ читает статьи (${j.count}) и составляет план — обычно меньше минуты…` : "";
+  if (j.error) txt = `<span style="color: var(--red)">${esc(j.error)}</span>`;
+  else if (plan && !j.running) txt = `План составлен ${esc(plan.made)}, статей: ${plan.count}.` + costText(j.cost);
+  $("ol-status").innerHTML = txt;
+  $("ol-plan").innerHTML = plan ? `<ol class="ol-plan">` + plan.sections.map((s) => `<li><b>${esc(s.title)}</b>` +
+      (s.about ? `<div class="about">${esc(s.about)}</div>` : "") +
+      `<ul>${s.papers.map((p) => `<li><b>${esc(p.ref)}</b> — ${esc(p.title)}</li>`).join("")}</ul></li>`).join("") + `</ol>` +
+    (plan.gaps ? `<div class="ol-gaps"><b>Чего не хватает в литературе:</b> ${esc(plan.gaps)}</div>` : "") : "";
+  if (j.running && view === "biblio") OL.timer = setTimeout(loadOutline, 2000);
+}
+$("ol-run").onclick = async () => {
+  const res = await api("/api/outline_start", { list: BB.list, scope: $("bb-scope").value, topic: $("ol-topic").value });
+  if (res.error) { $("ol-status").innerHTML = `<span style="color: var(--red)">${esc(res.error)}</span>`; return; }
+  loadOutline();
+};
+$("ol-copy").onclick = async (e) => { if (OL.plan) flash(e.currentTarget, await copyRich(olHtml(OL.plan), olText(OL.plan))); };
+$("ol-save").onclick = async () => {
+  const res = await api("/api/outline_save", { list: BB.list });
+  $("ol-status").innerHTML = res.error ? `<span style="color: var(--red)">${esc(res.error)}</span>`
+    : `💾 Сохранено: <b>Список литературы\\${esc(res.name)}</b>`;
+};
 (() => {
   const st = recall("ad_bb_style", "gost");
   if ([...$("bb-style").options].some((o) => o.value === st)) $("bb-style").value = st;

@@ -1,19 +1,19 @@
 {
   "message": "Если программа сэкономила вам время — можно поблагодарить автора. Все деньги пойдут на развитие проекта. Спасибо!",
   "plans": {
-    "title": "Уже сделано: ИИ-помощник на вашем ключе (Perplexity, ChatGPT, Claude, GigaChat или YandexGPT) — подбор слов, предотбор, перевод аннотаций и таблица по статьям для Excel; стили журналов. Следующие цели:",
+    "title": "Уже сделано: ИИ-помощник на вашем ключе (Perplexity, ChatGPT, Claude, GigaChat или YandexGPT) — подбор слов, предотбор, перевод аннотаций, таблица по статьям для Excel и план обзора; стили журналов, поиск по ссылкам, поиск по тексту PDF. Следующие цели:",
     "items": [
       "🌐 свой сервер ИИ-помощника — работать без своего ключа и зарубежной карты, оплата в рублях прямо в программе;",
-      "📝 черновик плана обзора по отобранным статьям."
+      "🔔 «новое по теме» — раз в месяц показывать только статьи, вышедшие с прошлого поиска."
     ]
   },
   "en": {
     "message": "If the program saved you time, you can thank the author. All the money goes to the project. Thank you!",
     "plans": {
-      "title": "Done: an AI helper on your own key (Perplexity, ChatGPT, Claude, GigaChat or YandexGPT) — search words, pre-screening, abstract translation and a table of the articles for Excel; journal styles. Next goals:",
+      "title": "Done: an AI helper on your own key (Perplexity, ChatGPT, Claude, GigaChat or YandexGPT) — search words, pre-screening, abstract translation, a table of the articles for Excel and a review outline; journal styles, the citation search, search in the PDF text. Next goals:",
       "items": [
         "🌐 our own AI helper server — no key of your own and no foreign card needed, paid in roubles in the program;",
-        "📝 a draft outline of the review from the selected articles."
+        "🔔 «new on the topic» — once a month, only the articles published since the last search."
       ]
     },
     "sbp": {
