@@ -225,6 +225,11 @@
   .note.amber { background: var(--amber-soft); border-color: #fcd34d; }
   .note.green { background: var(--green-soft); border-color: #86efac; }
   .note.blue { background: var(--blue-soft); border-color: #93c5fd; }
+  .tp-row { border: 1px solid var(--line); border-radius: 12px; padding: 10px 14px; margin-top: 10px; }
+  .tp-row .tp-head { display: flex; gap: 10px; align-items: center; flex-wrap: wrap; }
+  .tp-row .tp-title { flex: 1 1 260px; font-weight: 700; }
+  .tp-row .tp-res { margin-top: 8px; }
+  .tp-row .tp-res .note { margin: 0; }
   .note.red { background: var(--red-soft); border-color: #fca5a5; }
 
   /* v6.2: keyword hints, thanks to the author */
@@ -472,6 +477,7 @@
 
   <section id="view-home" class="view">
     <div id="home-note"></div>
+    <div id="home-topics"></div>
     <button class="guide-bar" id="go-guide"><span class="ai-ico">📖</span>
       <span class="ai-txt"><b>ИНСТРУКЦИЯ</b><small>с чего начать и зачем</small></span></button>
     <div class="home-buttons four">
@@ -726,6 +732,11 @@ https://link.springer.com/article/10.1007/s12393-026-09447-8
 
   <section id="view-search" class="view" hidden>
     <div id="keys-note"></div>
+    <div class="card" id="tp-card" hidden>
+      <h2><span>🔔 Мои темы</span><small>что нового вышло с прошлого поиска</small></h2>
+      <div class="recognized">Программа запоминает каждый сохранённый поиск по ключам API и через месяц напоминает на главной проверить новые статьи. «Проверить новое» ищет заново и показывает только статьи, которых не было в прошлых результатах, — они сохраняются отдельным списком.</div>
+      <div id="tp-list"></div>
+    </div>
     <div class="card">
       <h2><span>1. Ключевые слова</span><small>каждое слово или фраза — с новой строки, синонимы — в одной строке через «;»; лучше по-английски</small>
         <span class="grow"></span><button id="btn-new-topic" title="Очистить слова, запросы и найденное">🧹 Новая тема</button></h2>
@@ -1007,6 +1018,7 @@ extraction"></textarea>
     <p>Пишите слова по-английски, каждое понятие с новой строки, синонимы — в одной строке через «;»:<br>
       <code>grape pomace; grape marc</code><br><code>polyphenols; phenolic compounds</code></p>
     <p>Не знаете, какие слова? Нажмите <b>«💡 Подсказать слова»</b>: программа бесплатно покажет, какими словами описаны статьи по вашей теме. Или опишите тему своими словами — слова подберёт ИИ-помощник.</p>
+    <p>🔔 Сохранённый поиск программа запоминает: через месяц она напомнит на главной проверить, что вышло нового, и покажет только новые статьи.</p>
 
     <h4>3. 📝 Отбор статей</h4>
     <p>Читайте аннотации и жмите «✓ Подходит», «? Под вопросом» или «✗ Не подходит» (или клавиши 1, 2, 3). Подходящие сохраните новым списком — его и скачивайте.</p>
@@ -1500,6 +1512,7 @@ function show(v) {
   try { history.replaceState(null, "", "#" + v); } catch (e) {}
   window.scrollTo(0, 0);
   if (v === "download") loadLists();
+  if (v === "search") loadTopics();
   if (v === "keys") { if (AI_TABS.includes(keyTab)) keyTab = "openalex"; renderKeySteps(); }
   if (v === "ai") { keyTab = (state && state.ai && state.ai.provider) || recall("ad_aitab", "perplexity"); renderKeySteps(); }
   if (v === "search") buildQueriesSoon();
@@ -1534,6 +1547,7 @@ function renderExtra() {
   } else {
     home.innerHTML = "";
   }
+  renderTopicsDue(s.topics_due || []);
   $("btn-choose").hidden = !s.native_dialog;
   $("home-donate").hidden = !s.donate;
   $("about-donate").hidden = !s.donate;
@@ -1757,7 +1771,8 @@ async function saveList() {
   const dois = records.filter((r) => selected.has(r.doi)).map((r) => r.doi);
   const res = await api("/api/search_save", { dois, slug: $("save-name").value, keywords: $("kw").value });
   if (res.error) { note($("save-note"), "red", "✖", esc(res.error)); return; }
-  note($("save-note"), "green", "✅", `Сохранено: <b>inbox\\${esc(res.name)}</b> — ${res.count} DOI.`,
+  note($("save-note"), "green", "✅", `Сохранено: <b>inbox\\${esc(res.name)}</b> — ${res.count} DOI.` +
+    (res.topic ? `<br>🔔 Тема запомнена: через месяц программа напомнит проверить новые статьи.` : ""),
     `<button class="linkbtn" data-review="${esc(res.name)}">📝 Отобрать по аннотациям</button>` +
     `<button data-list="${esc(res.name)}">⬇ Скачать все сразу</button><button data-act="open-inbox">📂 Открыть папку inbox</button>`);
 }
@@ -2855,6 +2870,57 @@ $("tb-save").onclick = async () => {
     : `💾 Сохранено: <b>Список литературы\\${esc(res.name)}</b>`;
 };
 $("bb-save-txt").onclick = () => saveBiblio("txt");
+
+// ---- new on the topic (v8.5) ---------------------------------------------------------
+const TP = { timer: 0, sig: "" };
+function renderTopicsDue(due) {
+  const sig = JSON.stringify(due);
+  if (sig === TP.sig) return;
+  TP.sig = sig;
+  if (!due.length) { $("home-topics").innerHTML = ""; return; }
+  const t = due[0];
+  note($("home-topics"), "blue", "🔔", `<b>Что нового по теме?</b> «${esc(t.title)}» — последний поиск ${t.days} дн. назад. ` +
+    `Программа поищет заново и покажет только новые статьи.` + (due.length > 1 ? ` Тем, которые пора проверить: ${due.length}.` : ""),
+    `<button class="linkbtn" data-topic-check="${esc(t.id)}">🔔 Проверить новое</button><button data-topic-later="${esc(t.id)}">Позже</button>`);
+}
+function tpResult(t) {
+  const j = t.job || {};
+  if (j.running) return `<div class="tp-res recognized">⏳ Ищу новые статьи…</div>`;
+  if (j.error) return `<div class="tp-res" style="color: var(--red)">${esc(j.error)}</div>`;
+  if (j.found === undefined) return "";
+  const failed = (j.failed || []).length ? `<br><span style="color: var(--red)">Не ответили: ${esc(j.failed.join("; "))}</span>` : "";
+  if (!j.new) return `<div class="tp-res"><div class="note"><span style="font-size: 24px">🙂</span><span class="msg">Новых статей нет: всё, что нашлось (${j.found}), вы уже видели.${failed}</span></div></div>`;
+  return `<div class="tp-res"><div class="note green"><span style="font-size: 24px">✅</span><span class="msg">Новых статей: <b>${j.new}</b> — сохранены списком <b>inbox\\${esc(j.list)}</b>.${failed}</span>` +
+    `<button class="linkbtn" data-review="${esc(j.list)}">📝 Отобрать</button><button data-list="${esc(j.list)}">⬇ Скачать</button></div></div>`;
+}
+async function loadTopics(body, path) {
+  clearTimeout(TP.timer);
+  let res;
+  try { res = await api(path || "/api/topics", body || {}); } catch (e) { return; }
+  if (res.error) { $("tp-list").innerHTML = `<div class="tp-res" style="color: var(--red)">${esc(res.error)}</div>`; return; }
+  const topics = res.topics || [];
+  $("tp-card").hidden = !topics.length;
+  $("tp-list").innerHTML = topics.map((t) => `<div class="tp-row"><div class="tp-head"><span class="tp-title">${esc(t.title)}</span>` +
+    `<button class="linkbtn" data-topic-check="${esc(t.id)}" ${t.job && t.job.running ? "disabled" : ""}>🔔 Проверить новое</button>` +
+    `<button data-topic-forget="${esc(t.id)}" title="Не напоминать об этой теме">✕ Забыть</button></div>` +
+    `<div class="recognized">Последний поиск: ${esc(t.checked)}${t.days ? ` (${t.days} дн. назад)` : " (сегодня)"} · ${esc(t.sources.join(", "))}</div>` +
+    tpResult(t) + `</div>`).join("");
+  if (topics.some((t) => t.job && t.job.running) && view === "search") TP.timer = setTimeout(loadTopics, 1500);
+}
+document.addEventListener("click", async (e) => {
+  const b = e.target.closest("button");
+  if (!b) return;
+  if (b.dataset.topicCheck) {
+    if (view !== "search") show("search");
+    await loadTopics({ id: b.dataset.topicCheck }, "/api/topic_check");
+    $("tp-card").scrollIntoView({ behavior: "smooth", block: "start" });
+  } else if (b.dataset.topicLater) {
+    await api("/api/topic_later", { id: b.dataset.topicLater });
+    $("home-topics").innerHTML = "";
+  } else if (b.dataset.topicForget) {
+    await loadTopics({ id: b.dataset.topicForget }, "/api/topic_forget");
+  }
+});
 
 // ---- search in the text of the PDFs (v8.4) -------------------------------------------
 const FD = { timer: 0, list: "" };
