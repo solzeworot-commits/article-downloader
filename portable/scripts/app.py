@@ -76,7 +76,7 @@ REPORT_PATH = ROOT / "Отчёт.csv"
 BIBLIO_DIR = ROOT / "Список литературы"
 
 UI_PORT = 17865
-APP_VERSION = "8.2"
+APP_VERSION = "8.3"
 APP_AUTHOR = "Bucaneiro"
 OFFICIAL_URL = "https://github.com/solzeworot-commits/article-downloader"
 DOWNLOAD_URL = OFFICIAL_URL + "/releases/tag/portable-latest"
@@ -426,6 +426,7 @@ class State:
         self.reviews: dict[str, dict] = {}       # list file name -> review (rv)
         self.review_jobs: dict[str, dict] = {}   # list file name -> lookup progress
         self.ai_jobs: dict[str, dict] = {}       # list file name -> AI pre-screening progress
+        self.snow_jobs: dict[str, dict] = {}     # root list name -> citation search ("найти ещё по ссылкам")
         self.style_jobs: dict[str, dict] = {}    # list file name -> journal style formatting progress
         self.style_failed: dict[tuple, set] = {} # (list, style) -> DOIs doi.org could not format
         self.table_jobs: dict[str, dict] = {}    # list file name -> AI table progress
@@ -1157,10 +1158,11 @@ def start_lookup(list_name: str):
         if job and job["running"]:
             return
         todo = [d for d in data["order"] if data["records"][d].get("found") is None]
-        job = {"running": bool(todo), "done": len(data["order"]) - len(todo),
+        recheck = [d for d in data["order"] if data["records"][d].get("found") and "retracted" not in data["records"][d]]
+        job = {"running": bool(todo or recheck), "done": len(data["order"]) - len(todo),
                "total": len(data["order"]), "error": ""}
         S.review_jobs[name] = job
-    if not todo:
+    if not todo and not recheck:
         return
 
     def run():
@@ -1176,6 +1178,20 @@ def start_lookup(list_name: str):
                     job["done"] += len(chunk)
                     job["error"] = error
                     rv.save_review(INBOX, data)
+            # v8.3: is any of them retracted? (articles looked up by older versions, or OpenAlex was silent)
+            with S.lock:
+                rest = [d for d in data["order"] if data["records"][d].get("found") and "retracted" not in data["records"][d]]
+            if rest:
+                try:
+                    flags = rv.fetch_retracted(rest, keys)
+                except ds.SearchError as exc:
+                    app_log(f"Retraction check: {exc.message}")
+                    flags = {}
+                if flags:
+                    with S.lock:
+                        for doi, flag in flags.items():
+                            data["records"][doi]["retracted"] = flag
+                        rv.save_review(INBOX, data)
         except Exception as exc:
             app_log(f"Lookup error: {exc}\n{traceback.format_exc()}")
             with S.lock:
@@ -1278,6 +1294,78 @@ def accept_ai_advice(list_name: str) -> dict:
     return {"accepted": n}
 
 
+def root_list(name: str) -> str:
+    """The list a list of selected articles was made from (PRISMA counts there), else the list itself."""
+    parent = rv.load_meta(INBOX, name).get("parent")
+    return parent if parent and (INBOX / parent).is_file() else name
+
+
+def start_snowball(list_name: str) -> dict:
+    """«🔁 Найти ещё по ссылкам»: the articles linked by citations to the ones marked «✓ Подходит»."""
+    data = get_review(list_name)
+    root = get_review(root_list(data["list"]))
+    with S.lock:
+        job = S.snow_jobs.get(root["list"])
+        if job and job["running"]:
+            return {}
+        seeds = list(dict.fromkeys(d for src in (root, data) for d in src["order"]
+                                   if src["records"][d].get("decision") == "include"))
+        known = set(root["order"]) | set(data["order"])
+    if not seeds:
+        return {"error": tr("Сначала отметьте хотя бы одну статью «✓ Подходит»: по ним программа и ищет.")}
+    job = {"running": True, "done": 0, "total": len(seeds), "error": "", "result": None, "stop": False}
+    with S.lock:
+        S.snow_jobs[root["list"]] = job
+
+    def progress(done, total):
+        with S.lock:
+            job["done"], job["total"] = done, total
+
+    def run():
+        try:
+            result = rv.snowball(seeds, known, ds.load_keys(), progress, lambda: job["stop"])
+            with S.lock:
+                job["result"], job["error"] = result, result["error"]
+            app_log(f"Citation search {root['list']}: {result['seeds']} seeds, {len(result['candidates'])} candidates")
+        except ds.SearchError as exc:
+            with S.lock:
+                job["error"] = exc.message
+        except Exception as exc:
+            app_log(f"Citation search error: {exc}\n{traceback.format_exc()}")
+            with S.lock:
+                job["error"] = tr("Поиск по ссылкам не удался: {error}", error=exc)
+        finally:
+            with S.lock:
+                job["running"] = False
+
+    threading.Thread(target=run, daemon=True).start()
+    return {}
+
+
+def add_from_citations(list_name: str, dois) -> dict:
+    """The ticked articles go to the end of the (root) list for screening, marked «найдена по ссылкам»."""
+    root = get_review(root_list(get_review(list_name)["list"]))
+    with S.lock:
+        job = S.snow_jobs.get(root["list"]) or {}
+        result = job.get("result") or {}
+        found = {c["doi"]: c for c in result.get("candidates") or []}
+        new = [d for d in dict.fromkeys(ds.normalize_doi(x) for x in dois or []) if d and d not in root["records"]]
+        if not new:
+            return {"error": tr("Отметьте галочками статьи, которые добавить.")}
+        for doi in new:
+            c = found.get(doi, {})
+            root["records"][doi] = {"doi": doi, "decision": "", "reason": "", "found": None, "via": "refs",
+                                    "title": c.get("title", ""), "year": c.get("year", ""), "journal": c.get("journal", "")}
+            root["order"].append(doi)
+        root.setdefault("added", []).extend(new)
+        if result.get("candidates"):
+            result["candidates"] = [c for c in result["candidates"] if c["doi"] not in new]
+        rv.save_review(INBOX, root)
+    app_log(f"Added from citations to {root['list']}: {len(new)}")
+    start_lookup(root["list"])
+    return {"list": root["list"], "added": len(new)}
+
+
 def review_prisma(name: str) -> dict:
     """PRISMA numbers; a list of selected articles counts from its parent list."""
     meta = rv.load_meta(INBOX, name)
@@ -1300,6 +1388,8 @@ def review_state(name: str) -> dict:
             "records": [data["records"][d] for d in data["order"]],
             "job": dict(S.review_jobs.get(data["list"]) or {}),
             "ai_job": dict(S.ai_jobs.get(data["list"]) or {}),
+            "snow": {k: v for k, v in (S.snow_jobs.get(root_list(data["list"])) or {}).items() if k != "stop"},
+            "root": root_list(data["list"]),
             "prisma": prisma,
             "keywords": meta.get("keywords") or [],
             "ai_topic": meta.get("ai_topic") or "",
@@ -2070,6 +2160,20 @@ def handle_api(path: str, body: dict) -> dict:
             return {"error": tr("Сначала вставьте и проверьте ключ этого сервиса.")}
         set_ai_service(provider)
         return {"provider": provider}
+
+    if path in ("/api/snowball", "/api/snowball_stop", "/api/snowball_add"):
+        try:
+            if path == "/api/snowball":
+                return start_snowball(body.get("list"))
+            if path == "/api/snowball_add":
+                return add_from_citations(body.get("list"), body.get("dois"))
+            with S.lock:
+                job = S.snow_jobs.get(root_list(Path(str(body.get("list") or "")).name))
+                if job:
+                    job["stop"] = True
+            return {}
+        except FileNotFoundError:
+            return {"error": tr("Список не найден в папке inbox.")}
 
     if path == "/api/review_save_selected":
         try:
