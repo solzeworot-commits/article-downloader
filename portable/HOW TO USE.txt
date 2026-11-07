@@ -1,4 +1,4 @@
-﻿ARTICLE DOWNLOADER, portable version 8.1
+﻿ARTICLE DOWNLOADER, portable version 8.2
 ========================================
 
 Runs on any computer with Windows 10 or 11. Nothing to install: Python and everything
@@ -20,7 +20,7 @@ HOW TO USE
    «💡 Suggest words» offers frequent keywords on your topic (free) — click the ones you
    want. «🧹 New topic» clears everything for the next search. Look through the results,
    untick the extra ones and click «Save the list to inbox».
-   This search needs Scopus and Web of Science keys: the «🔑 API keys» button walks you
+   This search needs Scopus and Web of Science keys: the «API» circle in the middle of the home screen walks you
    through getting them (free, once). Without keys choose «🌐 Through the browser»: you
    click «Export» on the Scopus or Web of Science site and the program takes the file.
 
