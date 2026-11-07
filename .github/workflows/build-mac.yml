@@ -106,6 +106,10 @@ jobs:
           printf '{"version": "99.0", "sha256": "%s", "zip": "http://127.0.0.1:8765/ArticleDownloader_Mac.zip"}' "$HASH" > "$SITE/version-mac.json"
           python3 -m http.server 8765 --bind 127.0.0.1 --directory "$SITE" > /dev/null 2>&1 &
           WEB=$!
+          # The program asks for version-mac.json right at start: the server must be up by then.
+          for i in $(seq 1 30); do curl -s -m 2 -o /dev/null http://127.0.0.1:8765/version-mac.json && break; sleep 1; done
+          curl -s -m 10 -o /dev/null -w "сервер обновлений отвечает за %{time_total} с\n" http://127.0.0.1:8765/version-mac.json
+          "$APP/python/arm64/bin/python3" -E -s -c "import time, urllib.request; t = time.time(); r = urllib.request.urlopen('http://127.0.0.1:8765/version-mac.json', timeout=30); print('встроенный Python получил ответ', r.status, 'за', round(time.time() - t, 2), 'с')"
           MARKER="$APP/HOW TO USE.txt"
           rm "$MARKER"
           export ARTICLE_UI_NO_WINDOW=1
