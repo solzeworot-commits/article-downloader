@@ -28,6 +28,7 @@ FILES = [
     "scripts/ai_helper.py",
     "scripts/cite_styles.py",
     "scripts/pdf_table.py",
+    "scripts/osutil.py",
     "scripts/i18n.py",
     "scripts/article_downloader.py",
     "scripts/ui/index.html",

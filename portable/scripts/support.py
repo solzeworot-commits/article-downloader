@@ -126,9 +126,40 @@ Log 'program started again'
 """
 
 
-def start_updater(zip_path: Path, root: Path, app_pid: int) -> Path:
+# The Mac updater (v8.6): the same steps with the tools every Mac has. ditto keeps
+# the executable bits and links of the bundled Python; rsync copies over the
+# program and leaves the user's folders (inbox, pdf, …) as they are.
+UPDATER_SH = r"""#!/bin/bash
+APP_PID="$1"; ZIP="$2"; ROOT="$3"; PY="$4"
+LOG="$ROOT/logs/update.log"
+log() { echo "[$(date +%Y-%m-%dT%H:%M:%S)] $1" >> "$LOG"; }
+log "waiting for the program (pid $APP_PID) to exit"
+for i in $(seq 1 90); do kill -0 "$APP_PID" 2>/dev/null || break; sleep 1; done
+sleep 1
+TMP="$(mktemp -d "${TMPDIR:-/tmp}/ArticleDownloader_update.XXXXXX")"
+if /usr/bin/ditto -x -k "$ZIP" "$TMP" && [ -f "$TMP/ArticleDownloader/scripts/app.py" ]; then
+    /usr/bin/xattr -dr com.apple.quarantine "$TMP" 2>/dev/null
+    if /usr/bin/rsync -a "$TMP/ArticleDownloader/" "$ROOT/"; then log "updated (rsync)"; else log "update failed: rsync"; fi
+else
+    log "update failed: no ArticleDownloader/scripts/app.py in the archive"
+fi
+rm -rf "$TMP" "$ZIP"
+cd "$ROOT" && nohup "$PY" -E -s "$ROOT/scripts/app.py" >/dev/null 2>&1 &
+log "program started again"
+"""
+
+
+def start_updater(zip_path: Path, root: Path, app_pid: int, python: str = "") -> Path:
     """Write the updater next to the zip and start it detached from the program."""
     import subprocess
+    import sys
+    if sys.platform == "darwin":
+        script = zip_path.with_name("ArticleDownloader_updater.sh")
+        script.write_text(UPDATER_SH, encoding="utf-8")
+        subprocess.Popen(["/bin/bash", str(script), str(app_pid), str(zip_path), str(root), python or sys.executable],
+                         cwd=str(zip_path.parent), start_new_session=True, close_fds=True,
+                         stdin=subprocess.DEVNULL, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+        return script
     script = zip_path.with_name("ArticleDownloader_updater.ps1")
     script.write_text(UPDATER_PS1, encoding="ascii")
     args = ["powershell", "-NoProfile", "-NonInteractive", "-ExecutionPolicy", "Bypass", "-WindowStyle", "Hidden",
@@ -248,6 +279,6 @@ def save_report(folder: Path, text: str) -> Path:
 
 
 def show_in_folder(path: Path):
-    if os.name == "nt":
-        import subprocess
-        subprocess.Popen(["explorer", "/select,", str(path)])
+    import osutil
+    if os.name == "nt" or osutil.IS_MAC:
+        osutil.reveal(path)

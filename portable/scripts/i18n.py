@@ -17,6 +17,7 @@ from __future__ import annotations
 import json
 import os
 import re
+import sys
 from pathlib import Path
 
 LANG_FILE = Path(__file__).resolve().parent / "ui" / "lang" / "en.json"
@@ -25,6 +26,9 @@ LANGS = ("ru", "en")
 # language ids): Russian, Ukrainian, Belarusian, Kazakh, Kyrgyz, Uzbek, Tajik,
 # Turkmen, Azerbaijani, Armenian, Georgian.
 RUSSIAN_READING = {0x19, 0x22, 0x23, 0x3F, 0x40, 0x43, 0x28, 0x42, 0x2C, 0x2B, 0x37}
+# The same languages as language codes (macOS): Russian, Ukrainian, Belarusian, Kazakh,
+# Kyrgyz, Uzbek, Tajik, Turkmen, Azerbaijani, Armenian, Georgian.
+RUSSIAN_READING_CODES = {"ru", "uk", "be", "kk", "ky", "uz", "tg", "tk", "az", "hy", "ka"}
 
 LANG = "ru"
 _page: dict[str, str] | None = None
@@ -63,6 +67,11 @@ def detect_lang() -> str:
             return "ru" if lang_id in RUSSIAN_READING else "en"
         except Exception:
             return "ru"
+    if sys.platform == "darwin":
+        import osutil
+        code = osutil.mac_language()
+        if code:
+            return "ru" if code in RUSSIAN_READING_CODES else "en"
     return "ru"
 
 

@@ -4429,10 +4429,17 @@ BROWSER_EXE_NAMES = {
     "browser.exe": "yandex",
     "msedge.exe": "edge",
     "chrome.exe": "chrome",
+    # macOS (v8.6): the executables inside the .app bundles
+    "yandex": "yandex",
+    "microsoft edge": "edge",
+    "google chrome": "chrome",
 }
 
 
 def find_browser_exe(kind: str) -> str | None:
+    import osutil
+    if osutil.IS_MAC:
+        return osutil.mac_browser(kind)
     local = os.environ.get("LOCALAPPDATA")
     pf = os.environ.get("ProgramFiles")
     pf86 = os.environ.get("ProgramFiles(x86)")
@@ -4494,8 +4501,8 @@ def browser_profile_dir(kind: str | None = None) -> Path:
     if kind is None:
         kind = dedicated_browser()[0]
 
-    local = os.environ.get("LOCALAPPDATA")
-    base = Path(local) / "ArticleDownloader" if local else ROOT / "profile"
+    import osutil
+    base = osutil.user_data_dir() or ROOT / "profile"
     return base / BROWSER_PROFILE_NAMES.get(kind, "BrowserProfile")
 
 
@@ -4570,7 +4577,7 @@ def ensure_browser_running(timeout_sec: int = 40):
     # v7.4: start it outside the program folder. A process keeps its working
     # folder busy, and the browser outlives the program: started from the
     # program folder, it kept that folder from being deleted or replaced.
-    neutral = os.environ.get("LOCALAPPDATA") or os.environ.get("TEMP") or None
+    neutral = os.environ.get("LOCALAPPDATA") or os.environ.get("TEMP") or os.environ.get("HOME") or None
     if neutral and not os.path.isdir(neutral):
         neutral = None
 
@@ -4660,7 +4667,8 @@ foreach($p in $items) {
         return
 
     names = {"browser.exe", "msedge.exe", "chrome.exe", "browser", "msedge",
-             "chrome", "chromium", "chrome-wrapper"}
+             "chrome", "chromium", "chrome-wrapper",
+             "google chrome", "microsoft edge", "yandex"}           # macOS
     for proc in psutil.process_iter(["pid", "name", "cmdline"]):
         try:
             name = (proc.info.get("name") or "").lower()

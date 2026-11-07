@@ -9,7 +9,8 @@ OpenAlex), merges the hits by DOI and saves a list into inbox\\. Exports the
 user makes on the Scopus / WoS sites (CSV, RIS, plain text, tab-delimited)
 are read into the same records.
 
-API keys live in %LOCALAPPDATA%\\ArticleDownloader\\keys.json, outside the
+API keys live in %LOCALAPPDATA%\\ArticleDownloader\\keys.json (on a Mac in
+~/Library/Application Support/ArticleDownloader/keys.json), outside the
 portable folder that people copy around, and never go into logs or to the
 window in full. For tests ARTICLE_KEYS_FILE, ARTICLE_SCOPUS_URL,
 ARTICLE_WOS_URL, ARTICLE_OPENALEX_URL and ARTICLE_WOS_DELAY override the
@@ -75,9 +76,9 @@ def keys_path() -> Path:
     override = os.environ.get("ARTICLE_KEYS_FILE")
     if override:
         return Path(override)
-    local = os.environ.get("LOCALAPPDATA")
-    base = Path(local) if local else Path.home() / ".config"
-    return base / "ArticleDownloader" / "keys.json"
+    import osutil
+    base = osutil.user_data_dir() or Path.home() / ".config" / "ArticleDownloader"
+    return base / "keys.json"
 
 
 def load_keys() -> dict:

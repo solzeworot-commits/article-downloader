@@ -190,7 +190,7 @@ jobs:
           $ver = Get-Content dist\version.txt
           gh release create $tag dist\ArticleDownloader_Portable.zip dist\version.json `
             --target $env:GITHUB_SHA `
-            --title "Загрузчик статей $ver — готовая программа для Windows" `
+            --title "Загрузчик статей $ver — готовая программа для Windows и Mac" `
             --notes-file dist\release-notes.md `
             --latest
           if ($LASTEXITCODE) { throw "release" }
