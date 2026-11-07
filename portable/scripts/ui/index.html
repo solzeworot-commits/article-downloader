@@ -401,6 +401,24 @@
   .ai-box textarea { min-height: 56px; margin-top: 6px; font-size: 15px; font-family: inherit; }
   .ai-box .ai-src { font-size: 13px; color: var(--muted); margin-top: 6px; }
   .ai-box .ai-src a, .ai-box .ai-src button { font-size: 13px; }
+  .rv-retracted { background: var(--red-soft); border: 2px solid #f87171; border-radius: 12px; padding: 10px 14px;
+                  margin-bottom: 12px; font-size: 16px; color: #7f1d1d; display: flex; gap: 12px; align-items: center; flex-wrap: wrap; }
+  .rv-retracted button { background: #fff; border-color: #f87171; color: var(--red); font-weight: 600; }
+  .badge.via { background: #e0f2fe; color: #075985; }
+  .badge.rt { background: var(--red); color: #fff; font-weight: 700; }
+  .rv-counts-rt { color: var(--red); }
+  #sn-card .how { margin: 0 0 10px; color: var(--muted); font-size: 15px; line-height: 1.5; }
+  .sn-list { list-style: none; margin: 10px 0 0; padding: 0; max-height: 520px; overflow: auto; border: 1px solid var(--line); border-radius: 10px; }
+  .sn-list li { display: flex; gap: 10px; align-items: flex-start; padding: 9px 12px; border-bottom: 1px solid var(--line); }
+  .sn-list li:last-child { border-bottom: none; }
+  .sn-list label { display: flex; gap: 10px; align-items: flex-start; flex: 1; cursor: pointer; }
+  .sn-list input { margin-top: 4px; width: 18px; height: 18px; flex: none; }
+  .sn-list .t { font-weight: 600; }
+  .sn-list small { color: var(--muted); font-size: 13px; }
+  .sn-list .lk { color: #075985; font-weight: 600; }
+  .bb-list li.retracted { color: var(--red); }
+  .bb-list .badge { text-indent: 0; }
+  .rv-retracted > span { flex: 1 1 320px; }
   .rv-ai-hint { border-radius: 10px; padding: 8px 12px; margin-bottom: 10px; font-size: 15px; border: 1px solid var(--line); }
   .rv-ai-hint.include { background: #ecfdf5; border-color: #86efac; }
   .rv-ai-hint.maybe { background: #fffbeb; border-color: #fcd34d; }
@@ -585,6 +603,13 @@ https://link.springer.com/article/10.1007/s12393-026-09447-8
       </div>
       <div class="recognized" style="margin-top: 8px">Клавиши: <kbd>1</kbd> подходит, <kbd>2</kbd> под вопросом, <kbd>3</kbd> не подходит,
         <kbd>←</kbd> <kbd>→</kbd> листать. После отметки сразу открывается следующая статья.</div>
+    </div>
+    <div class="card" id="sn-card">
+      <h2><span>🔁 Найти ещё по ссылкам</span><small>статьи, которые пропустил поиск по словам</small></h2>
+      <p class="how">Программа посмотрит, на какие работы ссылаются ваши статьи «✓ Подходит» и какие работы ссылаются на них, и покажет те, что связаны с ними чаще всего. Так в систематических обзорах находят важные статьи, которых нет в поиске по ключевым словам. Бесплатно, через OpenAlex.</p>
+      <div class="acts"><button class="linkbtn" id="sn-run">🔁 Найти ещё по ссылкам</button>
+        <button id="sn-stop" hidden>⏹ Остановить</button><span class="recognized" id="sn-status"></span></div>
+      <div id="sn-result"></div>
     </div>
     <div class="card">
       <h2><span>Что дальше</span></h2>
@@ -949,6 +974,8 @@ extraction"></textarea>
 
     <h4>3. 📝 Отбор статей</h4>
     <p>Читайте аннотации и жмите «✓ Подходит», «? Под вопросом» или «✗ Не подходит» (или клавиши 1, 2, 3). Подходящие сохраните новым списком — его и скачивайте.</p>
+    <p>Когда отметите подходящие, нажмите <b>«🔁 Найти ещё по ссылкам»</b> (ниже на том же экране): программа найдёт статьи, на которые они ссылаются и которые ссылаются на них, — то, что пропустил поиск по словам.</p>
+    <p>Красная метка <b>«⚠ Статья отозвана»</b> значит, что журнал отказался от статьи (ошибки, подлог). Ссылаться на неё нельзя.</p>
 
     <h4>4. ⬇ Скачивание и капча</h4>
     <p>Когда выберете список, программа откроет базы (ScienceDirect, Springer, Wiley…) в своём браузере. Некоторые сайты сначала просят пройти проверку «я не робот» — пройдите её, дальше программа качает сама, можно уходить.</p>
@@ -2320,12 +2347,13 @@ async function refreshReview() {
   try { d = await (await fetch("/api/review?list=" + encodeURIComponent(RV.list), H)).json(); } catch (e) { return; }
   if (d.error) { $("rv-status").textContent = d.error; return; }
   RV.records = d.records; RV.keywords = d.keywords || []; RV.job = d.job || {}; RV.aiJob = d.ai_job || {};
+  RV.snow = d.snow || {}; RV.root = d.root || RV.list;
   if (RV.aiTopicFor !== RV.list) {
     RV.aiTopicFor = RV.list;
     $("rv-ai-topic").value = d.ai_topic || recall("ad_ai_topic", "") || RV.keywords.join(", ");
   }
   renderReview();
-  if ((RV.job.running || RV.aiJob.running) && view === "review") RV.timer = setTimeout(refreshReview, 1500);
+  if ((RV.job.running || RV.aiJob.running || RV.snow.running) && view === "review") RV.timer = setTimeout(refreshReview, 1500);
 }
 function rvVisible() {
   return RV.records.filter((r) => RV.filter === "all" || (RV.filter === "undecided" ? !r.decision : r.decision === RV.filter));
@@ -2336,12 +2364,15 @@ function renderReview() {
   $("rv-bar").style.width = all.length ? (100 * done / all.length) + "%" : "0";
   $("rv-counts").innerHTML = all.length ? [`отобрано <b>${done}</b> из ${all.length}`, `✓ подходит: <b>${c("include")}</b>`,
     `? под вопросом: <b>${c("maybe")}</b>`, `✗ не подходит: <b>${c("exclude")}</b>`].map((x) => `<span>${x}</span>`).join("") : "";
+  const rt = all.filter((r) => r.retracted).length;
+  if (rt) $("rv-counts").innerHTML += `<span class="rv-counts-rt">⚠ отозвано журналом: <b>${rt}</b></span>`;
   const j = RV.job;
   $("rv-status").innerHTML = j.running ? `⏳ Загружаю аннотации и данные статей: ${j.done} из ${j.total}…`
     : (j.error ? `<span style="color: var(--red)">${esc(j.error)}</span>` : (all.length ? "" : "В этом списке нет DOI."));
   document.querySelectorAll("#rv-filter button").forEach((b) => b.classList.toggle("on", b.dataset.rvf === RV.filter));
   renderReviewAi();
   renderReviewCard();
+  renderSnow();
 }
 function renderReviewAi() {
   const j = RV.aiJob || {}, adv = RV.records.filter((r) => r.ai), open = adv.filter((r) => !r.decision);
@@ -2388,14 +2419,103 @@ function renderReviewCard() {
   else if (!r.abstract) abstract = '<span class="empty">Аннотации в OpenAlex и Crossref нет — откройте статью по ссылке выше.</span>';
   else abstract = highlight(r.abstract);
   const badge = r.decision ? `<span class="badge b-${r.decision === "include" ? "success" : r.decision === "maybe" ? "captcha" : "failed"}">${DEC_LABEL[r.decision]}${r.reason ? " — " + esc(r.reason) : ""}</span>` : "";
-  $("rv-body").innerHTML = `<h3 id="rv-title">${esc(r.title || r.doi)}</h3>` +
+  const retracted = r.retracted ? `<div class="rv-retracted">⚠ <span><b>Статья отозвана журналом (retracted).</b> ` +
+    `Журнал отказался от неё — ссылаться на неё в обзоре нельзя.</span>` +
+    (r.decision === "exclude" ? "" : `<button data-reason="статья отозвана">✗ Не подходит — статья отозвана</button>`) + `</div>` : "";
+  const via = r.via === "refs" ? ` <span class="badge via" title="Добавлена кнопкой «🔁 Найти ещё по ссылкам»">🔁 найдена по ссылкам</span>` : "";
+  $("rv-body").innerHTML = retracted + `<h3 id="rv-title">${esc(r.title || r.doi)}</h3>` +
     `<div class="rv-meta">${who ? esc(who) + "<br>" : ""}${esc(where)}${where ? " · " : ""}` +
-    `<button class="link" data-doi="${esc(r.doi)}">открыть статью ↗</button> ${badge}</div>` +
+    `<button class="link" data-doi="${esc(r.doi)}">открыть статью ↗</button> ${badge}${via}</div>` +
     (r.ai ? `<div class="rv-ai-hint ${esc(r.ai.verdict)}">🤖 ИИ советует: <b>${DEC_LABEL[r.ai.verdict] || ""}</b>` +
       `${r.ai.why ? " — " + esc(r.ai.why) : ""}</div>` : "") +
     `<div class="rv-abstract">${abstract}</div>` + translationBlock(r);
   if (r.abstract && !r.tr && aiOn() && recall("ad_auto_tr", false) && TR.errorFor !== r.doi) translateCurrent();
 }
+// ---- the citation search, «find more through citations» (v8.3) ---------------
+const SN = { checked: new Set(), resultFor: null, msg: "" };
+function snLine(c) {
+  const parts = [];
+  if (c.cited_in) parts.push(`ссылаются на неё: ${c.cited_in}`);
+  if (c.cites) parts.push(`она ссылается на: ${c.cites}`);
+  const where = [c.journal, c.year].filter(Boolean).join(", ");
+  return `<small>${esc(where)}${where ? " · " : ""}<span class="lk">🔗 связана с вашими статьями: ${c.links}</span>` +
+    ` (${parts.join(", ")}) · цитирований: ${c.cited_by}${c.retracted ? ' · <span class="badge rt">⚠ отозвана</span>' : ""}</small>`;
+}
+function renderSnow() {
+  const j = RV.snow || {}, res = j.result;
+  const inc = RV.records.filter((r) => r.decision === "include").length;
+  $("sn-run").hidden = !!j.running;
+  $("sn-stop").hidden = !j.running;
+  $("sn-run").disabled = !inc;
+  $("sn-run").textContent = "🔁 Найти ещё по ссылкам" + (inc ? ` · ✓ ${inc}` : "");
+  let status = "";
+  if (!inc && !j.running) status = "Сначала отметьте хотя бы одну статью «✓ Подходит» — по ним программа и ищет.";
+  if (j.running) status = j.total ? `⏳ Смотрю ссылки отобранных статей: ${j.done} / ${j.total}…` : "⏳ Ищу статьи в OpenAlex…";
+  else if (j.error) status = `<span style="color: var(--red)">${esc(j.error)}</span>` + (res ? " Показываю то, что успел найти." : "");
+  $("sn-status").innerHTML = status;
+  if (!res || j.running) { $("sn-result").innerHTML = SN.msg; return; }
+  if (SN.resultFor !== res) {          // a new result: tick the ones linked to two or more selected articles
+    SN.resultFor = res;
+    SN.checked = new Set(res.candidates.filter((c) => c.links >= 2 && !c.retracted).map((c) => c.doi));
+  }
+  const cands = res.candidates || [];
+  if (!cands.length) {
+    $("sn-result").innerHTML = SN.msg + `<div class="empty" style="padding: 12px 0">Новых статей по ссылкам не нашлось` +
+      (res.seeds ? "" : ": OpenAlex не знает отобранных статей") + `.</div>`;
+    return;
+  }
+  const notFound = res.not_found ? ` Не нашлось в OpenAlex отобранных статей: ${res.not_found} — по ним не искали.` : "";
+  $("sn-result").innerHTML = SN.msg + `<div style="margin-top: 6px">Нашлось статей, которых нет в вашем списке: <b>${cands.length}</b>` +
+    `${res.more ? ` (показаны самые связанные, есть ещё ${res.more})` : ""}.${notFound} ` +
+    `Галочки уже стоят у тех, что связаны с двумя и больше вашими статьями, — их стоит посмотреть первыми. Отмеченные попадут в отбор.</div>` +
+    `<div class="acts" style="margin-top: 8px"><button class="linkbtn" id="sn-add"></button>` +
+    `<button id="sn-all">отметить все</button><button id="sn-none">снять все</button></div>` +
+    `<ul class="sn-list">${cands.map((c) => `<li><label><input type="checkbox" data-sn="${esc(c.doi)}" ${SN.checked.has(c.doi) ? "checked" : ""}>` +
+      `<span><span class="t">${esc(c.title || c.doi)}</span><br>${snLine(c)}</span></label>` +
+      `<button class="link" data-doi="${esc(c.doi)}">открыть ↗</button></li>`).join("")}</ul>`;
+  snCount();
+}
+function snCount() {
+  const b = $("sn-add");
+  if (!b) return;
+  b.textContent = `➕ Добавить отмеченные в отбор: ${SN.checked.size}`;
+  b.disabled = !SN.checked.size;
+}
+$("sn-run").onclick = async () => {
+  SN.msg = "";
+  const res = await api("/api/snowball", { list: RV.list });
+  if (res.error) { $("sn-status").innerHTML = `<span style="color: var(--red)">${esc(res.error)}</span>`; return; }
+  refreshReview();
+};
+$("sn-stop").onclick = () => api("/api/snowball_stop", { list: RV.list });
+$("sn-result").addEventListener("change", (e) => {
+  const doi = e.target.dataset && e.target.dataset.sn;
+  if (!doi) return;
+  if (e.target.checked) SN.checked.add(doi); else SN.checked.delete(doi);
+  snCount();
+});
+$("sn-result").addEventListener("click", async (e) => {
+  const t = e.target.closest("button");
+  if (!t) return;
+  const cands = ((RV.snow || {}).result || {}).candidates || [];
+  if (t.id === "sn-all") { cands.forEach((c) => SN.checked.add(c.doi)); renderSnow(); }
+  if (t.id === "sn-none") { SN.checked.clear(); renderSnow(); }
+  if (t.id === "sn-add") {
+    t.disabled = true;
+    const res = await api("/api/snowball_add", { list: RV.list, dois: [...SN.checked] });
+    if (res.error) { SN.msg = ""; note($("sn-result"), "amber", "⚠", esc(res.error)); return; }
+    SN.checked.clear();
+    SN.msg = `<div class="note green">✅ <span>Добавлено в отбор: <b>${res.added}</b>` +
+      `${res.list !== RV.list ? ` — в исходный список «${esc(res.list)}»` : ""}. ` +
+      `Они в фильтре «Не отобраны», с меткой «🔁 найдена по ссылкам»; аннотации подгружаются.</span></div>`;
+    if (res.list !== RV.list) { await selectReview(res.list); fillSelect($("rv-list"), await inboxFiles(), res.list); }
+    RV.filter = "undecided";
+    const first = RV.records.find((r) => r.via === "refs" && !r.decision);
+    RV.cur = first ? first.doi : "";
+    await refreshReview();
+    $("rv-card").scrollIntoView({ behavior: "smooth", block: "start" });
+  }
+});
 // ---- translation of the abstract (v7.9) ----------------------------------------
 const TR = { busy: "", error: "", errorFor: "" };
 function translationBlock(r) {
@@ -2508,7 +2628,13 @@ async function loadBiblio() {
   }
   const res = await api("/api/biblio", { list: BB.list, scope: $("bb-scope").value, order: $("bb-order").value, style: bbStyle() });
   BB.items = res.items || [];
-  $("bb-entries").innerHTML = BB.items.map((e) => `<li class="${e.fallback ? "fallback" : ""}">${esc(e.label)}${e.html}</li>`).join("") ||
+  const scope = $("bb-scope").value;
+  const inScope = (r) => scope === "all" || r.decision === "include" || (scope === "included_maybe" && r.decision === "maybe");
+  const bad = d.records.filter((r) => r.retracted && inScope(r));
+  const badDois = bad.map((r) => r.doi.toLowerCase());
+  const isBad = (e) => badDois.some((x) => (e.text || "").toLowerCase().includes(x));
+  $("bb-entries").innerHTML = BB.items.map((e) => `<li class="${e.fallback ? "fallback" : ""}${isBad(e) ? " retracted" : ""}">${esc(e.label)}` +
+    `${isBad(e) ? '<span class="badge rt">⚠ отозвана</span> ' : ""}${e.html}</li>`).join("") ||
     '<li class="empty">Нет статей для списка. Отметьте подходящие на шаге «📝 Отобрать статьи» или выберите «все статьи списка».</li>';
   let status = `Статей в списке литературы: <b>${res.count || 0}</b>. Стиль: <b>${esc(res.title || "")}</b>.`;
   if (d.job && d.job.running) status += ` ⏳ Загружаю данные статей: ${d.job.done} из ${d.job.total}…`;
@@ -2517,6 +2643,12 @@ async function loadBiblio() {
   if (sj && sj.running) status += ` ⏳ Оформляю в стиле журнала через doi.org: ${sj.done} из ${sj.total}…`;
   else if (res.fallback) status += ` <span style="color: var(--red)">${res.fallback} ${plural(res.fallback, "запись", "записи", "записей")} doi.org не оформил` +
     `${sj && sj.error ? " (" + esc(sj.error.replace(/\.$/, "")) + ")" : ""} — они серым, в ближайшем встроенном стиле.</span>`;
+  if (bad.length) {
+    status = `<div class="rv-retracted">⚠ <span><b>Отозванных статей в списке: ${bad.length}.</b> ` +
+      bad.slice(0, 5).map((r) => `«${esc(r.title || r.doi)}»`).join("; ") + (bad.length > 5 ? "…" : "") +
+      `. Журналы от них отказались — уберите их: на шаге «📝 Отобрать статьи» отметьте «✗ Не подходит».</span>` +
+      `<button data-review="${esc(BB.list)}">📝 Открыть отбор</button></div>` + status;
+  }
   $("bb-status").innerHTML = status;
   $("bb-hint").innerHTML = res.style === "gost"
     ? "Проверьте оформление по требованиям вашего вуза: ГОСТ допускает варианты (вид тире, «DOI:», пометка «Текст : электронный»)."
@@ -2530,7 +2662,8 @@ function prismaLines(p) {
   const src = Object.entries(p.per_source || {}).map(([k, v]) => `${k}: ${v}`).join("; ");
   const reasons = Object.entries(p.reasons || {}).map(([k, v]) => `${k}: ${v}`).join("; ");
   return {
-    identified: `Найдено записей: ${p.identified}` + (src ? ` (${src})` : ""),
+    identified: `Найдено записей: ${p.identified}` + (src ? ` (${src})` : "") +
+      (p.via_refs ? `; по ссылкам отобранных статей: ${p.via_refs}` : ""),
     removed: `Удалено до отбора: повторы — ${p.duplicates}, без DOI — ${p.no_doi}` + (p.removed_by_hand ? `, убрано вручную — ${p.removed_by_hand}` : ""),
     screened: `Отобрано по названиям и аннотациям: ${p.screened}` + (p.undecided ? ` (ещё не просмотрено: ${p.undecided})` : ""),
     excluded: `Исключено: ${p.excluded}` + (reasons ? ` (${reasons})` : ""),

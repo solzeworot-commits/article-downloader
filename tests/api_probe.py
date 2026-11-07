@@ -32,3 +32,8 @@ probe("OpenAlex search:", lambda: ds.run_search({"keywords": "grape pomace\npoly
 probe("OpenAlex hints:", lambda: [(h["term"], h["count"]) for h in ds.suggest_keywords("grape pomace\npolyphenols", {})["terms"][:8]])
 probe("Europe PMC abstracts:", lambda: {d: len(t) for d, t in rv.fetch_europepmc_abstracts(DOIS).items()})
 probe("OpenAlex lookup:", lambda: {d: (m["year"], len(m["abstract"])) for d, m in rv.fetch_openalex(DOIS, {}).items()})
+# v8.3: the Wakefield 1998 Lancet article is retracted; the citation search on one article
+probe("OpenAlex retracted:", lambda: rv.fetch_retracted(["10.1016/s0140-6736(97)11096-0", DOIS[0]], {}))
+probe("OpenAlex citations:", lambda: (lambda r: (r["seeds"], r["checked"], len(r["candidates"]), r["error"],
+                                                 [(c["doi"], c["links"], c["cited_by"]) for c in r["candidates"][:5]]))(
+    rv.snowball([DOIS[0]], set(), {}, per_article=50, limit=10)))

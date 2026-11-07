@@ -1,4 +1,4 @@
-﻿ARTICLE DOWNLOADER, portable version 8.2
+﻿ARTICLE DOWNLOADER, portable version 8.3
 ========================================
 
 Runs on any computer with Windows 10 or 11. Nothing to install: Python and everything
@@ -31,6 +31,11 @@ HOW TO USE
    abstracts and suggests for every article: fits, questionable or does not fit.
    «🌐 Translate into English» under the abstract translates the title and abstract
    (tick «translate every article at once» to skip the clicks); the translation is kept.
+   «🔁 Find more through citations» (lower on the same screen): the program looks at the works
+   your «✓ Fits» articles cite and the works citing them and shows the ones linked to them most
+   often — what the keyword search missed. The ticked ones go to screening marked «🔁 found
+   through citations»; PRISMA counts them on a line of their own.
+   The red «⚠ Retracted» mark: the journal withdrew the article; do not cite it.
 
 3. «⬇ Download articles» — the inbox folder opens: choose a file with a DOI list.
    The program opens the database sites in the downloader's browser. If a site asks you

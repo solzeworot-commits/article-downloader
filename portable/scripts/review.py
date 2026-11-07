@@ -72,7 +72,13 @@ def load_review(inbox: Path, list_name: str, dois: list[str]) -> dict:
     for doi in dois:
         records.setdefault(doi, {"doi": doi, "decision": "", "reason": "", "found": None})
     data["list"] = list_name
-    data["order"] = list(dois)
+    # Articles added through «🔁 Найти ещё по ссылкам» are kept here, not in the list file.
+    order, seen = list(dois), set(dois)
+    for doi in data.get("added") or []:
+        if doi not in seen and doi in records:
+            order.append(doi)
+            seen.add(doi)
+    data["order"] = order
     return data
 
 
@@ -129,7 +135,7 @@ def fetch_openalex(dois: list[str], keys: dict | None = None) -> dict:
     for chunk in _chunks([d for d in dois if "," not in d and "|" not in d], 50):
         url = (f"{base}?per-page=50&filter=doi:{quote('|'.join(chunk), safe='|/:')}"
                "&select=doi,display_name,publication_year,authorships,biblio,"
-               "primary_location,abstract_inverted_index,language,type")
+               "primary_location,abstract_inverted_index,language,type,is_retracted")
         if key:
             url += "&api_key=" + quote(key)
         data, _ = ds._get_json("openalex", url, {})
@@ -151,6 +157,7 @@ def fetch_openalex(dois: list[str], keys: dict | None = None) -> dict:
                 "language": work.get("language") or "",
                 "authors": [split_name((a.get("author") or {}).get("display_name") or a.get("raw_author_name"))
                             for a in work.get("authorships") or []],
+                "retracted": bool(work.get("is_retracted")),
             }
     return out
 
@@ -203,7 +210,7 @@ def merge_meta(openalex: dict | None, crossref: dict | None) -> dict:
     """Crossref for the bibliographic fields, OpenAlex for the abstract."""
     oa, cr = openalex or {}, crossref or {}
     pick = lambda field: cr.get(field) or oa.get(field) or ""  # noqa: E731
-    return {
+    out = {
         "title": pick("title"), "year": pick("year"), "journal": pick("journal"), "journal_abbr": pick("journal_abbr"),
         "volume": pick("volume"), "issue": pick("issue"), "pages": pick("pages"),
         "abstract": oa.get("abstract") or cr.get("abstract") or "",
@@ -211,6 +218,9 @@ def merge_meta(openalex: dict | None, crossref: dict | None) -> dict:
         "authors": cr.get("authors") or oa.get("authors") or [],
         "found": bool(oa or cr),
     }
+    if oa:      # only OpenAlex knows retractions; without its answer the check is made later
+        out["retracted"] = bool(oa.get("retracted"))
+    return out
 
 
 def enrich(dois: list[str], keys: dict | None = None) -> tuple[dict, str]:
@@ -235,6 +245,115 @@ def enrich(dois: list[str], keys: dict | None = None) -> tuple[dict, str]:
         except ds.SearchError:
             pass  # only abstracts are missing then; the rest is there
     return merged, " ".join(errors)
+
+
+# ---------------------------------------------------------------------------
+# retracted articles and the citation search (v8.3), both from OpenAlex
+# ---------------------------------------------------------------------------
+
+WORK_FIELDS = "id,doi,display_name,publication_year,primary_location,cited_by_count,type,is_retracted"
+# Not articles one reviews: notices, corrections, peer reviews, data.
+SKIP_TYPES = {"paratext", "erratum", "retraction", "peer-review", "dataset", "supplementary-materials"}
+
+
+def _openalex(query: str, keys: dict | None) -> dict:
+    url = f"{os.environ.get('ARTICLE_OPENALEX_URL') or ds.OPENALEX_URL}?{query}"
+    if (keys or {}).get("openalex"):
+        url += "&api_key=" + quote(keys["openalex"])
+    data, _ = ds._get_json("openalex", url, {})
+    return data
+
+
+def _work_id(value) -> str:
+    return str(value or "").rstrip("/").rsplit("/", 1)[-1].upper()
+
+
+def _doi_filter(chunk: list[str]) -> str:
+    return "doi:" + quote("|".join(chunk), safe="|/:")
+
+
+def fetch_retracted(dois: list[str], keys: dict | None = None) -> dict:
+    """{doi: True/False} for the DOIs OpenAlex answered about (unknown DOIs: False)."""
+    out = {}
+    for chunk in _chunks([d for d in dois if "," not in d and "|" not in d], 50):
+        data = _openalex(f"per-page=50&filter={_doi_filter(chunk)}&select=doi,is_retracted", keys)
+        found = {ds.normalize_doi(w.get("doi")): bool(w.get("is_retracted")) for w in data.get("results") or []}
+        out.update({d: found.get(d, False) for d in chunk})
+    return out
+
+
+def _candidate(work: dict) -> dict:
+    source = (work.get("primary_location") or {}).get("source") or {}
+    return {
+        "id": _work_id(work.get("id")),
+        "doi": ds.normalize_doi(work.get("doi")),
+        "title": _clean(work.get("display_name")),
+        "year": str(work.get("publication_year") or ""),
+        "journal": _clean(source.get("display_name")),
+        "cited_by": int(work.get("cited_by_count") or 0),
+        "type": work.get("type") or "",
+        "retracted": bool(work.get("is_retracted")),
+    }
+
+
+def snowball(dois: list[str], known: set[str], keys: dict | None = None, progress=None, stop=None,
+             per_article: int = 200, limit: int = 60) -> dict:
+    """Articles linked to the selected ones by citations ("snowballing").
+
+    Backward: the works the selected articles cite; forward: the works that
+    cite them (the most cited first, up to per_article for each). A candidate
+    linked to more selected articles comes first. Works already in the list
+    (known DOIs), without a DOI or not articles are left out.
+    """
+    seeds: dict[str, list[str]] = {}
+    for chunk in _chunks([d for d in dois if "," not in d and "|" not in d], 50):
+        data = _openalex(f"per-page=50&filter={_doi_filter(chunk)}&select=id,doi,referenced_works", keys)
+        for work in data.get("results") or []:
+            seeds[_work_id(work.get("id"))] = [_work_id(r) for r in work.get("referenced_works") or []]
+    cited_in, cites, meta = Counter(), Counter(), {}
+    for refs in seeds.values():
+        cited_in.update(set(refs))
+    error, done = "", 0
+    for wid in seeds:
+        if stop and stop():
+            break
+        try:
+            data = _openalex(f"per-page={per_article}&filter=cites:{wid}&sort=cited_by_count:desc&select={WORK_FIELDS}", keys)
+        except ds.SearchError as exc:      # a limit on the way: what was found so far still counts
+            error = exc.message
+            break
+        for work in data.get("results") or []:
+            cand = _candidate(work)
+            cites[cand["id"]] += 1
+            meta.setdefault(cand["id"], cand)
+        done += 1
+        if progress:
+            progress(done, len(seeds))
+    links = cited_in + cites
+    for wid in seeds:
+        links.pop(wid, None)
+    ranked = sorted(links, key=lambda c: (-links[c], -(meta[c]["cited_by"] if c in meta else 0)))
+    need = [c for c in ranked[:limit * 3] if c not in meta]
+    for chunk in _chunks(need, 50):
+        if stop and stop():
+            break
+        try:
+            data = _openalex(f"per-page=50&filter=openalex:{'|'.join(chunk)}&select={WORK_FIELDS}", keys)
+        except ds.SearchError as exc:
+            error = error or exc.message
+            break
+        for work in data.get("results") or []:
+            cand = _candidate(work)
+            meta[cand["id"]] = cand
+    out = []
+    for cid in ranked:
+        cand = meta.get(cid)
+        if not cand or not cand["doi"] or cand["doi"] in known or cand["type"] in SKIP_TYPES:
+            continue
+        out.append(dict(cand, links=links[cid], cited_in=cited_in[cid], cites=cites[cid]))
+    out.sort(key=lambda c: (-c["links"], -c["cited_by"]))
+    return {"seeds": len(seeds), "not_found": max(0, len(dois) - len(seeds)), "checked": done,
+            "candidates": out[:limit], "more": max(0, len(out) - limit), "error": error}
 
 
 # ---------------------------------------------------------------------------
@@ -401,12 +520,14 @@ def prisma(review: dict, meta: dict, downloaded: set[str]) -> dict:
     decided = Counter(r.get("decision") or "undecided" for r in records)
     reasons = Counter(r.get("reason") or tr("без причины") for r in records if r.get("decision") == "exclude")
     per_source = meta.get("per_source") or {}
-    identified = sum(per_source.values()) if per_source else len(records)
+    via_refs = sum(1 for r in records if r.get("via") == "refs")
+    identified = sum(per_source.values()) if per_source else len(records) - via_refs
     included = [r["doi"] for r in records if r.get("decision") == "include"]
     got = sum(d in downloaded for d in included)
     return {
         "per_source": per_source,
         "identified": identified,
+        "via_refs": via_refs,
         "duplicates": int(meta.get("duplicates") or 0),
         "no_doi": int(meta.get("no_doi") or 0),
         "removed_by_hand": int(meta.get("deselected") or 0),
