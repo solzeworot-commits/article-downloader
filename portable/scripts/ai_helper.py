@@ -686,6 +686,46 @@ def outline(provider: str, keys: dict, topic: str, papers: list[dict], lang: str
     return {"sections": sections, "gaps": gaps}, float(answer["cost"] or 0)
 
 
+REFS_SCHEMA = ("formatted_references", {
+    "type": "object",
+    "properties": {"references": {"type": "array", "items": {
+        "type": "object",
+        "properties": {"n": {"type": "integer"}, "text": {"type": "string"}},
+        "required": ["n", "text"], "additionalProperties": False}}},
+    "required": ["references"],
+    "additionalProperties": False,
+})
+
+REFS_INSTRUCTIONS = """You format bibliographic references for a researcher.
+Rewrite each numbered reference below in the {style} citation style.
+- Use only the information given in that reference: do not add, guess or look up authors, years,
+  pages, publishers or DOIs. If the style needs something the reference lacks, leave it out.
+- Keep the language of the reference (a Russian reference stays in Russian; for ГОСТ use the
+  Russian or Latin designations that match its language).
+- No numbering at the start of the text.
+Reply with JSON only: {"references": [{"n": 1, "text": "..."}, ...]} with one entry per reference."""
+
+
+def format_references(provider: str, keys: dict, references: list[str], style: str, lang: str = "ru") -> tuple[dict, float]:
+    """{index: formatted text} for the references (at most 20 per call) and the cost."""
+    listing = "\n".join(f"{i}. {str(r).strip()[:800]}" for i, r in enumerate(references[:20], 1))
+    answer = ask(provider, keys, REFS_INSTRUCTIONS.replace("{style}", style), listing, search=False,
+                 max_tokens=150 + 160 * len(references[:20]), lang=lang, timeout=180, schema=REFS_SCHEMA)
+    data = _json_part(answer["text"])
+    out = {}
+    for item in (data.get("references") if isinstance(data, dict) else data) or []:
+        try:
+            n = int(item.get("n"))
+        except (TypeError, ValueError, AttributeError):
+            continue
+        text = re.sub(r"\s+", " ", str(item.get("text") or "")).strip()
+        if 1 <= n <= len(references[:20]) and text:
+            out[n - 1] = text[:1500]
+    if not out:
+        raise AIError("bad_answer", tr("ИИ ответил не по форме. Нажмите кнопку ещё раз."))
+    return out, float(answer["cost"] or 0)
+
+
 SCREEN_INSTRUCTIONS = """You help a researcher pre-screen papers for a literature review by title and abstract.
 Judge every paper only by the text given; do not search the web. Reply with JSON only, no other text:
 {"papers": [{"id": 1, "verdict": "include", "why": "..."}, ...]}

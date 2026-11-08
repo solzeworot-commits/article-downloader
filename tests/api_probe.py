@@ -37,3 +37,10 @@ probe("OpenAlex retracted:", lambda: rv.fetch_retracted(["10.1016/s0140-6736(97)
 probe("OpenAlex citations:", lambda: (lambda r: (r["seeds"], r["checked"], len(r["candidates"]), r["error"],
                                                  [(c["doi"], c["links"], c["cited_by"]) for c in r["candidates"][:5]]))(
     rv.snowball([DOIS[0]], set(), {}, per_article=50, limit=10)))
+# v8.7: a reference without a DOI found by Crossref's bibliographic search, and one that must not match
+import reflist as rl  # noqa: E402
+probe("Crossref reference search:", lambda: rl.search_crossref(
+    "Page M.J., McKenzie J.E., Bossuyt P.M. et al. The PRISMA 2020 statement: an updated guideline for reporting "
+    "systematic reviews // BMJ. 2021. Vol. 372. n71."))
+probe("Crossref no false match:", lambda: rl.search_crossref(
+    "Иванов И.И. Экстракция антоцианов из виноградных выжимок : монография. М. : Наука, 2018. 200 с."))
