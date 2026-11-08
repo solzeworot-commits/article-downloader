@@ -9,6 +9,7 @@ What differs between Windows and macOS (v8.6, the Mac beta).
   set, wins everywhere: the tests and the bench point it at a temporary folder).
 - open_path() / reveal(): a file or folder in Explorer / Finder.
 - alert(): a message when the window cannot open.
+- keep_awake(): no sleep for the work computer of «☁ Облако» (v8.8).
 - mac_browser(), mac_choose_file(), mac_language(): in mac_support.py, which
   only the Mac archive has (v8.6.1: no Mac shell commands in the Windows one).
 """
@@ -78,6 +79,27 @@ def alert(text: str, title: str) -> bool:
             import mac_support
             mac_support.alert(text, title)
             return True
+    except Exception:
+        pass
+    return False
+
+
+def keep_awake(on: bool) -> bool:
+    """v8.8: the work computer of «☁ Облако» must not fall asleep while the program runs.
+
+    Windows: SetThreadExecutionState, for as long as the calling thread lives
+    (app.cloud_loop calls it); a Mac: mac_support (caffeinate). The screen may
+    still turn off. False when it could not be set.
+    """
+    try:
+        if IS_WIN:
+            import ctypes
+            ES_CONTINUOUS, ES_SYSTEM_REQUIRED = 0x80000000, 0x00000001
+            flags = ES_CONTINUOUS | (ES_SYSTEM_REQUIRED if on else 0)
+            return bool(ctypes.windll.kernel32.SetThreadExecutionState(flags))
+        if IS_MAC:
+            import mac_support
+            return mac_support.keep_awake(on)
     except Exception:
         pass
     return False

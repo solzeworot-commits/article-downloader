@@ -412,6 +412,48 @@
                       font-size: 14px; letter-spacing: .05em; white-space: nowrap; }
   .ai-bar.ok { background: linear-gradient(135deg, #22c55e, #15803d); animation: none; }
   .ai-bar.warn { background: linear-gradient(135deg, #f59e0b, #b45309); animation: none; }
+  /* v8.8: the cloud bar next to the AI helper (one row) */
+  .cl-row { display: flex; flex-wrap: wrap; gap: 14px; margin: 0 0 16px; }
+  .cl-row > .ai-bar, .cl-row > .cloud-bar { flex: 1 1 360px; width: auto; margin: 0; }
+  .cloud-bar { display: flex; align-items: center; gap: 16px; padding: 14px 22px; border: none; border-radius: 18px;
+               color: #fff; text-align: left; cursor: pointer; background: linear-gradient(135deg, #94a3b8, #64748b); }
+  .cloud-bar:hover { border: none; filter: brightness(1.06); }
+  .cloud-bar .ai-ico { font-size: 40px; line-height: 1; }
+  .cloud-bar .ai-txt { flex: 1; display: flex; flex-direction: column; gap: 3px; min-width: 0; }
+  .cloud-bar b { font-size: 24px; letter-spacing: .3px; }
+  .cloud-bar small { font-size: 14px; opacity: .95; }
+  .cloud-bar .ai-state { font-weight: 800; background: rgba(255,255,255,.25); border-radius: 99px; padding: 6px 14px;
+                         font-size: 14px; letter-spacing: .05em; white-space: nowrap; }
+  .cloud-bar.red { background: linear-gradient(135deg, #ef4444, #b91c1c); }
+  .cloud-bar.yellow { background: linear-gradient(135deg, #fde047, #eab308); color: #3b2a00; }
+  .cloud-bar.orange { background: linear-gradient(135deg, #fb923c, #ea580c); animation: cl-glow 1.6s ease-in-out infinite; }
+  .cloud-bar.green { background: linear-gradient(135deg, #22c55e, #15803d); }
+  .cloud-bar.static { cursor: default; margin-bottom: 10px; }
+  .cloud-bar.static:hover { filter: none; }
+  @keyframes cl-glow { 0%, 100% { box-shadow: 0 0 0 0 rgba(234,88,12,.55); } 50% { box-shadow: 0 0 20px 6px rgba(234,88,12,.55); } }
+  .cl-where { font-size: 14px; color: var(--muted); margin: 0 0 12px; overflow-wrap: anywhere; }
+  .cl-send { display: flex; gap: 10px; align-items: center; flex-wrap: wrap; margin: 4px 0 6px; }
+  .cl-send select { flex: 1; min-width: 220px; max-width: 420px; padding: 8px 10px; border-radius: 8px; border: 1px solid var(--line);
+                    font: inherit; color: var(--text); background: var(--card); }
+  .linkbtn.cloudbtn { background: #0284c7; border-color: #0284c7; }
+  .cl-scheme { display: flex; align-items: stretch; gap: 8px; flex-wrap: wrap; margin: 10px 0 12px; }
+  .cl-scheme span { flex: 1 1 140px; display: flex; flex-direction: column; align-items: center; text-align: center; gap: 2px;
+                    padding: 10px 8px; border-radius: 12px; background: var(--blue-soft); font-size: 26px; }
+  .cl-scheme span b { font-size: 15px; } .cl-scheme span small { font-size: 12px; color: var(--muted); }
+  .cl-scheme i { align-self: center; font-style: normal; font-size: 22px; color: var(--muted); }
+  .cl-steps li { margin-bottom: 6px; }
+  .cl-form { display: flex; flex-direction: column; gap: 8px; padding: 12px 14px; border: 1px solid var(--line); border-radius: 12px; margin: 8px 0 4px; }
+  .cl-found { display: flex; gap: 8px; align-items: center; padding: 6px 10px; border: 1px solid var(--line); border-radius: 10px; cursor: pointer; }
+  .cl-found small { color: var(--muted); overflow-wrap: anywhere; }
+  .cl-roles { display: flex; gap: 10px; flex-wrap: wrap; }
+  .cl-roles button { flex: 1 1 200px; display: flex; flex-direction: column; align-items: center; gap: 2px; padding: 12px; font-size: 26px; border-radius: 12px; }
+  .cl-roles button b { font-size: 17px; } .cl-roles button small { font-size: 13px; color: var(--muted); }
+  .cl-roles button.on { border: 2px solid var(--green); background: var(--green-soft); }
+  .cl-legend { list-style: none; padding-left: 0; }
+  .cl-legend li { display: flex; gap: 10px; align-items: baseline; margin-bottom: 5px; }
+  .cl-legend i { flex: none; width: 16px; height: 16px; border-radius: 50%; display: inline-block; transform: translateY(2px); }
+  .cl-legend i.grey { background: #94a3b8; } .cl-legend i.red { background: #dc2626; } .cl-legend i.yellow { background: #eab308; }
+  .cl-legend i.orange { background: #ea580c; } .cl-legend i.green { background: #16a34a; }
   .guide-bar { display: flex; align-items: center; gap: 16px; width: 100%; margin: 0 0 16px; padding: 14px 22px;
                border: none; border-radius: 18px; color: #3b2a00; text-align: left; cursor: pointer;
                background: linear-gradient(135deg, #fde68a, #fbbf24); }
@@ -509,9 +551,14 @@
       <button class="api-hub" id="go-api" title="Шаг 1: бесплатные ключи API — без них поиск статей часто не работает">
         <span class="step-n">1</span><b id="api-hub-label">API</b><small id="api-hub-sub">получить ключи</small></button>
     </div>
+    <div class="cl-row">
     <button class="ai-bar" id="go-ai" title="ИИ-помощник на вашем ключе (Perplexity, ChatGPT, Claude, GigaChat или YandexGPT): подбирает слова для поиска и помогает отобрать статьи">
       <span class="ai-ico">🤖</span><span class="ai-txt"><b>ИИ-помощник</b><small id="ai-bar-sub">не подключён — нажмите, чтобы подключить</small></span>
       <span class="ai-state" id="ai-bar-state">ВЫКЛ</span></button>
+    <button class="cloud-bar grey" id="go-cloud" title="Отправляйте списки из дома — статьи скачает рабочий компьютер с доступом вуза, через ваше облако">
+      <span class="ai-ico">☁</span><span class="ai-txt"><b>Облако</b><small id="cl-bar-sub">не настроено — качать на рабочем компьютере, сидя дома</small></span>
+      <span class="ai-state" id="cl-bar-state">ВЫКЛ</span></button>
+    </div>
     <button class="clear-bar" id="home-clear"><b>🧹 Очистить всё</b>
       <small>остановить всё и начать заново — скачанные PDF и списки DOI останутся</small></button>
     <div class="home-small">
@@ -1047,6 +1094,61 @@ extraction"></textarea>
   </div>
 </dialog>
 
+<dialog id="dlg-cloud" style="width: min(900px, calc(100vw - 32px))">
+  <div class="head"><h3>☁ Облако — качать на рабочем компьютере, сидя дома</h3><button data-close>✕</button></div>
+  <div class="body">
+    <div id="cl-now"></div>
+    <div id="cl-send-box" hidden>
+      <div class="cl-send"><b>Отправить список на рабочий компьютер:</b><select id="cl-list"></select><button class="primary" id="cl-send">☁ Отправить</button></div>
+      <div id="cl-send-note" class="recognized"></div>
+    </div>
+    <div id="cl-lists"></div>
+
+    <h4>Что это и как работает</h4>
+    <p>Дома нет доступа к платным базам, а на работе (в вузе) есть? Оставьте программу открытой на рабочем компьютере и отправляйте ей списки DOI из дома. Рабочий компьютер скачает статьи через подписку вуза, а PDF сами появятся у вас дома.</p>
+    <div class="cl-scheme"><span>🏠<b>Домашний</b><small>отправляет список</small></span><i>→</i><span>☁<b>Ваше облако</b><small>Яндекс Диск, Google Диск, OneDrive…</small></span><i>→</i><span>🏢<b>Рабочий</b><small>скачивает статьи</small></span><i>→</i><span>📄<b>PDF дома</b><small>через то же облако</small></span></div>
+    <p>Связь идёт через ваше облако. Программа кладёт файл со списком в свою папку в облаке, приложение облака переносит его на рабочий компьютер, программа там забирает список и качает статьи в ту же папку. Сама программа ничего не отправляет в интернет, сервер не нужен: только файлы в вашем облаке. Подойдёт и любая общая папка, которую видят оба компьютера (например, сетевой диск на работе).</p>
+
+    <details id="cl-setup-box" open><summary><b>⚙ Настроить — один раз на каждом компьютере</b></summary>
+      <ol class="cl-steps">
+        <li>На обоих компьютерах установите приложение облака (Яндекс Диск, Google Диск, OneDrive, Облако Mail.ru, Dropbox или iCloud) и войдите в <b>один и тот же</b> аккаунт.</li>
+        <li>На обоих компьютерах откройте это окно и выберите облако ниже: программа создаст в нём свою папку.</li>
+        <li>Укажите, какой это компьютер: дома — <b>🏠 Домашний</b>, на работе — <b>🏢 Рабочий</b>.</li>
+        <li>На рабочем компьютере один раз войдите через университет на сайтах баз («⬇ Скачать статьи» → «🏛 Вход через организацию») и оставьте программу открытой, окно можно свернуть. Компьютер не выключайте (у ноутбука не закрывайте крышку): пока программа открыта, он сам не уснёт.</li>
+        <li>Дома: «⬇ Скачать статьи» → у списка кнопка <b>«☁ На рабочий»</b> (или вверху этого окна). Цвет полоски «☁ Облако» на главной покажет, что происходит.</li>
+      </ol>
+      <div class="cl-form">
+        <b>Папка облака на этом компьютере:</b>
+        <div id="cl-found"></div>
+        <input id="cl-dir" spellcheck="false" placeholder="или вставьте путь к папке облака, например D:\YandexDisk">
+        <label><input type="checkbox" id="cl-pdf" checked> скачанные PDF складывать в облако — тогда статьи с рабочего компьютера сами появятся дома</label>
+        <b>Этот компьютер:</b>
+        <div class="cl-roles"><button id="cl-home"><span>🏠</span><b>Домашний</b><small>отправляю списки</small></button><button id="cl-work"><span>🏢</span><b>Рабочий</b><small>скачиваю статьи</small></button></div>
+        <div id="cl-setup-note" class="recognized"></div>
+      </div>
+    </details>
+
+    <h4>Цвет полоски «☁ Облако» на главной</h4>
+    <ul class="cl-legend">
+      <li><i class="grey"></i><span><b>Серый</b> — облако не настроено.</span></li>
+      <li><i class="red"></i><span><b>Красный</b> — рабочий компьютер не отвечает (выключен, программа закрыта, нет интернета) или ещё не взял список.</span></li>
+      <li><i class="yellow"></i><span><b>Жёлтый</b> — рабочий компьютер качает, например «12 из 30».</span></li>
+      <li><i class="orange"></i><span><b>Оранжевый</b> — капча: сайт просит пройти проверку «я не робот», нужен человек у рабочего компьютера.</span></li>
+      <li><i class="green"></i><span><b>Зелёный</b> — всё скачано или рабочий компьютер на связи и ждёт список.</span></li>
+    </ul>
+
+    <h4>Важно знать</h4>
+    <ul>
+      <li><b>Капчу программа не обходит.</b> Если сайт спросит «я не робот», рабочий компьютер подождёт человека: проверку может пройти коллега. Если никого нет, статья повторится в конце очереди, а после второй капчи получит пометку «капча» — её можно скачать позже.</li>
+      <li>Паузы между статьями и дневной лимит работают как обычно. Дошёл до лимита — рабочий компьютер сам продолжит на следующий день.</li>
+      <li>Облако переносит файлы не мгновенно: состояние обновляется с задержкой в минуту-две.</li>
+      <li>PDF занимают место в облаке: 300 статей — примерно 0,5–1 ГБ.</li>
+      <li>Рабочий компьютер должен быть один. Если он перезагрузился, откройте на нём программу: она продолжит сама.</li>
+    </ul>
+    <div class="about-acts"><button id="cl-open">📂 Открыть папку в облаке</button><button id="cl-off">Отключить облако на этом компьютере</button></div>
+  </div>
+</dialog>
+
 <dialog id="dlg-guide" style="width: min(860px, calc(100vw - 32px))">
   <div class="head"><h3>📖 Инструкция — с чего начать и зачем</h3><button data-close>✕</button></div>
   <div class="body">
@@ -1080,6 +1182,10 @@ extraction"></textarea>
     <p>Уже есть свой список литературы, но оформлен вразнобой? <b>«📄 Привести в порядок свой список»</b>: загрузите Word — программа найдёт каждый источник и оформит по ГОСТ или в нужном стиле.</p>
     <p>Там же <b>«🔍 Поиск по тексту статей»</b>: напишите, что ищете (например, «ultrasound 40 kHz»), — программа покажет, в каких скачанных PDF и на какой странице это написано. Без ИИ, бесплатно.</p>
     <p><b>PRISMA</b> — международный стандарт: схема показывает, сколько статей нашли в базах, сколько отсеяли и почему и сколько вошло в обзор. Рецензенты журналов и диссертационные советы требуют её в систематических обзорах: по ней видно, что литература отобрана честно, а не «какие нашлись». Программа считает цифры сама по вашим отметкам на шаге 3 — сохраните схему картинкой и вставьте в раздел «Материалы и методы».</p>
+
+    <h4>☁ Облако — качать на рабочем компьютере, сидя дома</h4>
+    <p>Доступ к базам есть только на работе? Настройте <b>«☁ Облако»</b> (полоска на главной) на обоих компьютерах. Дома нажимаете у списка <b>«☁ На рабочий»</b>: список через ваше облако (Яндекс Диск, Google Диск, OneDrive…) уходит на рабочий компьютер, тот качает статьи, а PDF приходят домой через то же облако. Цвет полоски показывает, что там происходит: жёлтый — качает, оранжевый — капча, зелёный — готово, красный — не отвечает.</p>
+    <div class="about-acts"><button class="linkbtn" data-guide="cloud">☁ Настроить облако</button></div>
 
     <h4>🤖 ИИ-помощник — по желанию</h4>
     <p>Программа работает и без него, с ним быстрее:</p>
@@ -1600,6 +1706,7 @@ function renderExtra() {
   renderUpdate(s.update);
   renderApiHub(s.keys);
   renderAi();
+  renderCloud();
   renderUpdateJob(s.update_job);
   renderKeysNote();
   renderSources();
@@ -1628,8 +1735,11 @@ function renderLists(files) {
   const rows = files.map((f) => {
     let status = [f.done ? `скачано ${f.done} из ${f.count}` : "", f.queued ? `в очереди ${f.queued}` : ""].filter(Boolean).join(" · ");
     if (f.count && f.done >= f.count) status = "✅ всё скачано";
+    if (f.cloud) status = (status ? status + "<br>" : "") + "☁ рабочий компьютер: " + cloudListText(f.cloud);
+    const home = state && state.cloud && state.cloud.role === "home";
     return `<tr><td class="query"><b>${esc(f.name)}</b></td><td>${esc(f.modified)}</td><td>${f.count} DOI</td>` +
       `<td>${status || "ещё не скачивался"}</td><td class="act"><button class="linkbtn" data-list="${esc(f.name)}" ${f.count ? "" : "disabled"}>⬇ Скачать</button> ` +
+      (home ? `<button class="linkbtn cloudbtn" data-cloudsend="${esc(f.name)}" ${f.count ? "" : "disabled"} title="Отправить список на рабочий компьютер через облако">☁ На рабочий</button> ` : "") +
       `<button data-review="${esc(f.name)}" title="Отобрать статьи по аннотациям">📝</button> ` +
       `<button data-archive="${esc(f.name)}" title="Убрать список в архив (inbox\\_архив)">🗑</button></td></tr>`;
   });
@@ -2229,7 +2339,7 @@ $("dlg-guide").addEventListener("click", (e) => {
   const b = e.target.closest("button[data-guide]");
   if (!b) return;
   $("dlg-guide").close();
-  show(b.dataset.guide);
+  if (b.dataset.guide === "cloud") openCloud(); else show(b.dataset.guide);
 });
 // ---- the size of the window (v8.1): the screen once, the user's own size when they resize it
 (() => {
@@ -2265,6 +2375,131 @@ function renderAi() {
   $("rv-ai-off").hidden = on;
   $("rv-ai-on").hidden = !on;
 }
+// ---- the cloud bridge (v8.8): the home computer sends lists, the work computer downloads ----
+const CL_COLOR = { never: "red", stale: "red", nofolder: "red", stopped: "red", wait: "red",
+  run: "yellow", limit: "yellow", captcha: "orange", done: "green", idle: "green" };
+let clInfo = null;
+function cloudTexts(c) {
+  if (!c.role) return ["не настроено — качать на рабочем компьютере, сидя дома", "ВЫКЛ"];
+  const work = c.role === "work", n = c.total ? `${c.done} / ${c.total}` : "";
+  switch (c.state) {
+    case "nofolder": return ["папка облака не найдена — запущено ли приложение облака?", "НЕТ ПАПКИ"];
+    case "never": return ["рабочий компьютер ещё не подключён — настройте программу и на нём", "ЖДЁТ"];
+    case "stale": return [`рабочий компьютер не отвечает (на связи был ${c.seen})`, "НЕТ СВЯЗИ"];
+    case "stopped": return [work ? "скачивание остановлено на этом компьютере" : "на рабочем компьютере остановили скачивание", "СТОП"];
+    case "wait": return [work ? "беру список из облака…" : "список в облаке — ждёт рабочий компьютер", "ЖДЁТ"];
+    case "run": return [(work ? "качаю списки из облака: " : "рабочий компьютер качает: ") + `${c.done} из ${c.total}`, n];
+    case "limit": return [work ? "дневной лимит — продолжу завтра сам" : "дневной лимит на рабочем компьютере — продолжит завтра", n];
+    case "captcha": return [work ? "капча — пройдите проверку в окне браузера загрузчика" : "капча на рабочем компьютере — нужен человек рядом с ним", "КАПЧА"];
+    case "done": return [`готово: скачано ${c.done} из ${c.total}` + (work ? "" : " — PDF в облаке"), "ГОТОВО ✓"];
+    default: return [work ? "это рабочий компьютер: жду списки из облака" : "рабочий компьютер на связи — отправьте ему список", work ? "ЖДУ" : "НА СВЯЗИ"];
+  }
+}
+function cloudListText(x) {
+  if (x.state === "wait") return "⏳ ждёт рабочий компьютер";
+  let t = (x.state === "run" ? "⬇ скачано " : "✅ скачано ") + `${x.done} из ${x.total}`;
+  if (x.no_access) t += ` · нет доступа ${x.no_access}`;
+  if (x.captcha) t += ` · капча ${x.captcha}`;
+  if (x.failed) t += ` · не скачалось ${x.failed}`;
+  return t;
+}
+function renderCloud() {
+  const c = (state && state.cloud) || {}, [sub, pill] = cloudTexts(c);
+  $("go-cloud").className = "cloud-bar " + (c.role ? CL_COLOR[c.state] || "green" : "grey");
+  $("cl-bar-sub").textContent = (c.role === "work" ? "🏢 " : c.role === "home" ? "🏠 " : "") + sub;
+  $("cl-bar-state").textContent = pill;
+  if ($("dlg-cloud").open) renderCloudDialog(c);
+}
+function renderCloudDialog(c) {
+  const [sub, pill] = cloudTexts(c), work = c.role === "work";
+  $("cl-now").innerHTML = !c.role ? "" :
+    `<div class="cloud-bar static ${CL_COLOR[c.state] || "green"}"><span class="ai-ico">☁</span><span class="ai-txt">` +
+    `<b>${work ? "🏢 Рабочий компьютер" : "🏠 Домашний компьютер"}</b><small>${esc(sub)}</small></span><span class="ai-state">${esc(pill)}</span></div>` +
+    `<div class="cl-where">Папка в облаке: <code>${esc(c.dir || "")}</code>` +
+    (c.pdf ? ` · PDF — в папке <b>${esc(c.pdf_name || "")}</b> внутри неё` : "") +
+    (c.computer && !work ? ` · рабочий компьютер: <b>${esc(c.computer)}</b>` : "") + "</div>";
+  $("cl-send-box").hidden = c.role !== "home";
+  const lists = c.lists || [];
+  $("cl-lists").innerHTML = !c.role ? "" : !lists.length
+    ? `<div class="empty">${work ? "Списков из облака пока нет. Их отправляют с домашнего компьютера." : "В облаке пока нет списков. Отправьте список кнопкой выше или «☁ На рабочий» на экране «⬇ Скачать статьи»."}</div>`
+    : `<table><thead><tr><th>${work ? "Списки из облака" : "Списки в облаке"}</th><th>Состояние</th><th></th></tr></thead><tbody>` +
+      lists.map((x) => `<tr><td class="query"><b>${esc(x.name)}</b>${x.taken ? `<br><small>взят ${esc(x.taken)}</small>` : ""}</td>` +
+        `<td>${cloudListText(x)}</td><td class="act">${work ? "" : `<button data-cloudrm="${esc(x.name)}" title="Убрать список из облака (на рабочем компьютере он останется)">🗑</button>`}</td></tr>`).join("") +
+      "</tbody></table>";
+  $("cl-home").classList.toggle("on", c.role === "home");
+  $("cl-work").classList.toggle("on", c.role === "work");
+  $("cl-open").hidden = $("cl-off").hidden = !c.role;
+}
+function cloudChosen() {
+  const r = document.querySelector('input[name="cl-found"]:checked');
+  return $("cl-dir").value.trim() || (r ? r.value : "");
+}
+async function openCloud() {
+  $("cl-setup-note").textContent = "";
+  $("cl-send-note").textContent = "";
+  $("dlg-cloud").showModal();
+  try { clInfo = await api("/api/cloud"); } catch (e) { $("cl-setup-note").textContent = e.message; return; }
+  const c = clInfo.state || {}, root = c.root || "";
+  const found = clInfo.detected || [];
+  $("cl-found").innerHTML = found.length
+    ? found.map((d, i) => `<label class="cl-found"><input type="radio" name="cl-found" value="${esc(d.path)}" ${(root ? d.path === root : i === 0) ? "checked" : ""}>` +
+        `<b>${esc(d.name)}</b><small>${esc(d.path)}</small></label>`).join("")
+    : `<div class="recognized">На этом компьютере облако не нашлось. Установите приложение облака и войдите в него или вставьте путь к папке ниже.</div>`;
+  $("cl-dir").value = root && !found.some((d) => d.path === root) ? root : "";
+  $("cl-pdf").checked = c.role ? !!c.pdf : true;
+  $("cl-setup-box").open = !c.role;
+  $("cl-list").innerHTML = (clInfo.lists || []).map((n) => `<option>${esc(n)}</option>`).join("") ||
+    "<option disabled>в папке inbox нет списков</option>";
+  if (state) state.cloud = c;
+  renderCloudDialog(c);
+}
+async function cloudSetup(role) {
+  const dir = cloudChosen(), note = $("cl-setup-note");
+  if (!dir) { note.textContent = "Выберите облако из найденных или вставьте путь к папке."; return; }
+  note.textContent = "Настраиваю…";
+  const res = await api("/api/cloud_setup", { dir, role, pdf: $("cl-pdf").checked });
+  if (res.error) { note.innerHTML = `<span style="color: var(--red)">${esc(res.error)}</span>`; return; }
+  note.innerHTML = (role === "work"
+    ? "✅ Готово: это рабочий компьютер. Оставьте программу открытой — она будет забирать списки из облака."
+    : "✅ Готово: это домашний компьютер. Теперь настройте программу на рабочем и отправляйте списки.") +
+    (res.warning ? `<br><span style="color: var(--red)">⚠ ${esc(res.warning)}</span>` : "");
+  await openCloudRefresh();
+}
+async function openCloudRefresh() {
+  try { clInfo = await api("/api/cloud"); } catch (e) { return; }
+  if (state) state.cloud = clInfo.state;
+  renderCloud();
+  renderCloudDialog(clInfo.state || {});
+  if (view === "download") loadLists();
+}
+async function cloudSend(name, noteEl) {
+  if (!name) return;
+  const res = await api("/api/cloud_send", { name });
+  const html = res.error ? `<span style="color: var(--red)">${esc(res.error)}</span>`
+    : `☁ Список <b>${esc(res.sent)}</b> отправлен на рабочий компьютер. Как идёт скачивание — на полоске «☁ Облако» на главной.` +
+      (res.answering ? "" : " Рабочий компьютер сейчас не отвечает: он возьмёт список, когда там откроется программа.");
+  noteEl.innerHTML = html;
+  openCloudRefresh();
+}
+$("go-cloud").onclick = openCloud;
+$("cl-home").onclick = () => cloudSetup("home");
+$("cl-work").onclick = () => cloudSetup("work");
+$("cl-dir").oninput = () => { if ($("cl-dir").value.trim()) document.querySelectorAll('input[name="cl-found"]').forEach((r) => { r.checked = false; }); };
+$("cl-send").onclick = () => cloudSend($("cl-list").value, $("cl-send-note"));
+$("cl-open").onclick = () => api("/api/cloud_open");
+$("cl-off").onclick = async () => {
+  if (!confirm("Отключить облако на этом компьютере? Файлы в облаке останутся.")) return;
+  await api("/api/cloud_off");
+  $("cl-setup-box").open = true;
+  $("cl-setup-note").textContent = "Облако на этом компьютере отключено.";
+  openCloudRefresh();
+};
+document.addEventListener("click", (e) => {
+  const t = e.target.closest("button");
+  if (!t) return;
+  if (t.dataset.cloudsend) cloudSend(t.dataset.cloudsend, $("choose-note"));
+  if (t.dataset.cloudrm) api("/api/cloud_remove", { name: t.dataset.cloudrm }).then(openCloudRefresh);
+});
 async function aiSearch() {
   if (!aiOn()) { show("ai"); return; }
   const topic = $("ai-topic").value.trim(), note = $("ai-search-note"), btn = $("btn-ai-search");

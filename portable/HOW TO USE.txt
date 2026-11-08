@@ -1,4 +1,4 @@
-﻿ARTICLE DOWNLOADER, portable version 8.7
+﻿ARTICLE DOWNLOADER, portable version 8.8
 ========================================
 
 Runs on any computer with Windows 10 or 11. Nothing to install: Python and everything
@@ -45,6 +45,8 @@ HOW TO USE
    The program opens the database sites in the downloader's browser. If a site asks you
    to pass a check («I am not a robot»), pass it. Then you can leave: downloading starts
    by itself.
+   No access to the databases at home? The «☁ To work» button on a list sends it to the
+   work computer through the cloud — see the «CLOUD» section below.
 
 4. «📚 Reference list» — a list in the Russian GOST R 7.0.100-2018 style or a journal
    style: APA 7, Elsevier Harvard, Vancouver, ACS, IEEE, Chicago, Nature — or the style of
@@ -106,6 +108,35 @@ Once on every computer:
 The sign-in is remembered on this computer. Sometimes a site asks you to sign in again
 after a few weeks. If many articles in the queue show «🔒 no access», sign in and click
 «Retry failed».
+
+
+CLOUD: DOWNLOAD ON YOUR WORK COMPUTER WHILE AT HOME
+--------------------------------------------------
+Access to the paid databases only at work (at the university)? Leave the program open on
+the work computer and send it DOI lists from home — it downloads the articles through the
+university's subscription, and the PDFs appear at home by themselves. The link is YOUR
+cloud: the program itself sends nothing to the internet and needs no server.
+How to set it up (once on each computer):
+  • on both computers install the cloud's app (Yandex Disk, Google Drive, OneDrive, Cloud
+    Mail.ru, Dropbox or iCloud) and sign in to THE SAME account; any shared folder both
+    computers see works too (for example, a network drive at work);
+  • press the «☁ Cloud» bar on the home screen, choose the cloud folder and say which
+    computer this is: at home — «🏠 Home», at work — «🏢 Work»;
+  • on the work computer sign in once through the university («🏛 Institutional sign-in»)
+    and leave the program open; do not turn the computer off (while the program is open it
+    does not fall asleep by itself);
+  • at home, on the «⬇ Download articles» screen, press «☁ To work» on a list.
+The colour of the «☁ Cloud» bar on the home screen shows what is going on at the work
+computer: grey — not set up; red — the work computer does not answer (off, the program
+closed, no internet) or has not taken the list yet; yellow — downloading (for example,
+«12 of 30»); orange — CAPTCHA, a person is needed at the work computer; green — everything
+downloaded or waiting for a list.
+The program does not get around CAPTCHAs: at an «I am not a robot» check the work computer
+waits for a person (a colleague can pass it). Pauses and the daily limit work as usual;
+once the limit is reached, the work computer goes on by itself the next day. The cloud does
+not move files instantly: the state is shown a minute or two late. PDFs take space in the
+cloud (300 articles are about 0.5–1 GB). There must be only one work computer; if it
+restarted, open the program on it — it goes on by itself.
 
 
 WHAT YOU CAN PASTE
