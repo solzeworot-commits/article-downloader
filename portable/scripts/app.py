@@ -48,6 +48,7 @@ import urllib.request
 import ai_helper as ai
 import cite_styles as cs
 import cloud
+import tray
 import pdf_table as pt
 import reflist as rl
 import doi_search as ds
@@ -84,7 +85,7 @@ PDF_TEXT_CACHE = ROOT / "logs" / "pdf_text"      # the pages of the PDFs, for «
 BIBLIO_DIR = ROOT / "Список литературы"
 
 UI_PORT = 17865
-APP_VERSION = "8.8"
+APP_VERSION = "8.8.1"
 APP_AUTHOR = "Bucaneiro"
 OFFICIAL_URL = "https://github.com/solzeworot-commits/article-downloader"
 DOWNLOAD_URL = OFFICIAL_URL + "/releases/tag/portable-latest"
@@ -180,6 +181,8 @@ DEFAULT_SETTINGS = {
     "window": None,        # {"w", "h"} the user resized the program window to
     "screen": None,        # {"w", "h", "x", "y"} the screen's work area the window reported (CSS pixels)
     "cloud": {},           # v8.8 «☁ Облако»: {"dir", "role": home|work, "pdf", "prev_pdf_dir"}
+    "minimize_to_tray": True,   # v8.8.1: on Windows the minimized window goes to the tray (tray.py)
+    "tray_hint_shown": False,   # the «программа здесь, у часов» notification was shown once
     "bases": {b[0]: True for b in BASES},
 }
 
@@ -2245,6 +2248,10 @@ def cloud_setup(folder: str, role: str, use_pdf: bool) -> dict:
         return {"error": tr("Выберите, какой это компьютер: домашний или рабочий.")}
     if not str(folder or "").strip():
         return {"error": tr("Выберите папку облака или вставьте путь к ней.")}
+    if cloud.is_link(folder):
+        return {"error": tr("Это ссылка на сайт, а нужна папка на этом компьютере. Установите приложение облака "
+                            "(например, «Google Диск для компьютеров» или «Яндекс Диск») и войдите в него: "
+                            "программа сама найдёт его папку.")}
     shared = cloud.shared_dir(folder)
     if not shared.parent.is_dir():
         return {"error": tr("Папка не найдена: {path}", path=shared.parent)}
@@ -2458,6 +2465,48 @@ def cloud_remove(name: str) -> dict:
     return {}
 
 
+# ---------------------------------------------------------------------------
+# v8.8.1: the icon by the clock on Windows (tray.py)
+# ---------------------------------------------------------------------------
+
+def tray_tip() -> str:
+    """The icon's tooltip: what the program is doing."""
+    with S.lock:
+        phase, captcha = S.phase, S.captcha_now
+        done = sum(1 for i in S.items if i["status"] == "success")
+        left = sum(1 for i in S.items if i["status"] in ("pending", "running"))
+    tip = f"{tr('Загрузчик статей')} {APP_VERSION}"
+    if captcha:
+        return tip + "\n" + tr("Капча: пройдите проверку в браузере загрузчика")
+    if phase in ("downloading", "pause", "warmup_wait") and left:
+        return tip + "\n" + tr("Скачиваю: готово {done}, осталось {left}", done=done, left=left)
+    if phase == "limit":
+        return tip + "\n" + tr("Дневной лимит: продолжу завтра")
+    if cloud_cfg()[0] == "work":
+        return tip + "\n" + tr("☁ Рабочий компьютер: жду списки из облака")
+    return tip
+
+
+def tray_parked():
+    """The window has just gone to the tray: say where it is, the first time only."""
+    with S.lock:
+        if S.settings.get("tray_hint_shown"):
+            return
+        S.settings["tray_hint_shown"] = True
+        write_json_atomic(SETTINGS_PATH, S.settings)
+    tray.notify(tr("Загрузчик статей — здесь, у часов"),
+                tr("Окно свернулось в трей, программа работает. Нажмите на значок, чтобы открыть окно."))
+
+
+def start_tray(url: str):
+    if os.name != "nt" or os.environ.get("ARTICLE_UI_NO_WINDOW") == "1":
+        return
+    ok = tray.start(ICON_FILE, tip=tray_tip, should_hide=lambda: bool(S.settings.get("minimize_to_tray", True)),
+                    open_window=lambda: open_ui_window(url), quit=shutdown, on_park=tray_parked,
+                    labels=lambda: {"open": tr("Открыть окно"), "quit": tr("Выход")})
+    app_log(f"Tray icon: {'on' if ok else 'not shown'}")
+
+
 def browser_search_url(source: str, query: str) -> str:
     if source == "scopus":
         return SCOPUS_RESULTS_URL + quote(query, safe="")
@@ -2470,7 +2519,7 @@ def idle_exit_loop():
         with S.lock:
             # v8.8: the work computer keeps waiting for lists from the cloud.
             busy = (S.running or S.warm["running"] or S.search["running"]
-                    or cloud_cfg()[0] == "work")
+                    or cloud_cfg()[0] == "work" or tray.parked())
             idle = time.time() - S.last_poll > IDLE_EXIT_SEC
         if idle and not busy:
             app_log("No window for a long time and nothing to do: exiting")
@@ -2486,6 +2535,7 @@ def shutdown():
     S.save_queue()
     if S.server:
         threading.Thread(target=S.server.shutdown, daemon=True).start()
+    tray.stop()
 
 
 # ---------------------------------------------------------------------------
@@ -2726,7 +2776,7 @@ def update_settings(new: dict):
                     S.settings[key] = max(0, int(value))
                 except (TypeError, ValueError):
                     pass
-            elif key in ("title_for_plain_lines", "desktop_shortcut"):
+            elif key in ("title_for_plain_lines", "desktop_shortcut", "minimize_to_tray"):
                 S.settings[key] = bool(value)
             elif key in ("browser", "pdf_dir"):
                 S.settings[key] = str(value or "").strip()
@@ -2835,7 +2885,7 @@ def handle_api(path: str, body: dict) -> dict:
         added = import_files(body.get("files") or [])
         if added:
             start_queue()
-        return {"added": added}
+        return {"added": added, "shown": tray.show_window(parked_only=True)}
 
     if path == "/api/quit":
         shutdown()
@@ -3476,8 +3526,12 @@ def hand_over_to_running_copy(files: list[str]) -> bool:
             headers={"Content-Type": "application/json", "X-Token": token},
             method="POST",
         )
-        urllib.request.urlopen(req, timeout=30).read()
-        open_ui_window(f"{base}/?t={token}")
+        if os.name == "nt":                      # let the running copy bring its window to the front
+            import ctypes
+            ctypes.windll.user32.AllowSetForegroundWindow(-1)
+        answer = json.loads(urllib.request.urlopen(req, timeout=30).read() or b"{}")
+        if not answer.get("shown"):              # v8.8.1: its window was not waiting in the tray
+            open_ui_window(f"{base}/?t={token}")
         return True
     except Exception as exc:
         app_log(f"Hand-over failed: {exc}")
@@ -3518,6 +3572,7 @@ def main():
 
     url = f"http://127.0.0.1:{UI_PORT}/?t={S.token}"
     open_ui_window(url)
+    start_tray(url)
 
     threading.Thread(target=ensure_desktop_shortcut, daemon=True).start()
     threading.Thread(target=idle_exit_loop, daemon=True).start()
@@ -3534,6 +3589,7 @@ def main():
         server.serve_forever(poll_interval=0.5)
     finally:
         S.save_queue()
+        tray.stop()
         app_log("Stopped")
 
 

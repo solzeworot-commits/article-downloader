@@ -91,6 +91,13 @@ def detect() -> list[dict]:
     return out
 
 
+def is_link(text: str) -> bool:
+    """A web address pasted instead of a folder (https://drive.google.com/…, disk.yandex.ru/…)."""
+    low = str(text or "").strip().strip('"').lower()
+    return "://" in low or low.startswith(("www.", "drive.google.", "disk.yandex.", "onedrive.live.",
+                                           "1drv.ms", "cloud.mail.ru", "dropbox.com", "icloud.com"))
+
+
 def shared_dir(chosen: str) -> Path:
     """The program's folder inside the chosen cloud folder (the chosen one when it already is it)."""
     path = Path(str(chosen or "").strip().strip('"'))

@@ -931,7 +931,6 @@
   "«☁ На рабочий»": "«☁ To work»",
   "(или вверху этого окна). Цвет полоски «☁ Облако» на главной покажет, что происходит.": "(or at the top of this window). The colour of the «☁ Cloud» bar on the home screen shows what is going on.",
   "Папка облака на этом компьютере:": "The cloud folder on this computer:",
-  "или вставьте путь к папке облака, например D:\\YandexDisk": "or paste the path of the cloud folder, for example D:\\YandexDisk",
   "скачанные PDF складывать в облако — тогда статьи с рабочего компьютера сами появятся дома": "put the downloaded PDFs into the cloud — then the articles from the work computer appear at home by themselves",
   "Этот компьютер:": "This computer:",
   "отправляю списки": "I send lists",
@@ -1017,7 +1016,9 @@
   "отправлен на рабочий компьютер. Как идёт скачивание — на полоске «☁ Облако» на главной.": "has been sent to the work computer. How downloading goes — on the «☁ Cloud» bar of the home screen.",
   "Рабочий компьютер сейчас не отвечает: он возьмёт список, когда там откроется программа.": "The work computer does not answer now: it takes the list once the program opens there.",
   "Отключить облако на этом компьютере? Файлы в облаке останутся.": "Turn the cloud off on this computer? The files in the cloud stay.",
-  "Облако на этом компьютере отключено.": "The cloud is turned off on this computer."
+  "Облако на этом компьютере отключено.": "The cloud is turned off on this computer.",
+  "или вставьте путь к папке облака на этом компьютере (не ссылку из браузера), например G:\\Мой диск": "or paste the path of the cloud folder on this computer (not a link from the browser), for example G:\\My Drive",
+  "Сворачивать окно в трей (значок у часов)": "Minimize the window to the tray (the icon by the clock)"
  },
  "messages": {
   "экспорт": "export",
@@ -1187,6 +1188,15 @@
   "Облако не настроено.": "The cloud is not set up.",
   "Яндекс Диск": "Yandex Disk",
   "Google Диск": "Google Drive",
-  "Облако Mail.ru": "Cloud Mail.ru"
+  "Облако Mail.ru": "Cloud Mail.ru",
+  "Это ссылка на сайт, а нужна папка на этом компьютере. Установите приложение облака (например, «Google Диск для компьютеров» или «Яндекс Диск») и войдите в него: программа сама найдёт его папку.": "This is a link to a website, but a folder on this computer is needed. Install the cloud's app (for example, «Google Drive for desktop» or «Yandex Disk») and sign in: the program finds its folder by itself.",
+  "Капча: пройдите проверку в браузере загрузчика": "CAPTCHA: pass the check in the downloader's browser",
+  "Скачиваю: готово {done}, осталось {left}": "Downloading: {done} done, {left} left",
+  "Дневной лимит: продолжу завтра": "Daily limit: I go on tomorrow",
+  "☁ Рабочий компьютер: жду списки из облака": "☁ Work computer: waiting for lists from the cloud",
+  "Загрузчик статей — здесь, у часов": "Article Downloader is here, by the clock",
+  "Окно свернулось в трей, программа работает. Нажмите на значок, чтобы открыть окно.": "The window went to the tray; the program keeps working. Click the icon to open the window.",
+  "Открыть окно": "Open the window",
+  "Выход": "Exit"
  }
 }

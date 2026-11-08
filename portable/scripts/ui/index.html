@@ -1120,7 +1120,7 @@ extraction"></textarea>
       <div class="cl-form">
         <b>Папка облака на этом компьютере:</b>
         <div id="cl-found"></div>
-        <input id="cl-dir" spellcheck="false" placeholder="или вставьте путь к папке облака, например D:\YandexDisk">
+        <input id="cl-dir" spellcheck="false" placeholder="или вставьте путь к папке облака на этом компьютере (не ссылку из браузера), например G:\Мой диск">
         <label><input type="checkbox" id="cl-pdf" checked> скачанные PDF складывать в облако — тогда статьи с рабочего компьютера сами появятся дома</label>
         <b>Этот компьютер:</b>
         <div class="cl-roles"><button id="cl-home"><span>🏠</span><b>Домашний</b><small>отправляю списки</small></button><button id="cl-work"><span>🏢</span><b>Рабочий</b><small>скачиваю статьи</small></button></div>
@@ -1242,6 +1242,10 @@ extraction"></textarea>
     <div class="form-row">
       <label for="s-shortcut">Значок «Скачать статьи» на рабочем столе</label>
       <span><input type="checkbox" id="s-shortcut"></span>
+    </div>
+    <div class="form-row" id="s-tray-row">
+      <label for="s-tray">Сворачивать окно в трей (значок у часов)</label>
+      <span><input type="checkbox" id="s-tray"></span>
     </div>
     <div style="margin: 14px 0 6px; font-weight: 600;">Какие базы открывать при запуске</div>
     <div class="checks" id="s-bases"></div>
@@ -1597,6 +1601,8 @@ $("btn-settings").onclick = () => {
   $("s-warm").value = s.warmup_timeout_min;
   $("s-pdf").value = s.pdf_dir;
   $("s-shortcut").checked = s.desktop_shortcut;
+  $("s-tray").checked = s.minimize_to_tray !== false;
+  $("s-tray-row").hidden = state.platform !== "windows";
   $("s-bases").innerHTML = state.warm.bases.map((b) =>
     `<label><input type="checkbox" data-base="${b.key}" ${s.bases[b.key] !== false ? "checked" : ""}> ${esc(b.name)}</label>`).join("");
   $("dlg-settings").showModal();
@@ -1612,6 +1618,7 @@ $("btn-save").onclick = async () => {
     warmup_timeout_min: $("s-warm").value,
     pdf_dir: $("s-pdf").value,
     desktop_shortcut: $("s-shortcut").checked,
+    minimize_to_tray: $("s-tray").checked,
     bases,
   });
   $("dlg-settings").close();
