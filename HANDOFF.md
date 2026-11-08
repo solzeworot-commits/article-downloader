@@ -780,6 +780,20 @@ https://github.com/solzeworot-commits/article-downloader/releases/download/porta
   командой `curl … && ditto -x -k …` из README. Живой проверки на Mac пока не было: бета, отзывы — через
   «Сообщить о проблеме». Счётчик скачиваний (`tools/download_stats.py`) архив для Mac пока не считает.
 
+## 2ш. Версия 8.6.1: Защитник Windows и архив 8.6
+
+- В 8.6 Защитник Windows стал удалять архив как «Троян» («Эта опасная программа выполняет команды
+  злоумышленника»): и при скачивании в браузере, и при автообновлении (программа оставалась на 8.5 и снова
+  предлагала 8.6). С выключенным антивирусом всё работало; на 8.5 срабатываний не было. Новое в Windows-архиве
+  8.6 — bash-обновлятор для Mac в `support.py` (снимает карантин `xattr -dr com.apple.quarantine`, `nohup`,
+  `rm -rf`) и osascript-вызовы в `osutil.py`.
+- Всё Mac-специфичное вынесено в `portable/scripts/mac_support.py`; `osutil`/`support` импортируют его только на
+  Mac. `tools/build_portable.py` его не кладёт в Windows-архив; сборка для Windows проверяет, что в
+  `scripts` нет `mac_support.py`, «com.apple.quarantine», «osascript», «xattr -». Сборка для Mac — что он есть.
+- Точного названия угрозы нет (журнал защиты показал только «Троян»). Если 8.6.1 тоже будут удалять — отправить
+  архив в Microsoft как ложное срабатывание (https://www.microsoft.com/en-us/wdsi/filesubmission, «Software
+  developer», «Incorrectly detected as malware»).
+
 ## 3. Что проверено в 6.0 (Linux, Chromium в Xvfb, поддельное издательство)
 
 Настоящие сайты издательств из среды сборки были закрыты сетью, поэтому всё

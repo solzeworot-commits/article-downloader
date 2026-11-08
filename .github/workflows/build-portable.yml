@@ -53,6 +53,11 @@ jobs:
           Expand-Archive dist\ArticleDownloader_Portable.zip -DestinationPath $dest -Force
           $app = Join-Path $dest "ArticleDownloader"
           if (-not (Test-Path (Join-Path $app "ЛИЦЕНЗИЯ.txt"))) { throw "в архиве нет ЛИЦЕНЗИЯ.txt" }
+          # v8.6.1: no Mac shell code in the Windows archive (Defender took it for a trojan in 8.6).
+          if (Test-Path (Join-Path $app "scripts\mac_support.py")) { throw "в Windows-архив попал mac_support.py" }
+          $mac = Get-ChildItem (Join-Path $app "scripts") -Recurse -Include *.py, *.bat, *.ps1 |
+            Select-String -SimpleMatch -Pattern "com.apple.quarantine", "osascript", "xattr -"
+          if ($mac) { $mac | Out-String | Write-Output; throw "в Windows-архиве остались команды для Mac" }
           $py = Join-Path $app "python\python.exe"
           & $py -E -s -X utf8 -c "import playwright, psutil, pypdf, greenlet, ssl, sqlite3; print('встроенный Python: всё на месте')"
           if ($LASTEXITCODE) { throw "встроенный Python не запустился" }
