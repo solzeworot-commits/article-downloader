@@ -94,8 +94,10 @@ def main():
     for data_dir in site.glob("*.data"):
         shutil.rmtree(data_dir)  # e.g. greenlet's C headers
 
+    # mac_support.py is for the Mac archive only: its shell commands (the updater clears the
+    # "downloaded from the internet" mark) made Windows Defender call 8.6 a trojan.
     shutil.copytree(SOURCE, target, dirs_exist_ok=True,
-                    ignore=shutil.ignore_patterns("__pycache__", "*.pyc"))
+                    ignore=shutil.ignore_patterns("__pycache__", "*.pyc", "mac_support.py"))
     # The licence goes next to the program as a Notepad-friendly file
     # (UTF-8 with BOM, CRLF), like "КАК ПОЛЬЗОВАТЬСЯ.txt".
     licence = (HERE.parent / "LICENSE").read_text(encoding="utf-8")

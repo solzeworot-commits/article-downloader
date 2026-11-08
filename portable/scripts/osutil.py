@@ -7,10 +7,10 @@ What differs between Windows and macOS (v8.6, the Mac beta).
   outside the program folder — %LOCALAPPDATA%\\ArticleDownloader on Windows,
   ~/Library/Application Support/ArticleDownloader on a Mac (LOCALAPPDATA, when
   set, wins everywhere: the tests and the bench point it at a temporary folder).
-- mac_browser(kind): Yandex Browser, Edge or Chrome in /Applications.
 - open_path() / reveal(): a file or folder in Explorer / Finder.
 - alert(): a message when the window cannot open.
-- mac_language(): the first language of the Mac's preferred languages.
+- mac_browser(), mac_choose_file(), mac_language(): in mac_support.py, which
+  only the Mac archive has (v8.6.1: no Mac shell commands in the Windows one).
 """
 from __future__ import annotations
 
@@ -29,14 +29,6 @@ IS_MAC = sys.platform == "darwin"
 if IS_MAC and not os.environ.get("SSL_CERT_FILE") and os.path.exists("/etc/ssl/cert.pem"):
     os.environ["SSL_CERT_FILE"] = "/etc/ssl/cert.pem"
 
-# The executable inside each browser's .app bundle.
-MAC_BROWSERS = {
-    "yandex": ("Yandex.app", "Yandex"),
-    "edge": ("Microsoft Edge.app", "Microsoft Edge"),
-    "chrome": ("Google Chrome.app", "Google Chrome"),
-}
-
-
 def user_data_dir() -> Path | None:
     local = os.environ.get("LOCALAPPDATA")
     if local:
@@ -47,15 +39,8 @@ def user_data_dir() -> Path | None:
 
 
 def mac_browser(kind: str) -> str | None:
-    """The browser's executable in /Applications or ~/Applications, or None."""
-    if kind not in MAC_BROWSERS:
-        return None
-    bundle, exe = MAC_BROWSERS[kind]
-    for apps in (Path("/Applications"), Path.home() / "Applications"):
-        candidate = apps / bundle / "Contents" / "MacOS" / exe
-        if candidate.exists():
-            return str(candidate)
-    return None
+    import mac_support
+    return mac_support.browser(kind)
 
 
 def _quiet(args: list[str]):
@@ -82,10 +67,6 @@ def reveal(path) -> None:
         open_path(Path(path).parent)
 
 
-def applescript_text(text: str) -> str:
-    return '"' + str(text).replace("\\", "\\\\").replace('"', '\\"') + '"'
-
-
 def alert(text: str, title: str) -> bool:
     """A message box; False when there is none on this system."""
     try:
@@ -94,9 +75,8 @@ def alert(text: str, title: str) -> bool:
             ctypes.windll.user32.MessageBoxW(None, text, title, 0x10)
             return True
         if IS_MAC:
-            subprocess.run(["osascript", "-e", f"display alert {applescript_text(title)} message "
-                            f"{applescript_text(text)} as critical"], timeout=600,
-                           stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+            import mac_support
+            mac_support.alert(text, title)
             return True
     except Exception:
         pass
@@ -104,22 +84,13 @@ def alert(text: str, title: str) -> bool:
 
 
 def mac_choose_file(prompt: str, folder: Path) -> str:
-    """The Finder "choose file" dialog; the POSIX path or "" when cancelled."""
-    script = (f"POSIX path of (choose file with prompt {applescript_text(prompt)} "
-              f"default location (POSIX file {applescript_text(str(folder))}))")
-    result = subprocess.run(["osascript", "-e", script], capture_output=True, text=True, timeout=1800)
-    return result.stdout.strip() if result.returncode == 0 else ""
+    import mac_support
+    return mac_support.choose_file(prompt, folder)
 
 
 def mac_language() -> str:
-    """"ru", "en", … from the Mac's preferred languages ("" when unknown)."""
     try:
-        out = subprocess.run(["defaults", "read", "-g", "AppleLanguages"], capture_output=True,
-                             text=True, timeout=5).stdout
-    except Exception:
+        import mac_support
+    except ImportError:
         return ""
-    for line in out.splitlines():
-        code = line.strip().strip('(),"').strip()
-        if code:
-            return code.split("-")[0].split("_")[0].lower()
-    return ""
+    return mac_support.language()

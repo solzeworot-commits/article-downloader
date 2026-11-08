@@ -54,6 +54,7 @@ jobs:
           test -f "$APP/ЛИЦЕНЗИЯ.txt" || { echo "в архиве нет ЛИЦЕНЗИЯ.txt"; exit 1; }
           test -x "$APP/СКАЧАТЬ СТАТЬИ.command" || { echo "запускалка не исполняемая"; exit 1; }
           test ! -e "$APP/СКАЧАТЬ СТАТЬИ.bat" || { echo "в архиве для Mac лишний .bat"; exit 1; }
+          test -f "$APP/scripts/mac_support.py" || { echo "в архиве для Mac нет mac_support.py"; exit 1; }
           "$APP/python/arm64/bin/python3" -E -s -c "import playwright, psutil, pypdf, greenlet, ssl, sqlite3, qrcode; print('Python для Apple (arm64): всё на месте')"
           test -x "$APP/python/arm64/lib/python3.13/site-packages/playwright/driver/node" || { echo "node без права запуска"; exit 1; }
           file "$APP/python/x86_64/bin/python3.13" | grep -q x86_64 || { echo "нет Python для Intel"; exit 1; }
