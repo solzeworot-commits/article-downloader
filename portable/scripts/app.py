@@ -47,6 +47,7 @@ import urllib.request
 
 import ai_helper as ai
 import cite_styles as cs
+import cloud
 import pdf_table as pt
 import reflist as rl
 import doi_search as ds
@@ -83,7 +84,7 @@ PDF_TEXT_CACHE = ROOT / "logs" / "pdf_text"      # the pages of the PDFs, for «
 BIBLIO_DIR = ROOT / "Список литературы"
 
 UI_PORT = 17865
-APP_VERSION = "8.7"
+APP_VERSION = "8.8"
 APP_AUTHOR = "Bucaneiro"
 OFFICIAL_URL = "https://github.com/solzeworot-commits/article-downloader"
 DOWNLOAD_URL = OFFICIAL_URL + "/releases/tag/portable-latest"
@@ -178,6 +179,7 @@ DEFAULT_SETTINGS = {
     "ai_provider": "",     # the AI helper's service (ai_helper.PROVIDERS)
     "window": None,        # {"w", "h"} the user resized the program window to
     "screen": None,        # {"w", "h", "x", "y"} the screen's work area the window reported (CSS pixels)
+    "cloud": {},           # v8.8 «☁ Облако»: {"dir", "role": home|work, "pdf", "prev_pdf_dir"}
     "bases": {b[0]: True for b in BASES},
 }
 
@@ -445,6 +447,16 @@ class State:
         self.find_jobs: dict[str, dict] = {}     # list file name -> search in the text of the PDFs
         self.outline_jobs: dict[str, dict] = {}  # list file name -> AI draft outline of the review
         self.reflist: dict = {}                   # «Привести в порядок свой список» (v8.7): the last one
+        # v8.8 «☁ Облако»: the lists taken from the cloud (work computer), the last
+        # status written, the size/mtime of the lists seen once (taken when unchanged
+        # on the next look: the cloud may still be writing), the cached view.
+        self.cloud_taken: dict | None = None
+        self.cloud_status: dict | None = None
+        self.cloud_written = 0.0
+        self.cloud_seen: dict[str, list] = {}
+        self.cloud_error = ""
+        self.cloud_cache: tuple[float, dict] | None = None
+        self.cloud_wake = threading.Event()
 
         self.browser = {}
         self.update: dict | None = None    # support.check_update()
@@ -2206,6 +2218,246 @@ def check_topic(topic_id: str) -> dict:
     return {}
 
 
+# ---------------------------------------------------------------------------
+# v8.8: «☁ Облако» — the home computer sends lists, the work computer (with the
+# university's access) downloads them; the bridge is a folder of the user's
+# cloud (cloud.py). The work computer looks into it every CLOUD_TICK_SEC.
+# ---------------------------------------------------------------------------
+
+CLOUD_TICK_SEC = 15
+CLOUD_TAKEN_PATH = LOGS / "cloud_taken.json"
+
+
+def cloud_cfg() -> tuple[str, Path | None]:
+    """(role, the shared folder): ("", None) when the cloud is not set up."""
+    cfg = S.settings.get("cloud") or {}
+    role = cfg.get("role") if cfg.get("role") in ("home", "work") else ""
+    return (role, Path(cfg["dir"])) if role and cfg.get("dir") else ("", None)
+
+
+def computer_name() -> str:
+    import platform
+    return platform.node() or "?"
+
+
+def cloud_setup(folder: str, role: str, use_pdf: bool) -> dict:
+    if role not in ("home", "work"):
+        return {"error": tr("Выберите, какой это компьютер: домашний или рабочий.")}
+    if not str(folder or "").strip():
+        return {"error": tr("Выберите папку облака или вставьте путь к ней.")}
+    shared = cloud.shared_dir(folder)
+    if not shared.parent.is_dir():
+        return {"error": tr("Папка не найдена: {path}", path=shared.parent)}
+    try:
+        cloud.prepare(shared)
+    except OSError as exc:
+        return {"error": tr("В эту папку не получается записать: {error}", error=exc)}
+    warning = ""
+    status = cloud.read_status(shared)
+    if (role == "work" and status and status.get("computer") != computer_name()
+            and time.time() - float(status.get("updated") or 0) < cloud.STALE_SEC):
+        warning = tr("В этой папке уже есть рабочий компьютер «{name}». Рабочий компьютер "
+                     "должен быть один, иначе оба будут качать одно и то же.", name=status.get("computer"))
+    with S.lock:
+        old = S.settings.get("cloud") or {}
+        prev = old.get("prev_pdf_dir", "") if old.get("pdf") else S.settings.get("pdf_dir", "")
+        if use_pdf:
+            S.settings["pdf_dir"] = str(shared / cloud.PDF)
+        elif old.get("pdf"):
+            S.settings["pdf_dir"] = prev
+        S.settings["cloud"] = {"dir": str(shared), "role": role, "pdf": bool(use_pdf), "prev_pdf_dir": prev}
+        write_json_atomic(SETTINGS_PATH, S.settings)
+        S.cloud_cache = None
+        S.cloud_status = None
+    app_log(f"Cloud: {role} computer, folder {shared}")
+    S.cloud_wake.set()
+    return {"ok": True, "warning": warning}
+
+
+def cloud_off():
+    with S.lock:
+        old = S.settings.get("cloud") or {}
+        if old.get("pdf"):
+            S.settings["pdf_dir"] = old.get("prev_pdf_dir", "")
+        S.settings["cloud"] = {}
+        write_json_atomic(SETTINGS_PATH, S.settings)
+        S.cloud_cache = None
+        S.cloud_status = None
+    app_log("Cloud: off")
+    S.cloud_wake.set()
+
+
+def _cloud_taken() -> dict:
+    if S.cloud_taken is None:
+        try:
+            S.cloud_taken = json.loads(CLOUD_TAKEN_PATH.read_text(encoding="utf-8"))
+        except (OSError, ValueError):
+            S.cloud_taken = {}
+    return S.cloud_taken
+
+
+def cloud_work_status(shared: Path, taken: dict) -> dict:
+    """What the work computer writes to состояние.json: its queue and each list taken."""
+    with S.lock:
+        best = cloud.best_status(S.items)
+        warm_captcha = S.warm["running"] and any(b.get("state") == "captcha" for b in S.warm["bases"].values())
+        data = {"app": "ArticleDownloader", "version": APP_VERSION, "computer": computer_name(),
+                "running": S.running, "phase": S.phase, "limit": S.phase == "limit",
+                "captcha": bool(S.captcha_now or warm_captcha)}
+    lists = {}
+    for name, rec in taken.items():
+        path = INBOX / rec.get("local", "")
+        if not path.is_file():
+            path = shared / cloud.TODO / name
+        keys = [e.lower() for e in _list_entries(path)] if path.is_file() else []
+        lists[name] = {"size": rec.get("size"), "taken": rec.get("taken", ""), **cloud.list_counts(keys, best)}
+    data["lists"] = lists
+    return data
+
+
+def cloud_tick():
+    """The work computer: take the new lists of «В работу», write the status."""
+    role, shared = cloud_cfg()
+    if role != "work":
+        return
+    try:
+        cloud.prepare(shared)
+    except OSError as exc:
+        S.cloud_error = str(exc)
+        return
+    S.cloud_error = ""
+    taken = _cloud_taken()
+    files = cloud.list_files(shared, LIST_SUFFIXES)
+    changed = False
+    for path in reversed(files):                       # the oldest first
+        try:
+            sig = cloud.signature(path)
+            if taken.get(path.name, {}).get("sig") == sig:
+                continue
+            if S.cloud_seen.get(path.name) != sig:     # the cloud may still be writing it
+                S.cloud_seen[path.name] = sig
+                continue
+            data = path.read_bytes()
+            local = cloud.place(data, path.name, INBOX)
+        except OSError as exc:
+            app_log(f"Cloud: {path.name} not taken yet: {exc}")
+            continue
+        taken[path.name] = {"local": local.name, "sig": sig, "size": sig[0],
+                            "taken": time.strftime("%d.%m.%Y %H:%M")}
+        changed = True
+        try:
+            res = queue_list_file(local)
+            app_log(f"Cloud: took {path.name}: {res['added']} queued, {res['duplicates']} already there")
+        except Exception as exc:
+            app_log(f"Cloud: {path.name} not queued: {exc}")
+    names = {p.name for p in files}
+    for name in [n for n in taken if n not in names]:  # removed from the cloud by the home computer
+        del taken[name]
+        changed = True
+    if changed:
+        try:
+            write_json_atomic(CLOUD_TAKEN_PATH, taken)
+        except OSError as exc:
+            app_log(f"Cloud: {CLOUD_TAKEN_PATH.name} not saved: {exc}")
+    # Nobody presses «Продолжить» at the work computer: the next day it goes on by itself.
+    with S.lock:
+        next_day = S.phase == "limit" and not S.running and not _limit_reached()
+        if next_day:
+            S.phase, S.notice = "idle", ""
+    if next_day:
+        start_queue()
+    status = cloud_work_status(shared, taken)
+    body = json.dumps(status, sort_keys=True)
+    old = S.cloud_status or {}
+    if (body != json.dumps({k: v for k, v in old.items() if k not in ("updated", "updated_text")}, sort_keys=True)
+            or time.time() - S.cloud_written > cloud.HEARTBEAT_SEC - CLOUD_TICK_SEC / 2):
+        status.update(updated=time.time(), updated_text=time.strftime("%d.%m.%Y %H:%M"))
+        try:
+            cloud.write_status(shared, status)
+            S.cloud_written = time.time()
+        except OSError as exc:
+            app_log(f"Cloud: status not written: {exc}")
+        S.cloud_status = status
+        S.cloud_cache = None
+
+
+def cloud_loop():
+    awake = False
+    first = True
+    while True:
+        role, _ = cloud_cfg()
+        want = role == "work"
+        if want != awake:
+            awake = osutil.keep_awake(want) and want
+        if want:
+            if first:
+                # The program was restarted at the work computer: go on with the queue.
+                with S.lock:
+                    resume = S.next_pending() is not None and not S.running
+                if resume:
+                    start_queue()
+            try:
+                cloud_tick()
+            except Exception as exc:
+                app_log(f"Cloud error: {exc}\n{traceback.format_exc()}")
+        first = False
+        S.cloud_wake.wait(CLOUD_TICK_SEC)
+        S.cloud_wake.clear()
+
+
+def cloud_state(fresh: bool = False) -> dict:
+    """The «☁ Облако» bar and window: role, state, the lists (cached for a few seconds)."""
+    role, shared = cloud_cfg()
+    if not role:
+        return {"role": ""}
+    with S.lock:
+        cached = S.cloud_cache
+    if cached and not fresh and time.time() - cached[0] < 4:
+        return cached[1]
+    cfg = S.settings.get("cloud") or {}
+    out = {"role": role, "dir": str(shared), "root": str(shared.parent), "pdf": bool(cfg.get("pdf")),
+           "pdf_name": cloud.PDF}
+    if not shared.is_dir() or (role == "work" and S.cloud_error):
+        out.update(state="nofolder", lists=[], error=S.cloud_error)
+    else:
+        files = cloud.list_files(shared, LIST_SUFFIXES)
+        status = S.cloud_status if role == "work" else cloud.read_status(shared)
+        out.update(cloud.home_view(shared, files, status))
+        if role == "work" and status is None:
+            out["state"] = "idle"
+    with S.lock:
+        S.cloud_cache = (time.time(), out)
+    return out
+
+
+def cloud_send(name: str) -> dict:
+    role, shared = cloud_cfg()
+    if role != "home":
+        return {"error": tr("Сначала настройте облако на этом компьютере как домашний.")}
+    source = INBOX / Path(name).name
+    if not name or not source.is_file():
+        return {"error": tr("Файл не найден в папке inbox.")}
+    try:
+        cloud.send(source, shared)
+    except OSError as exc:
+        return {"error": tr("Не получилось положить список в облако: {error}", error=exc)}
+    with S.lock:
+        S.cloud_cache = None
+    app_log(f"Cloud: sent {source.name}")
+    state = cloud_state(fresh=True)
+    return {"sent": source.name, "answering": state.get("state") not in ("never", "stale", "nofolder")}
+
+
+def cloud_remove(name: str) -> dict:
+    role, shared = cloud_cfg()
+    if not role:
+        return {"error": tr("Облако не настроено.")}
+    cloud.remove(shared, name)
+    with S.lock:
+        S.cloud_cache = None
+    return {}
+
+
 def browser_search_url(source: str, query: str) -> str:
     if source == "scopus":
         return SCOPUS_RESULTS_URL + quote(query, safe="")
@@ -2216,7 +2468,9 @@ def idle_exit_loop():
     while True:
         time.sleep(30)
         with S.lock:
-            busy = S.running or S.warm["running"] or S.search["running"]
+            # v8.8: the work computer keeps waiting for lists from the cloud.
+            busy = (S.running or S.warm["running"] or S.search["running"]
+                    or cloud_cfg()[0] == "work")
             idle = time.time() - S.last_poll > IDLE_EXIT_SEC
         if idle and not busy:
             app_log("No window for a long time and nothing to do: exiting")
@@ -2456,6 +2710,7 @@ def public_state(known_version: int) -> dict:
                                             "message", "attempts")}
                 for i in S.items
             ]
+    data["cloud"] = cloud_state()      # outside the lock: a cloud folder can be slow to read
     return data
 
 
@@ -2828,6 +3083,27 @@ def handle_api(path: str, body: dict) -> dict:
         open_path(INBOX)
         return {}
 
+    # -- v8.8 «☁ Облако» ----------------------------------------------------------
+    if path == "/api/cloud":
+        found = [dict(d, name=tr(d["name"])) for d in cloud.detect()]
+        return {"detected": found, "state": cloud_state(fresh=True), "computer": computer_name(),
+                "lists": [f["name"] for f in inbox_lists() if f["count"]]}
+    if path == "/api/cloud_setup":
+        return cloud_setup(str(body.get("dir") or ""), str(body.get("role") or ""), bool(body.get("pdf", True)))
+    if path == "/api/cloud_off":
+        cloud_off()
+        return {}
+    if path == "/api/cloud_send":
+        return cloud_send(str(body.get("name") or ""))
+    if path == "/api/cloud_remove":
+        return cloud_remove(str(body.get("name") or ""))
+    if path == "/api/cloud_open":
+        role, shared = cloud_cfg()
+        if not role or not shared.is_dir():
+            return {"error": tr("Облако не настроено.")}
+        open_path(shared)
+        return {}
+
     # -- DOI search ------------------------------------------------------------
     if path == "/api/build_queries":
         try:
@@ -3082,7 +3358,12 @@ class Handler(BaseHTTPRequestHandler):
             except FileNotFoundError:
                 return self._json({"error": tr("Список не найден в папке inbox.")})
         if url.path == "/api/inbox":
-            return self._json({"files": inbox_lists(), "inbox": str(INBOX)})
+            files = inbox_lists()
+            sent = {x["name"]: x for x in cloud_state().get("lists") or []} if cloud_cfg()[0] == "home" else {}
+            for f in files:
+                if f["name"] in sent:
+                    f["cloud"] = sent[f["name"]]
+            return self._json({"files": files, "inbox": str(INBOX)})
         if url.path == "/api/search_results":
             with S.lock:
                 return self._json({"version": S.search["version"],
@@ -3241,6 +3522,7 @@ def main():
     threading.Thread(target=ensure_desktop_shortcut, daemon=True).start()
     threading.Thread(target=idle_exit_loop, daemon=True).start()
     threading.Thread(target=check_for_update, daemon=True).start()
+    threading.Thread(target=cloud_loop, daemon=True).start()
 
     # v6.1: the start screen comes first; the databases open once a list is
     # chosen (or "Продолжить" pressed). A file dropped on the icon starts at

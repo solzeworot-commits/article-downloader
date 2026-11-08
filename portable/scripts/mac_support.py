@@ -2,7 +2,8 @@
 # © 2026 Bucaneiro. Бесплатная программа; условия — в файле ЛИЦЕНЗИЯ.txt.
 """
 macOS only (v8.6.1): the browsers in /Applications, the Finder dialog and
-alerts through osascript, the Mac's language and the updater.
+alerts through osascript, the Mac's language, the updater and (v8.8) no sleep
+for the work computer of «☁ Облако».
 
 Only the Mac archive has this file: the Windows build leaves it out, so the
 Windows program carries no Mac shell commands (Windows Defender took the
@@ -51,6 +52,22 @@ def choose_file(prompt: str, folder: Path) -> str:
               f"default location (POSIX file {applescript_text(str(folder))}))")
     result = subprocess.run(["osascript", "-e", script], capture_output=True, text=True, timeout=1800)
     return result.stdout.strip() if result.returncode == 0 else ""
+
+
+_caffeinate: subprocess.Popen | None = None
+
+
+def keep_awake(on: bool) -> bool:
+    """v8.8: no sleep while the program runs (caffeinate ends with it by itself)."""
+    global _caffeinate
+    if on and _caffeinate is None:
+        import os
+        _caffeinate = subprocess.Popen(["caffeinate", "-i", "-w", str(os.getpid())],
+                                       stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+    elif not on and _caffeinate is not None:
+        _caffeinate.terminate()
+        _caffeinate = None
+    return True
 
 
 def language() -> str:

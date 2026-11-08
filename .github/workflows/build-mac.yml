@@ -72,7 +72,7 @@ jobs:
         run: |
           PY="$APP/python/arm64/bin/python3"
           SCRIPTS="$APP/scripts"
-          for t in parse search review donate support styles window citations pdf_search topics reflist table ai i18n; do
+          for t in parse search review donate support styles window citations pdf_search topics reflist cloud table ai i18n; do
             echo "== $t"
             "$PY" -E -s -X utf8 "tests/${t}_test.py" "$SCRIPTS" || { echo "тест $t не прошёл"; exit 1; }
           done
