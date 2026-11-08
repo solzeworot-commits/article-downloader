@@ -18,7 +18,7 @@ from pathlib import Path
 
 tmp = Path(tempfile.mkdtemp(prefix="ad_cloud_"))
 home_dir = tmp / "home"
-(home_dir / "YandexDisk").mkdir(parents=True)
+home_dir.mkdir(parents=True)
 os.environ.update(HOME=str(home_dir), USERPROFILE=str(home_dir), ARTICLE_UI_NO_WINDOW="1",
                   ARTICLE_KEYS_FILE=str(tmp / "keys.json"), LOCALAPPDATA=str(tmp / "local"))
 for var in ("OneDrive", "OneDriveConsumer", "OneDriveCommercial"):
@@ -26,6 +26,10 @@ for var in ("OneDrive", "OneDriveConsumer", "OneDriveCommercial"):
 sys.path.insert(0, sys.argv[1])
 import app  # noqa: E402
 import cloud  # noqa: E402
+
+# Yandex Disk is detected at different places on each system: make the real one.
+yandex = home_dir / ("Yandex.Disk.localized" if cloud.IS_MAC else "YandexDisk")
+yandex.mkdir(parents=True)
 
 app.SETTINGS_PATH = tmp / "settings.json"
 app.INBOX = tmp / "inbox"
@@ -63,7 +67,6 @@ def state():
 
 
 # ---- the clouds of this computer
-yandex = home_dir / "YandexDisk"
 check("found", [d["name"] for d in cloud.detect()], ["Яндекс Диск"])
 check("found by the window", api("/api/cloud")["detected"][0]["path"], str(yandex))
 check("not set", state(), {"role": ""})
