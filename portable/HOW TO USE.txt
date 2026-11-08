@@ -1,4 +1,4 @@
-﻿ARTICLE DOWNLOADER, portable version 8.6.1
+﻿ARTICLE DOWNLOADER, portable version 8.7
 ========================================
 
 Runs on any computer with Windows 10 or 11. Nothing to install: Python and everything
@@ -54,6 +54,13 @@ HOW TO USE
    and LaTeX (.bib). «📊 Table of the articles» (with the AI helper): the AI reads the
    downloaded PDFs (or the abstracts when there is no PDF) and fills the columns — object,
    method, conditions, results; you can change them; saved for Excel (.xlsx).
+   «📄 Tidy up your own reference list»: upload a Word file (.docx) with your own reference list,
+   formatted every which way, or paste it as text. The program splits it into references and
+   looks up each: with a DOI — by it (✓); without — searches Crossref by the reference text and
+   checks the title, year and authors (🔎, blue — check them); not found (books, standards,
+   websites) — left as written (⚠, yellow; the AI helper can format them). The style is the one
+   chosen in «Citation style»; the numbering stays as in the document. Copy it into Word or save
+   .docx / .txt; the DOIs found go to inbox as a list.
    «🔍 Search the text of the articles»: write what you are looking for (for example,
    ultrasound 40 kHz) and the program shows which downloaded PDFs say it and on which page;
    the «📄 p. N» button opens the PDF at that page. No AI, free.

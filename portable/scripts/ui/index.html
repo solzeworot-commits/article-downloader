@@ -349,6 +349,23 @@
   .bb-list li { margin-bottom: 6px; }
   ul.bb-list { list-style: none; padding-left: 12px; }
   #tb-cols { min-height: 116px; font-size: 15px; font-family: inherit; margin-top: 4px; }
+  .rf-how { background: var(--blue-soft); border-radius: 12px; padding: 10px 14px; font-size: 15px; line-height: 1.5; margin-bottom: 10px; }
+  .rf-how ul { margin: 6px 0; padding-left: 4px; list-style: none; }
+  .rf-how li { margin: 3px 0; }
+  .rf-mark { display: inline-block; min-width: 26px; text-align: center; font-weight: 700; }
+  .rf-mark.doi { color: var(--green); }
+  .rf-mark.search { color: #1d4ed8; }
+  .rf-mark.none { color: #b45309; }
+  .rf-mark.ai { color: #7c3aed; }
+  #rf-paste { min-height: 110px; font-size: 14px; font-family: inherit; margin: 6px 0; }
+  ul.rf-list { list-style: none; padding: 8px 12px; margin: 10px 0 0; font-size: 14px; line-height: 1.5; max-height: 520px; overflow: auto;
+               border: 1px solid var(--line); border-radius: 10px; }
+  ul.rf-list:empty { display: none; }
+  ul.rf-list li { padding: 5px 6px; border-radius: 8px; margin-bottom: 3px; display: flex; gap: 6px; }
+  ul.rf-list li.search { background: #eff6ff; }
+  ul.rf-list li.none { background: #fffbeb; }
+  ul.rf-list li.ai { background: #f5f3ff; }
+  ul.rf-list .was { display: block; color: var(--muted); font-size: 12px; margin-top: 2px; }
   .fd-row { display: flex; gap: 10px; flex-wrap: wrap; }
   .fd-row input { flex: 1 1 280px; font-size: 16px; padding: 9px 12px; border-radius: 10px; border: 1px solid var(--line); }
   .fd-art { border: 1px solid var(--line); border-radius: 12px; padding: 10px 14px; margin-top: 10px; }
@@ -682,6 +699,34 @@ https://link.springer.com/article/10.1007/s12393-026-09447-8
       </div>
       <div id="bb-saved" class="recognized" style="margin-top: 8px"></div>
       <div class="recognized" style="margin-top: 6px" id="bb-hint"></div>
+    </div>
+    <div class="card" id="rf-card">
+      <h2><span>📄 Привести в порядок свой список</span><small>загрузите Word со своим списком литературы — программа оформит его по стилю, выбранному выше</small></h2>
+      <div class="rf-how"><b>Как это работает.</b> Программа делит документ на источники (по номерам или по абзацам) и для каждого ищет точные данные:
+        <ul>
+          <li><span class="rf-mark doi">✓</span> есть DOI — берёт данные по нему, это надёжно;</li>
+          <li><span class="rf-mark search">🔎</span> DOI нет — ищет статью в Crossref по тексту ссылки и сверяет название, год и авторов. Такие помечены синим — проверьте их;</li>
+          <li><span class="rf-mark none">⚠</span> не нашлось (книги, ГОСТы, законы, сайты, часть российских статей) — остаются как были и подсвечены жёлтым. С ИИ-помощником их можно оформить по стилю.</li>
+        </ul>
+        Нумерация остаётся как в документе, чтобы не сбились ссылки в тексте работы. Бесплатно, ИИ не нужен.</div>
+      <div class="acts">
+        <button class="linkbtn" id="rf-file-btn">📄 Загрузить Word (.docx)</button>
+        <input type="file" id="rf-file" accept=".docx,.txt" hidden>
+        <label>Порядок <select id="rf-order"><option value="doc">как в документе</option><option value="alpha">по алфавиту</option></select></label>
+      </div>
+      <details style="margin-top: 8px"><summary>или вставьте список текстом</summary>
+        <textarea id="rf-paste" spellcheck="false" placeholder="Скопируйте сюда список из Word — каждый источник с новой строки"></textarea>
+        <button id="rf-paste-run">✨ Привести в порядок</button></details>
+      <div class="recognized" id="rf-status" style="margin-top: 8px"></div>
+      <ul class="rf-list" id="rf-list"></ul>
+      <div class="acts" id="rf-acts" hidden style="margin-top: 10px">
+        <button class="linkbtn" id="rf-copy">📋 Скопировать список</button>
+        <button id="rf-docx">💾 Для Word (.docx)</button>
+        <button id="rf-txt">💾 Текстом (.txt)</button>
+        <button id="rf-inbox" title="Сохранить найденные DOI списком в папку inbox — например, чтобы скачать эти статьи или собрать схему PRISMA">⬇ DOI списком в inbox</button>
+        <button id="rf-ai" hidden>🤖 Оформить ненайденные с ИИ</button>
+      </div>
+      <div class="recognized" id="rf-saved" style="margin-top: 6px"></div>
     </div>
     <div class="card" id="fd-card">
       <h2><span>🔍 Поиск по тексту статей</span><small>где в скачанных PDF написано то, что вам нужно</small></h2>
@@ -1032,6 +1077,7 @@ extraction"></textarea>
 
     <h4>5. 📚 Список литературы и схема PRISMA</h4>
     <p>Готовый список литературы по ГОСТ, APA, Vancouver или в стиле нужного журнала (около 11 000 журналов) — скопировать в Word или сохранить файлом.</p>
+    <p>Уже есть свой список литературы, но оформлен вразнобой? <b>«📄 Привести в порядок свой список»</b>: загрузите Word — программа найдёт каждый источник и оформит по ГОСТ или в нужном стиле.</p>
     <p>Там же <b>«🔍 Поиск по тексту статей»</b>: напишите, что ищете (например, «ultrasound 40 kHz»), — программа покажет, в каких скачанных PDF и на какой странице это написано. Без ИИ, бесплатно.</p>
     <p><b>PRISMA</b> — международный стандарт: схема показывает, сколько статей нашли в базах, сколько отсеяли и почему и сколько вошло в обзор. Рецензенты журналов и диссертационные советы требуют её в систематических обзорах: по ней видно, что литература отобрана честно, а не «какие нашлись». Программа считает цифры сама по вашим отметкам на шаге 3 — сохраните схему картинкой и вставьте в раздел «Материалы и методы».</p>
 
@@ -2666,7 +2712,7 @@ async function openBiblio(name) {
 async function loadBiblio() {
   clearTimeout(BB.timer);
   BB.list = $("bb-list").value;
-  if (!BB.list) { $("bb-status").textContent = "В папке inbox нет списков."; $("bb-entries").innerHTML = ""; $("prisma").innerHTML = ""; return; }
+  if (!BB.list) { $("bb-status").textContent = "В папке inbox нет списков."; $("bb-entries").innerHTML = ""; $("prisma").innerHTML = ""; syncReflist(); return; }
   await api("/api/review_open", { list: BB.list });
   let d;
   try { d = await (await fetch("/api/review?list=" + encodeURIComponent(BB.list), H)).json(); } catch (e) { return; }
@@ -2709,6 +2755,7 @@ async function loadBiblio() {
       "пишется полное название. Курсив и жирный сохраняются при копировании в Word и в файле .docx.";
   renderPrisma(d.prisma);
   loadTable();
+  syncReflist();
   loadFind();
   loadOutline();
   if (((d.job && d.job.running) || (sj && sj.running)) && view === "biblio") BB.timer = setTimeout(loadBiblio, 2000);
@@ -2921,6 +2968,75 @@ document.addEventListener("click", async (e) => {
     await loadTopics({ id: b.dataset.topicForget }, "/api/topic_forget");
   }
 });
+
+// ---- tidy up one's own reference list (v8.7) ----------------------------------------------
+const RF = { timer: 0, loaded: false, style: "", items: [] };
+const RF_MARK = { doi: "✓", search: "🔎", none: "⚠", ai: "🤖" };
+const RF_TIP = { doi: "найдено по DOI", search: "найдено поиском по тексту ссылки — сверьте с исходной", none: "не нашлось — оставлено как было",
+  ai: "оформлено ИИ по тексту ссылки — проверьте" };
+async function loadReflist() {
+  clearTimeout(RF.timer);
+  let res;
+  try { res = await api("/api/reflist", {}); } catch (e) { return; }
+  const j = res.job || {}, items = res.items || [], c = res.counts || {};
+  RF.items = items; RF.loaded = items.length > 0; RF.style = j.style || "";
+  let txt = "";
+  if (j.running) txt = j.ai_total && j.ai_done < j.ai_total ? `⏳ ИИ оформляет ненайденные: ${j.ai_done || 0} / ${j.ai_total}…`
+    : `⏳ Ищу источники: ${j.done || 0} / ${j.total || 0}…`;
+  else if (items.length) txt = `Источников: <b>${items.length}</b> — ✓ по DOI: ${c.doi || 0}, 🔎 найдено поиском: ${c.search || 0}` +
+    `${c.search ? " (проверьте)" : ""}, ⚠ не нашлось: ${c.none || 0}${c.ai ? `, 🤖 оформлено ИИ: ${c.ai}` : ""}. Стиль: <b>${esc(j.style_title || "")}</b>.`;
+  if (j.error) txt += ` <span style="color: var(--red)">${esc(j.error)}</span>`;
+  if (j.cost) txt += costText(j.cost);
+  $("rf-status").innerHTML = txt;
+  $("rf-list").innerHTML = items.map((r) => `<li class="${r.status}"><span class="rf-mark ${r.status}" title="${esc(RF_TIP[r.status] || "")}">` +
+    `${RF_MARK[r.status] || ""}</span><span>${esc(r.label)}${r.html}` +
+    ((r.status === "search" || r.status === "ai") ? `<span class="was">было: ${esc(r.raw)}</span>` : "") + `</span></li>`).join("");
+  $("rf-acts").hidden = !items.length || !!j.running;
+  $("rf-ai").hidden = !(c.none && aiOn());
+  $("rf-ai").textContent = `🤖 Оформить ненайденные с ИИ: ${c.none || 0}`;
+  if (j.running && view === "biblio") RF.timer = setTimeout(loadReflist, 1500);
+}
+function syncReflist() {           // the style above changed: the tidied list follows it
+  if (RF.loaded && RF.style !== bbStyle()) startReflist({ restyle: true }); else loadReflist();
+}
+async function startReflist(body) {
+  $("rf-saved").textContent = "";
+  const res = await api("/api/reflist_start", { ...body, style: bbStyle(), order: $("rf-order").value });
+  if (res.error) { $("rf-status").innerHTML = `<span style="color: var(--red)">${esc(res.error)}</span>`; return; }
+  loadReflist();
+}
+$("rf-file-btn").onclick = () => $("rf-file").click();
+$("rf-file").addEventListener("change", async (e) => {
+  const f = e.target.files[0];
+  if (!f) return;
+  $("rf-status").textContent = "⏳ Читаю файл…";
+  await startReflist({ file_name: f.name, file_b64: toBase64(await f.arrayBuffer()) });
+  e.target.value = "";
+});
+$("rf-paste-run").onclick = () => {
+  const text = $("rf-paste").value.trim();
+  if (!text) { $("rf-paste").focus(); return; }
+  startReflist({ text, file_name: "список.txt" });
+};
+$("rf-order").onchange = () => { if (RF.loaded) startReflist({ restyle: true }); };
+$("rf-ai").onclick = async () => {
+  const res = await api("/api/reflist_ai", {});
+  if (res.error) { $("rf-status").innerHTML = `<span style="color: var(--red)">${esc(res.error)}</span>`; return; }
+  loadReflist();
+};
+$("rf-copy").onclick = async (e) => flash(e.currentTarget, await copyRich(RF.items.map((r) => `<p>${esc(r.label)}${r.html}</p>`).join(""),
+  RF.items.map((r) => r.label + r.text).join("\n")));
+for (const [id, fmt] of [["rf-docx", "docx"], ["rf-txt", "txt"]]) {
+  $(id).onclick = async () => {
+    const res = await api("/api/reflist_save", { fmt });
+    $("rf-saved").innerHTML = res.error ? `<span style="color: var(--red)">${esc(res.error)}</span>` : `💾 Сохранено: <b>Список литературы\\${esc(res.name)}</b>`;
+  };
+}
+$("rf-inbox").onclick = async () => {
+  const res = await api("/api/reflist_to_inbox", {});
+  $("rf-saved").innerHTML = res.error ? `<span style="color: var(--red)">${esc(res.error)}</span>`
+    : `✅ Сохранено: <b>inbox\\${esc(res.name)}</b> — ${res.count} DOI. Его можно скачать или отобрать, как любой список.`;
+};
 
 // ---- search in the text of the PDFs (v8.4) -------------------------------------------
 const FD = { timer: 0, list: "" };

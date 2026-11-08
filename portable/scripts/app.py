@@ -48,6 +48,7 @@ import urllib.request
 import ai_helper as ai
 import cite_styles as cs
 import pdf_table as pt
+import reflist as rl
 import doi_search as ds
 import i18n
 import osutil
@@ -82,7 +83,7 @@ PDF_TEXT_CACHE = ROOT / "logs" / "pdf_text"      # the pages of the PDFs, for «
 BIBLIO_DIR = ROOT / "Список литературы"
 
 UI_PORT = 17865
-APP_VERSION = "8.6.1"
+APP_VERSION = "8.7"
 APP_AUTHOR = "Bucaneiro"
 OFFICIAL_URL = "https://github.com/solzeworot-commits/article-downloader"
 DOWNLOAD_URL = OFFICIAL_URL + "/releases/tag/portable-latest"
@@ -443,6 +444,7 @@ class State:
         self.table_jobs: dict[str, dict] = {}    # list file name -> AI table progress
         self.find_jobs: dict[str, dict] = {}     # list file name -> search in the text of the PDFs
         self.outline_jobs: dict[str, dict] = {}  # list file name -> AI draft outline of the review
+        self.reflist: dict = {}                   # «Привести в порядок свой список» (v8.7): the last one
 
         self.browser = {}
         self.update: dict | None = None    # support.check_update()
@@ -1803,6 +1805,195 @@ def save_outline(name: str) -> Path:
     return path
 
 
+# ---- «📄 Привести в порядок свой список» (v8.7) ---------------------------------------
+
+def _format_ref(item: dict, info: dict) -> tuple[str, str]:
+    """(text, html) of one reference in the style; the reference as written when nothing was found."""
+    rec = item.get("rec")
+    if rec and info["csl"] and item.get("doi"):
+        cached = (item.get("csl") or {}).get(info["id"])
+        if cached:
+            return cached, html.escape(cached)
+    if rec and not info["csl"]:
+        segs = cs.STYLES[info["id"]][2](rec)
+        return cs.plain(segs), cs.html(segs)
+    if rec:                          # a journal style doi.org has not formatted (yet): the closest built-in one
+        segs = (cs.vancouver if info["numeric"] else cs.apa)(rec)
+        return cs.plain(segs), cs.html(segs)
+    text = item.get("ai") or item["raw"]
+    return text, html.escape(text)
+
+
+def reflist_view() -> dict:
+    """The tidied list as it is now, numbered and ordered for the chosen style."""
+    with S.lock:
+        job = {k: v for k, v in S.reflist.items() if k not in ("items", "entries", "text")}
+        items = [dict(i) for i in S.reflist.get("items") or []]
+    if not items:
+        return {"job": job, "items": []}
+    info = style_info(job.get("style") or "gost")
+    rows = []
+    for item in items:
+        text, markup = _format_ref(item, info)
+        status = item["status"] if item["status"] != "none" or not item.get("ai") else "ai"
+        rows.append({"n": item["n"], "status": status, "text": text, "html": markup, "raw": item["raw"],
+                     "doi": item.get("doi", ""), "fallback": bool(info["csl"] and item.get("rec")
+                                                                 and not (item.get("csl") or {}).get(info["id"]))})
+    if job.get("order") == "alpha":
+        rows.sort(key=lambda r: rv.sort_key(r["text"]) if info["id"] == "gost" else r["text"].lower())
+    label = cs.STYLES[info["id"]][3] if info["id"] in cs.STYLES else ("{n}. " if info["numeric"] else "")
+    for i, row in enumerate(rows, 1):
+        row["label"] = label.format(n=i) if label else ""
+    counts = Counter(r["status"] for r in rows)
+    return {"job": job | {"style_title": info["title"]}, "items": rows, "counts": dict(counts)}
+
+
+def start_reflist(text: str, name: str, style: str, order: str) -> dict:
+    """Cut the list into references, find each one (DOI, else Crossref search) and format them."""
+    entries = rl.split_entries(text)
+    if not entries:
+        return {"error": tr("В файле не нашлось списка: нужны источники, каждый с новой строки или под своим номером.")}
+    with S.lock:
+        if S.reflist.get("running"):
+            return {"error": tr("Список ещё обрабатывается — подождите.")}
+        same = S.reflist.get("entries") == entries
+        if same:                                      # the same list again: only the style or the order changed
+            S.reflist.update(style=style, order=order)
+            items = S.reflist["items"]
+        else:
+            items = [{"n": i, "raw": e, "doi": rl.find_doi(e), "status": "", "rec": None} for i, e in enumerate(entries)]
+            S.reflist = {"running": True, "done": 0, "total": len(items), "error": "", "name": name, "style": style,
+                         "order": order, "entries": entries, "items": items, "cost": 0.0, "text": text}
+        info = style_info(style)
+        need_csl = [i for i in items if info["csl"] and i.get("rec") and i.get("doi")
+                    and not (i.get("csl") or {}).get(info["id"])]
+        if same and not need_csl:
+            return {}
+        S.reflist["running"] = True
+        S.reflist["done"] = 0 if not same else S.reflist["done"]
+    keys = ds.load_keys()
+
+    def run():
+        try:
+            if not same:
+                # 1. references without a DOI: Crossref's search, checked against the reference
+                for item in items:
+                    if not item["doi"]:
+                        try:
+                            found = rl.search_crossref(item["raw"])
+                        except ds.SearchError as exc:
+                            with S.lock:
+                                S.reflist["error"] = exc.message
+                            found = None
+                        if found:
+                            item["doi"], item["status"] = found["doi"], "search"
+                    else:
+                        item["status"] = "doi"
+                    with S.lock:
+                        S.reflist["done"] += 1
+                # 2. the metadata of every DOI (OpenAlex + Crossref, as for the review)
+                dois = [i["doi"] for i in items if i["doi"]]
+                for chunk in rv._chunks(list(dict.fromkeys(dois)), 50):
+                    meta, _error = rv.enrich(chunk, keys)
+                    with S.lock:
+                        for item in items:
+                            m = meta.get(item["doi"])
+                            if m and m.get("found"):
+                                item["rec"] = dict(m, doi=item["doi"])
+                for item in items:
+                    if not item["rec"]:
+                        item["status"] = "none"
+            # 3. a journal's style: doi.org formats each reference
+            if info["csl"]:
+                for item in items:
+                    if item.get("rec") and item.get("doi") and not (item.get("csl") or {}).get(info["id"]):
+                        try:
+                            text = cs.csl_format(item["doi"], info["csl"]["id"], info["numeric"])
+                            item.setdefault("csl", {})[info["id"]] = text
+                        except cs.StyleError:
+                            pass
+            app_log(f"Reference list tidied: {len(items)} references, "
+                    f"{sum(1 for i in items if i['status'] == 'none')} not found")
+        except Exception as exc:
+            app_log(f"Reference list error: {exc}\n{traceback.format_exc()}")
+            with S.lock:
+                S.reflist["error"] = tr("Список не обработался: {error}", error=exc)
+        finally:
+            with S.lock:
+                S.reflist["running"] = False
+
+    threading.Thread(target=run, daemon=True).start()
+    return {}
+
+
+def reflist_ai() -> dict:
+    """The references nothing was found for, formatted by the AI helper from what they say."""
+    provider, keys = ai_service()
+    if not provider:
+        return {"error": tr("ИИ-помощник не подключён: вставьте ключ (кнопка «🤖 ИИ-помощник» на главной).")}
+    with S.lock:
+        if S.reflist.get("running"):
+            return {"error": tr("Список ещё обрабатывается — подождите.")}
+        todo = [i for i in S.reflist.get("items") or [] if i["status"] == "none" and not i.get("ai")]
+        if not todo:
+            return {"nothing": True}
+        S.reflist.update(running=True, ai_done=0, ai_total=len(todo), error="")
+        style = style_info(S.reflist.get("style") or "gost")["title"]
+    lang = i18n.LANG
+
+    def run():
+        try:
+            for start in range(0, len(todo), 20):
+                batch = todo[start:start + 20]
+                texts, cost = ai.format_references(provider, keys, [i["raw"] for i in batch], style, lang)
+                with S.lock:
+                    for k, text in texts.items():
+                        batch[k]["ai"] = text
+                    S.reflist["cost"] = S.reflist.get("cost", 0.0) + cost
+                    S.reflist["ai_done"] += len(batch)
+        except ai.AIError as exc:
+            with S.lock:
+                S.reflist["error"] = exc.message
+        except Exception as exc:
+            app_log(f"Reference list AI error: {exc}\n{traceback.format_exc()}")
+            with S.lock:
+                S.reflist["error"] = tr("ИИ не оформил список: {error}", error=exc)
+        finally:
+            with S.lock:
+                S.reflist["running"] = False
+
+    threading.Thread(target=run, daemon=True).start()
+    return {}
+
+
+def save_reflist(fmt: str) -> Path:
+    view = reflist_view()
+    if not view["items"]:
+        raise ValueError(tr("Сначала загрузите список."))
+    stem = Path(view["job"].get("name") or tr("список")).stem
+    BIBLIO_DIR.mkdir(parents=True, exist_ok=True)
+    path = BIBLIO_DIR / f"{stem} ({tr('приведён в порядок')}).{'docx' if fmt == 'docx' else 'txt'}"
+    if fmt == "docx":
+        cs.to_docx(path, tr("Список литературы"), [{"label": r["label"], "html": r["html"]} for r in view["items"]])
+    else:
+        path.write_text("\n".join(r["label"] + r["text"] for r in view["items"]) + "\n", encoding="utf-8-sig")
+    return path
+
+
+def reflist_to_inbox() -> dict:
+    with S.lock:
+        items = [dict(i) for i in S.reflist.get("items") or []]
+        name = S.reflist.get("name") or tr("список")
+    records = [{"doi": i["doi"], "title": (i.get("rec") or {}).get("title", ""), "year": (i.get("rec") or {}).get("year", ""),
+                "journal": (i.get("rec") or {}).get("journal", ""), "sources": []}
+               for i in items if i.get("doi") and i.get("rec")]
+    records = list({r["doi"]: r for r in records}.values())
+    if not records:
+        return {"error": tr("В списке нет источников с DOI.")}
+    saved = ds.save_list(INBOX, Path(name).stem + "_" + tr("источники"), records)
+    return {"name": saved.name, "count": len(records)}
+
+
 def save_table(name: str, scope: str, columns) -> Path:
     t = table_rows(name, scope, columns)
     BIBLIO_DIR.mkdir(parents=True, exist_ok=True)
@@ -2572,6 +2763,33 @@ def handle_api(path: str, body: dict) -> dict:
             return outline_state(name)
         except FileNotFoundError:
             return {"error": tr("Список не найден в папке inbox.")}
+
+    if path in ("/api/reflist_start", "/api/reflist", "/api/reflist_ai", "/api/reflist_save", "/api/reflist_to_inbox"):
+        if path == "/api/reflist_start":
+            name = Path(str(body.get("file_name") or tr("список"))).name
+            if body.get("restyle"):                 # the style or the order changed: the same list
+                with S.lock:
+                    text, name = S.reflist.get("text") or "", S.reflist.get("name") or name
+                if not text:
+                    return {}
+            elif body.get("file_b64"):
+                if Path(name).suffix.lower() not in (".docx", ".txt", ".rtf", ".md"):
+                    return {"error": tr("Нужен файл Word (.docx) или текст (.txt). Старый .doc сохраните в Word как .docx.")}
+                text = file_to_text(name, base64.b64decode(body["file_b64"]))
+            else:
+                text = str(body.get("text") or "")
+            return start_reflist(text[:400000], name, str(body.get("style") or "gost"),
+                                 "alpha" if body.get("order") == "alpha" else "doc")
+        if path == "/api/reflist_ai":
+            return reflist_ai()
+        if path == "/api/reflist_to_inbox":
+            return reflist_to_inbox()
+        if path == "/api/reflist_save":
+            try:
+                return {"name": save_reflist(str(body.get("fmt") or "docx")).name}
+            except ValueError as exc:
+                return {"error": str(exc)}
+        return reflist_view()
 
     if path == "/api/open_pdf":
         try:

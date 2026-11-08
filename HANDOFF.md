@@ -794,6 +794,24 @@ https://github.com/solzeworot-commits/article-downloader/releases/download/porta
   архив в Microsoft как ложное срабатывание (https://www.microsoft.com/en-us/wdsi/filesubmission, «Software
   developer», «Incorrectly detected as malware»).
 
+## 2щ. Версия 8.7: «📄 Привести в порядок свой список»
+
+- `portable/scripts/reflist.py`: `split_entries(text)` — по номерам («1.», «1)», «[1]», «(1)»), если так начинается
+  хотя бы половина строк (строки без номера приклеиваются к предыдущему источнику), иначе по абзацам; заголовки
+  «Список литературы», «References» и т. п. отбрасываются. `find_doi` (DOI внутри ссылки, скобки в DOI учтены).
+  `search_crossref(entry)` — Crossref `query.bibliographic`, лучшие 3; `matches()` принимает кандидата, только если
+  слова названия есть в ссылке (≥ 90 %, или ≥ 75 % при совпавшем авторе и годе), год не расходится больше чем на 1.
+- `app.start_reflist` (фоновая задача, одна, `S.reflist`): поиск DOI → `rv.enrich` (OpenAlex + Crossref) → оформление;
+  статусы `doi` / `search` (показывается «было: …») / `none` / `ai`. Стиль и порядок — из карточки «Список
+  литературы» (`bbStyle()`, «как в документе» по умолчанию — чтобы не сбились ссылки в тексте); смена стиля
+  переоформляет без повторного поиска (`restyle`), стиль журнала — через doi.org (`cs.csl_format`). `reflist_ai` —
+  ненайденные оформляет ИИ (`ai.format_references`, по 20, «только из того, что в ссылке, ничего не выдумывать»).
+  Сохранение: «Список литературы\<файл> (приведён в порядок).docx/.txt»; найденные DOI — списком в inbox.
+  `/api/reflist_start` (file_b64 .docx/.txt или text, либо restyle), `/api/reflist`, `/api/reflist_ai`,
+  `/api/reflist_save`, `/api/reflist_to_inbox`.
+- Карточка `#rf-card` в окне «📚 Список литературы» под списком, с блоком «Как это работает»; строка в инструкции
+  (шаг 5). Тест `tests/reflist_test.py` (Word-файл, поддельные Crossref/OpenAlex/ChatGPT).
+
 ## 3. Что проверено в 6.0 (Linux, Chromium в Xvfb, поддельное издательство)
 
 Настоящие сайты издательств из среды сборки были закрыты сетью, поэтому всё
