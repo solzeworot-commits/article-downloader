@@ -30,6 +30,7 @@ FILES = [
     "scripts/pdf_table.py",
     "scripts/reflist.py",
     "scripts/cloud.py",
+    "scripts/tray.py",
     "scripts/osutil.py",
     "scripts/mac_support.py",
     "scripts/i18n.py",

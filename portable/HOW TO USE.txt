@@ -1,4 +1,4 @@
-﻿ARTICLE DOWNLOADER, portable version 8.8
+﻿ARTICLE DOWNLOADER, portable version 8.8.1
 ========================================
 
 Runs on any computer with Windows 10 or 11. Nothing to install: Python and everything
@@ -76,6 +76,10 @@ PDFs go to the «pdf» folder; the results are written to «Отчёт.csv» (op
 If you closed the program before the list was finished, the home screen shows
 «▶ Continue». «🧹 Clear all» stops downloading and clears the search and the queue in one
 click (downloaded PDFs and lists in inbox stay). «Exit» closes the program.
+The program's icon by the clock (in the tray): a minimized window goes there, a click on the
+icon brings it back; right click — «Open the window» and «Exit»; hover to see what the program
+is doing. If the icon is hidden under the «^» arrow, drag it onto the taskbar. Don't like it —
+«⚙ Settings» → «Minimize the window to the tray».
 You can also drop a DOI list file onto the icon: downloading starts at once.
 
 
@@ -120,7 +124,8 @@ How to set it up (once on each computer):
   • on both computers install the cloud's app (Yandex Disk, Google Drive, OneDrive, Cloud
     Mail.ru, Dropbox or iCloud) and sign in to THE SAME account; any shared folder both
     computers see works too (for example, a network drive at work);
-  • press the «☁ Cloud» bar on the home screen, choose the cloud folder and say which
+  • press the «☁ Cloud» bar on the home screen, choose the cloud folder (a folder on the
+    computer, not a browser link like https://drive.google.com/…) and say which
     computer this is: at home — «🏠 Home», at work — «🏢 Work»;
   • on the work computer sign in once through the university («🏛 Institutional sign-in»)
     and leave the program open; do not turn the computer off (while the program is open it

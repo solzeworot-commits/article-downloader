@@ -72,6 +72,10 @@ check("found by the window", api("/api/cloud")["detected"][0]["path"], str(yande
 check("not set", state(), {"role": ""})
 check("no folder", "error" in api("/api/cloud_setup", {"dir": str(tmp / "nowhere"), "role": "home"}), True)
 check("no role", "error" in api("/api/cloud_setup", {"dir": str(yandex), "role": ""}), True)
+link = api("/api/cloud_setup", {"dir": "https://drive.google.com/drive/u/1/home", "role": "home"}).get("error", "")
+check("a link, not a folder", "ссылка на сайт" in link, True)
+check("not a link", (cloud.is_link(str(yandex)), cloud.is_link(r"G:\Мой диск"), cloud.is_link("disk.yandex.ru/client/disk")),
+      (False, False, True))
 
 # ---- the home computer
 as_home()
