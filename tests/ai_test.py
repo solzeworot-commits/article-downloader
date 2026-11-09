@@ -169,6 +169,8 @@ class Handler(BaseHTTPRequestHandler):
             return self.send(400, {"type": "error", "error": {
                 "type": "invalid_request_error",
                 "message": "Unexpected value(s) `server-side-fallback-2026-07-01` for the `anthropic-beta` header."}})
+        if key == "sk-ant-region":       # what Anthropic answers from a country it does not serve
+            return self.send(403, {"type": "error", "error": {"type": "forbidden", "message": "Request not allowed"}})
         if key == "sk-ant-refuse":
             return self.send(200, {"id": "m", "type": "message", "role": "assistant", "model": body["model"],
                                    "content": [], "stop_reason": "refusal",
@@ -324,6 +326,8 @@ assert abs(res["cost"] - 0.008) < 1e-9, res["cost"]           # 1000 in x $4 + 2
 assert kind("anthropic", {"anthropic": "sk-ant-bad"}) == "bad_key"
 assert kind("anthropic", {"anthropic": "sk-ant-broke"}) == "no_money"
 assert kind("anthropic", {"anthropic": "sk-ant-refuse"}) == "other"
+region = ai.check_key("anthropic", {"anthropic": "sk-ant-region"})
+assert region["kind"] == "region" and "ни при чём" in region["message"], region   # v8.8.3: not "the key was refused"
 assert ai.check_key("anthropic", {"anthropic": "sk-ant-nobeta"})["ok"]
 assert "fallbacks" not in last_body() and not FAKE["calls"][-1][2].get("anthropic-beta")
 

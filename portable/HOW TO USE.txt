@@ -1,4 +1,4 @@
-﻿ARTICLE DOWNLOADER, portable version 8.8.2
+﻿ARTICLE DOWNLOADER, portable version 8.8.3
 ========================================
 
 Runs on any computer with Windows 10 or 11. Nothing to install: Python and everything
