@@ -19,9 +19,11 @@ browsers are downloaded.
 from __future__ import annotations
 
 import argparse
+import http.client
 import shutil
 import subprocess
 import sys
+import time
 import urllib.request
 import zipfile
 from pathlib import Path
@@ -32,14 +34,26 @@ SOURCE = HERE.parent / "portable"
 PACKAGES = ["playwright", "psutil", "pypdf", "qrcode"]
 
 
-def download(url: str, dest: Path):
+def download(url: str, dest: Path, attempts: int = 5):
+    """Download with a few tries: a server sometimes answers 504 for a minute (8.8.3 Mac build)."""
     if dest.exists():
         return
     print("download", url)
     tmp = dest.with_suffix(dest.suffix + ".part")
-    with urllib.request.urlopen(url, timeout=300) as response, tmp.open("wb") as f:
-        shutil.copyfileobj(response, f)
-    tmp.replace(dest)
+    request = urllib.request.Request(url, headers={"User-Agent": "ArticleDownloader-build"})
+    for attempt in range(1, attempts + 1):
+        try:
+            with urllib.request.urlopen(request, timeout=300) as response, tmp.open("wb") as f:
+                shutil.copyfileobj(response, f)
+            tmp.replace(dest)
+            return
+        except (OSError, http.client.HTTPException) as exc:      # URLError and HTTPError are OSErrors
+            code = getattr(exc, "code", None)
+            if (code is not None and code < 500 and code != 429) or attempt == attempts:
+                raise
+            wait = 15 * attempt
+            print(f"  {exc}; again in {wait} s")
+            time.sleep(wait)
 
 
 def main():

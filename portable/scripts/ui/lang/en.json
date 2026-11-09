@@ -1120,7 +1120,6 @@
   "Опишите тему хотя бы парой слов.": "Describe the topic in at least a couple of words.",
   "ИИ не предложил ни одного слова. Опишите тему подробнее.": "The AI suggested no words. Describe the topic in more detail.",
   "Компьютер не доверяет сертификату Сбера. Установите сертификаты Минцифры (кнопка «Сертификаты Минцифры» в инструкции GigaChat) и перезапустите программу.": "This computer does not trust Sber's certificate. Install the Russian root certificates (the «Russian root certificates» button in the GigaChat guide) and restart the program.",
-  "{service} не работает в вашей стране. Выберите другого помощника: из России работают Perplexity, GigaChat и YandexGPT.": "{service} does not work in your country. Choose another helper: Perplexity, GigaChat and YandexGPT work from Russia.",
   "Слишком много запросов к {service} подряд. Подождите минуту и повторите.": "Too many requests to {service} in a row. Wait a minute and try again.",
   "На счёте {service} нет денег. Пополните баланс API — шаг «пополните счёт» в инструкции.": "There is no money on the {service} balance. Top up the API balance — the “top up” step of the guide.",
   "Ключ {service} неверный или устарел — скопируйте его ещё раз, целиком.": "The {service} key is wrong or expired — copy it again, in full.",
@@ -1198,6 +1197,7 @@
   "Окно свернулось в трей, программа работает. Нажмите на значок, чтобы открыть окно.": "The window went to the tray; the program keeps working. Click the icon to open the window.",
   "Открыть окно": "Open the window",
   "Выход": "Exit",
-  "Новая версия скачалась не полностью ({done} из {total} байт). Попробуйте ещё раз.": "The new version was not downloaded completely ({done} of {total} bytes). Try again."
+  "Новая версия скачалась не полностью ({done} из {total} байт). Попробуйте ещё раз.": "The new version was not downloaded completely ({done} of {total} bytes). Try again.",
+  "{service} недоступен из вашей страны — ключ здесь ни при чём. Выберите другого помощника: из России работают Perplexity, GigaChat и YandexGPT.": "{service} is not available from your country — the key is not the problem. Choose another helper: Perplexity, GigaChat and YandexGPT work from Russia."
  }
 }

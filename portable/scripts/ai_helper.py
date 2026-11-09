@@ -98,6 +98,9 @@ YANDEX_MODELS = ("yandexgpt/latest", "yandexgpt-lite/latest")
 # Words of an old Perplexity endpoint answer that send people to the Agent API.
 GONE_MARKERS = ("chat_completions_not_available", "/v1/responses", "agent api", "migrate-from-sonar")
 REGION_MARKERS = ("unsupported_country", "country, region", "your region", "your country", "region is not supported")
+# v8.8.3: Anthropic answers a request from a country it does not serve with
+# 403 {"error": {"type": "forbidden", "message": "Request not allowed"}}.
+REGION_403_MARKERS = ("request not allowed",)
 MONEY_MARKERS = ("credit", "balance", "insufficient", "billing", "payment", "quota")
 OPTIONAL = {
     "perplexity": ("response_format", "language_preference", "max_output_tokens", "max_tokens", "search_mode"),
@@ -175,9 +178,10 @@ def _http_error(provider: str, status: int, data: dict | None, text: str) -> AIE
     name = PROVIDERS[provider]
     detail = _error_text(data, text)
     low = detail.lower()
-    if status in (400, 403) and any(m in low for m in REGION_MARKERS):
-        return AIError("region", tr("{service} не работает в вашей стране. Выберите другого помощника: из России "
-                                    "работают Perplexity, GigaChat и YandexGPT.", service=name))
+    if (status in (400, 403) and any(m in low for m in REGION_MARKERS)) or \
+            (status == 403 and any(m in low for m in REGION_403_MARKERS)):
+        return AIError("region", tr("{service} недоступен из вашей страны — ключ здесь ни при чём. Выберите другого "
+                                    "помощника: из России работают Perplexity, GigaChat и YandexGPT.", service=name))
     if status == 429 and provider == "yandex":
         return AIError("quota", tr("Слишком много запросов к {service} подряд. Подождите минуту и повторите.", service=name))
     if status == 402 or any(m in low for m in MONEY_MARKERS):

@@ -28,6 +28,9 @@ import stat
 import subprocess
 import sys
 import tarfile
+import http.client
+import time
+import urllib.error
 import urllib.parse
 import urllib.request
 from pathlib import Path
@@ -85,14 +88,26 @@ README_MAC = """ЗАГРУЗЧИК СТАТЕЙ ДЛЯ MAC (бета)
 """
 
 
-def download(url: str, dest: Path):
+def download(url: str, dest: Path, attempts: int = 5):
+    """Download with a few tries: GitHub sometimes answers 504 for a minute (8.8.3 build)."""
     if dest.exists():
         return
     print("download", url)
     tmp = dest.with_suffix(dest.suffix + ".part")
-    with urllib.request.urlopen(url, timeout=600) as response, tmp.open("wb") as f:
-        shutil.copyfileobj(response, f)
-    tmp.replace(dest)
+    request = urllib.request.Request(url, headers={"User-Agent": "ArticleDownloader-build"})
+    for attempt in range(1, attempts + 1):
+        try:
+            with urllib.request.urlopen(request, timeout=600) as response, tmp.open("wb") as f:
+                shutil.copyfileobj(response, f)
+            tmp.replace(dest)
+            return
+        except (OSError, http.client.HTTPException) as exc:      # URLError and HTTPError are OSErrors
+            code = getattr(exc, "code", None)
+            if (code is not None and code < 500 and code != 429) or attempt == attempts:
+                raise
+            wait = 15 * attempt
+            print(f"  {exc}; again in {wait} s")
+            time.sleep(wait)
 
 
 def standalone_assets(minor: str) -> dict[str, str]:
