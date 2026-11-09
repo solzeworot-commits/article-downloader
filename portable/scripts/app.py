@@ -85,7 +85,7 @@ PDF_TEXT_CACHE = ROOT / "logs" / "pdf_text"      # the pages of the PDFs, for «
 BIBLIO_DIR = ROOT / "Список литературы"
 
 UI_PORT = 17865
-APP_VERSION = "8.8.1"
+APP_VERSION = "8.8.2"
 APP_AUTHOR = "Bucaneiro"
 OFFICIAL_URL = "https://github.com/solzeworot-commits/article-downloader"
 DOWNLOAD_URL = OFFICIAL_URL + "/releases/tag/portable-latest"
@@ -2583,7 +2583,11 @@ def start_update() -> dict:
             import tempfile
             dest = Path(tempfile.gettempdir()) / "ArticleDownloader_update.zip"
             app_log(f"Update to {up.get('latest')}: downloading")
-            sp.download_update(up.get("zip") or UPDATE_ZIP_URL, dest, up.get("sha256", ""), progress)
+            # v8.8.2: the checksum from version.json as it is now, not the one remembered at start
+            info = sp.fetch_update(APP_VERSION, UPDATE_URL, up, UPDATE_ZIP_URL, dest, progress)
+            with S.lock:
+                if info.get("latest"):
+                    S.update = info
             if not (os.name == "nt" or osutil.IS_MAC) or os.environ.get("ARTICLE_UPDATE_DRY_RUN") == "1":
                 app_log("Update downloaded and checked (no installation here)")
                 with S.lock:
