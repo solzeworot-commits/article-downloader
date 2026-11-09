@@ -53,6 +53,46 @@ try:
         except sp.UpdateError:
             check(not (Path(tmp) / "bad.zip").exists() and not (Path(tmp) / "bad.zip.part").exists(),
                   "damaged download removed")
+
+        # v8.8.2: the checksum remembered at the start is old (the release was published again
+        # since): version.json is read again right before the download
+        stale = dict(newer, sha256="0" * 64)
+        used = sp.fetch_update("7.2", f"http://127.0.0.1:{PORT}/version.json", stale, newer["zip"],
+                               Path(tmp) / "fresh.zip")
+        check(used.get("sha256") == newer["sha256"], f"fresh checksum used: {used}")
+        check((Path(tmp) / "fresh.zip").read_bytes() == fake_api.UPDATE_ZIP, "fresh zip")
+        # version.json out of reach and the remembered checksum wrong: still refused (after a second try)
+        try:
+            sp.fetch_update("7.2", f"http://127.0.0.1:{PORT}/nothing.json", stale, newer["zip"],
+                            Path(tmp) / "never.zip")
+            check(False, "a wrong checksum must still fail")
+        except sp.ChecksumError:
+            check(not (Path(tmp) / "never.zip").exists(), "nothing left behind")
+
+    # a connection cut in the middle of the zip: a clear error, nothing left behind
+    import threading
+    from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
+
+    class Cut(BaseHTTPRequestHandler):
+        def log_message(self, *a):
+            pass
+
+        def do_GET(self):
+            self.send_response(200)
+            self.send_header("Content-Length", "1000000")
+            self.end_headers()
+            self.wfile.write(b"x" * 1000)        # then the connection closes
+
+    cut = ThreadingHTTPServer(("127.0.0.1", PORT + 1), Cut)
+    threading.Thread(target=cut.serve_forever, daemon=True).start()
+    with tempfile.TemporaryDirectory() as tmp:
+        try:
+            sp.download_update(f"http://127.0.0.1:{PORT + 1}/a.zip", Path(tmp) / "cut.zip", "")
+            check(False, "a cut download must fail")
+        except sp.UpdateError as exc:
+            check(not isinstance(exc, sp.ChecksumError), f"cut: not a checksum error: {exc}")
+            check(not list(Path(tmp).iterdir()), "cut: nothing left behind")
+    cut.shutdown()
 finally:
     server.shutdown()
 

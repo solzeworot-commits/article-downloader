@@ -1,6 +1,9 @@
 # Builds the portable program on a real Windows machine, checks it there and
 # publishes the zip as the "portable-latest" release, so the user downloads it
 # from GitHub with one link instead of passing a 54 MB file around.
+# v8.8.2: published from main only. A branch push only builds and checks:
+# publishing from the branch too gave the same version twice with different
+# zips, and programs that had read the first checksum refused the second zip.
 name: Портативная сборка для Windows
 
 on:
@@ -184,7 +187,7 @@ jobs:
           & $py -E -s -X utf8 tests\api_probe.py (Join-Path $env:APP "scripts")
 
       - name: Выложить zip на страницу Releases
-        if: github.event_name != 'pull_request'
+        if: github.event_name != 'pull_request' && github.ref == 'refs/heads/main'
         shell: pwsh
         env:
           GH_TOKEN: ${{ github.token }}

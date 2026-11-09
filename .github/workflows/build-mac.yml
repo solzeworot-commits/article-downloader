@@ -1,7 +1,8 @@
 # The Mac beta (v8.6): builds the program on a real Mac, checks it there and,
 # after the Windows build has published the "portable-latest" release, adds
 # ArticleDownloader_Mac.zip and version-mac.json to it. A push only builds and
-# checks; publishing happens after a successful Windows build (workflow_run).
+# checks; publishing happens after a successful Windows build of main
+# (workflow_run; v8.8.2: not after a branch build, which publishes nothing).
 name: Сборка для Mac (бета)
 
 on:
@@ -26,7 +27,7 @@ concurrency:
 
 jobs:
   mac:
-    if: github.event_name != 'workflow_run' || (github.event.workflow_run.conclusion == 'success' && github.event.workflow_run.event != 'pull_request')
+    if: github.event_name != 'workflow_run' || (github.event.workflow_run.conclusion == 'success' && github.event.workflow_run.event != 'pull_request' && github.event.workflow_run.head_branch == 'main')
     runs-on: macos-latest
     env:
       PYTHONUTF8: "1"

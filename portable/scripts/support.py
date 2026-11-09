@@ -16,6 +16,7 @@ GitHub "new issue" link that stays under the length browsers accept.
 """
 from __future__ import annotations
 
+import http.client
 import json
 import os
 import platform
@@ -65,6 +66,10 @@ class UpdateError(Exception):
     pass
 
 
+class ChecksumError(UpdateError):
+    """The zip is not the one version.json describes."""
+
+
 def download_update(url: str, dest: Path, sha256: str = "", progress=None, timeout: float = 30) -> Path:
     """Download the zip to dest (progress(done, total) on the way) and check its SHA-256."""
     import hashlib
@@ -84,14 +89,41 @@ def download_update(url: str, dest: Path, sha256: str = "", progress=None, timeo
                 done += len(block)
                 if progress:
                     progress(done, total)
-    except OSError as exc:
+    except (OSError, http.client.HTTPException) as exc:   # incl. a connection cut in the middle
         part.unlink(missing_ok=True)
         raise UpdateError(tr("Новая версия не скачалась: {error}", error=exc)) from None
+    if total and done != total:                  # the connection broke off quietly
+        part.unlink(missing_ok=True)
+        raise UpdateError(tr("Новая версия скачалась не полностью ({done} из {total} байт). Попробуйте ещё раз.",
+                             done=done, total=total))
     if sha256 and digest.hexdigest() != sha256.lower():
         part.unlink(missing_ok=True)
-        raise UpdateError(tr("Скачанный архив повреждён (контрольная сумма не совпала). Попробуйте ещё раз."))
+        raise ChecksumError(tr("Скачанный архив повреждён (контрольная сумма не совпала). Попробуйте ещё раз."))
     os.replace(part, dest)
     return dest
+
+
+def fetch_update(current: str, version_url: str, known: dict, zip_url: str, dest: Path, progress=None) -> dict:
+    """Download the new version, checked against version.json as it is NOW (v8.8.2).
+
+    The checksum remembered at the program's start can be old: the release may
+    have been published again since (a new zip, a new checksum). So version.json
+    is read again right before the download, and once more when the checksum
+    still does not match (published again during the download). Returns what
+    was used ({"latest", "sha256", "zip", ...}).
+    """
+    info = known or {}
+    for attempt in range(2):
+        fresh = check_update(current, version_url)
+        if fresh.get("newer") and fresh.get("sha256"):
+            info = fresh
+        try:
+            download_update(info.get("zip") or zip_url, dest, info.get("sha256", ""), progress)
+            return info
+        except ChecksumError:
+            if attempt:
+                raise
+    return info
 
 
 # Plain ASCII on purpose: Windows PowerShell reads a script without a BOM in
