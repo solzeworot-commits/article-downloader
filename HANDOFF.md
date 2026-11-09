@@ -895,6 +895,9 @@ https://github.com/solzeworot-commits/article-downloader/releases/download/porta
   стран-отказов: «{service} недоступен из вашей страны — ключ здесь ни при чём. Выберите другого помощника: из России
   работают Perplexity, GigaChat и YandexGPT». Тест `ai_test` (`sk-ant-region`). Обходить ограничения сервисов (VPN и
   т. п.) пользователям не советуем — только сервисы, которые работают из России.
+- Сборка 8.8.3 для Mac дважды упала на `HTTP Error 504` при скачивании python-build-standalone с GitHub (временный
+  сбой; отсюда тот же файл качался). `download()` в `tools/build_portable_mac.py` и `tools/build_portable.py`
+  теперь пробует до 5 раз с паузой 15/30/45/60 с на 5xx, 429 и обрывах; 4xx — сразу ошибка.
 - Пользователь прислал в чат настоящий ключ — попросили отозвать его в console.anthropic.com. Ключи никуда, кроме
   окна программы (`%LOCALAPPDATA%\ArticleDownloader\keys.json`), не вставлять.
 
