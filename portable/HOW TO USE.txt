@@ -1,4 +1,4 @@
-﻿ARTICLE DOWNLOADER, portable version 8.9
+﻿ARTICLE DOWNLOADER, portable version 9.0
 ========================================
 
 Runs on any computer with Windows 10 or 11. Nothing to install: Python and everything
@@ -67,6 +67,11 @@ HOW TO USE
    websites) — left as written (⚠, yellow; the AI helper can format them). The style is the one
    chosen in «Citation style»; the numbering stays as in the document. Copy it into Word or save
    .docx / .txt; the DOIs found go to inbox as a list.
+   «💬 Ask your own papers» (with the AI helper): ask a question, for example «at what
+   ultrasound frequency is the polyphenol yield highest?» — the AI answers only from your
+   downloaded PDFs, and every point gets a «📄 Author, year · p. N» button that opens the paper
+   at that page. The program itself finds the right places in the PDFs and gives the AI only
+   those (about a cent a question); no answer in the papers — it says so.
    «🔍 Search the text of the articles»: write what you are looking for (for example,
    ultrasound 40 kHz) and the program shows which downloaded PDFs say it and on which page;
    the «📄 p. N» button opens the PDF at that page. No AI, free.

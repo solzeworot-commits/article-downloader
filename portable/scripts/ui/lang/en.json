@@ -823,7 +823,6 @@
   "…и ещё мест в этой статье: ": "…and more places in this article: ",
   "Там же <b>«🔍 Поиск по тексту статей»</b>: напишите, что ищете (например, «ultrasound 40 kHz»), — программа покажет, в каких скачанных PDF и на какой странице это написано. Без ИИ, бесплатно.": "There is also <b>«🔍 Search the text of the articles»</b>: write what you are looking for (for example, «ultrasound 40 kHz») and the program shows which downloaded PDFs say it and on which page. No AI, free.",
   "таблица по скачанным статьям (объект, метод, условия, результаты) для Excel;": "a table of the downloaded articles (object, method, conditions, results) for Excel;",
-  "план обзора: разделы и какие статьи в какой раздел — черновик для текста.": "an outline of the review: the sections and which articles go where — a draft for the text.",
   "📝 План обзора": "📝 Review outline",
   "ИИ предложит разделы и разложит по ним ваши статьи — черновик для текста": "the AI proposes sections and sorts your articles into them — a draft for the text",
   "Нужен ИИ-помощник: он прочитает аннотации отобранных статей и предложит разделы обзора.": "This needs the AI helper: it reads the abstracts of the selected articles and proposes the sections of the review.",
@@ -1026,7 +1025,30 @@
   "дополнительные материалы (Supplementary)": "supplementary materials",
   ": таблицы с данными, приложения, методики. Они ложатся в папку рядом с PDF, а в очереди у статьи появляется кнопка «📎 N доп.». Не нужны — снимите галочку вверху экрана «⬇ Скачать статьи».": ": data tables, appendices, methods. They go into a folder next to the PDF, and the article in the queue gets a «📎 N suppl.» button. Not needed — untick the box at the top of the «⬇ Download articles» screen.",
   "Открыть папку с дополнительными материалами": "Open the folder with the supplementary materials",
-  "доп.": "suppl."
+  "доп.": "suppl.",
+  "план обзора: разделы и какие статьи в какой раздел — черновик для текста;": "an outline of the review: the sections and which articles go where — a draft for the text;",
+  "вопросы по своим статьям: ответ только по скачанным PDF, со ссылкой на статью и страницу.": "questions about your own papers: an answer only from the downloaded PDFs, with the paper and page.",
+  "💬 Спросить по своим статьям": "💬 Ask your own papers",
+  "ИИ отвечает только по вашим скачанным PDF — у каждого пункта ссылка на статью и страницу": "The AI answers only from your downloaded PDFs — every point links to its paper and page",
+  "Нужен ИИ-помощник: он прочитает найденные места в ваших статьях и ответит.": "The AI helper is needed: it reads the places found in your papers and answers.",
+  "например: при какой частоте ультразвука выход полифенолов наибольший?": "for example: at what ultrasound frequency is the polyphenol yield highest?",
+  "💬 Спросить": "💬 Ask",
+  "Спрашивает по статьям из списка выше («Какие статьи»: только отобранные «✓» или все статьи списка). Программа сама находит в скачанных PDF подходящие места и отдаёт ИИ только их; утверждение без ссылки на статью не показывается. Если ответа в ваших статьях нет, ИИ так и скажет. Вопрос стоит около цента. Проверяйте по статьям: ИИ может ошибаться.": "Asks the papers of the list above («Which articles»: only the selected «✓» ones or all of the list). The program itself finds the right places in the downloaded PDFs and gives the AI only those; a statement without a link to its paper is not shown. If your papers hold no answer, the AI says so. A question costs about a cent. Check against the papers: the AI can be wrong.",
+  "⏳ ИИ подбирает слова для поиска…": "⏳ The AI picks the words to look for…",
+  "⏳ Ищу подходящие места в PDF:": "⏳ Looking for the right places in the PDFs:",
+  "… Первый раз программа читает PDF дольше.": "… The first time the program reads the PDFs longer.",
+  "⏳ ИИ читает найденные места и пишет ответ…": "⏳ The AI reads the places found and writes the answer…",
+  "Ответ по": "Answer from",
+  "статье": "paper",
+  "статьям": "papers",
+  "В ваших статьях ответа не нашлось.": "No answer was found in your papers.",
+  "PDF без текста (скан):": "PDFs without text (scans):",
+  "📋 Копировать ответ": "📋 Copy the answer",
+  "Вопрос:": "Question:",
+  "· стр.": "· p.",
+  ", с.": ", p.",
+  "«💬 Спросить по своим статьям»": "«💬 Ask your own papers»",
+  "(с ИИ-помощником): задайте вопрос, например «при какой частоте ультразвука выход наибольший?», — ИИ ответит только по вашим скачанным PDF, и у каждого пункта будет кнопка «📄 статья · стр. N». Нет ответа в статьях — так и скажет.": "(with the AI helper): ask a question, for example «at what ultrasound frequency is the yield highest?» — the AI answers only from your downloaded PDFs, and every point gets a «📄 paper · p. N» button. No answer in the papers — it says so."
  },
  "messages": {
   "экспорт": "export",
@@ -1206,6 +1228,9 @@
   "Открыть окно": "Open the window",
   "Выход": "Exit",
   "Новая версия скачалась не полностью ({done} из {total} байт). Попробуйте ещё раз.": "The new version was not downloaded completely ({done} of {total} bytes). Try again.",
-  "{service} недоступен из вашей страны — ключ здесь ни при чём. Выберите другого помощника: из России работают Perplexity, GigaChat и YandexGPT.": "{service} is not available from your country — the key is not the problem. Choose another helper: Perplexity, GigaChat and YandexGPT work from Russia."
+  "{service} недоступен из вашей страны — ключ здесь ни при чём. Выберите другого помощника: из России работают Perplexity, GigaChat и YandexGPT.": "{service} is not available from your country — the key is not the problem. Choose another helper: Perplexity, GigaChat and YandexGPT work from Russia.",
+  "Напишите вопрос — например, при какой температуре выход наибольший.": "Write a question — for example, at what temperature the yield is highest.",
+  "В скачанных PDF не нашлось мест об этом. Переформулируйте вопрос или проверьте, что нужные статьи скачаны.": "Nothing about this was found in the downloaded PDFs. Rephrase the question or check that the right papers are downloaded.",
+  "Ответ не получился: {error}": "The answer did not work out: {error}"
  }
 }

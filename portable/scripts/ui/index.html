@@ -366,6 +366,13 @@
   ul.rf-list li.none { background: #fffbeb; }
   ul.rf-list li.ai { background: #f5f3ff; }
   ul.rf-list .was { display: block; color: var(--muted); font-size: 12px; margin-top: 2px; }
+  /* v9.0: ask the user's own papers */
+  .ask-ans { border: 1px solid var(--line); border-radius: 12px; padding: 12px 16px; margin-top: 10px; }
+  .ask-ans .ask-sum { font-size: 16px; margin: 0 0 8px; }
+  .ask-ans ol { margin: 0; padding-left: 22px; }
+  .ask-ans li { margin-bottom: 8px; line-height: 1.5; }
+  .ask-cites { display: inline-flex; flex-wrap: wrap; gap: 6px; margin-left: 6px; vertical-align: middle; }
+  .ask-cites button { padding: 2px 9px; font-size: 13px; border-radius: 99px; }
   .fd-row { display: flex; gap: 10px; flex-wrap: wrap; }
   .fd-row input { flex: 1 1 280px; font-size: 16px; padding: 9px 12px; border-radius: 10px; border: 1px solid var(--line); }
   .fd-art { border: 1px solid var(--line); border-radius: 12px; padding: 10px 14px; margin-top: 10px; }
@@ -790,6 +797,18 @@ https://link.springer.com/article/10.1007/s12393-026-09447-8
       </div>
       <div class="recognized" id="rf-saved" style="margin-top: 6px"></div>
     </div>
+    <div class="card" id="ask-card">
+      <h2><span>💬 Спросить по своим статьям</span><small>ИИ отвечает только по вашим скачанным PDF — у каждого пункта ссылка на статью и страницу</small></h2>
+      <div id="ask-off">Нужен ИИ-помощник: он прочитает найденные места в ваших статьях и ответит.
+        <button class="linkbtn" data-go="ai">🤖 Подключить ИИ-помощник</button></div>
+      <div id="ask-on" hidden>
+        <div class="fd-row"><input id="ask-q" spellcheck="true" autocomplete="off" placeholder="например: при какой частоте ультразвука выход полифенолов наибольший?">
+          <button class="linkbtn" id="ask-run">💬 Спросить</button></div>
+        <div class="recognized" style="margin-top: 6px">Спрашивает по статьям из списка выше («Какие статьи»: только отобранные «✓» или все статьи списка). Программа сама находит в скачанных PDF подходящие места и отдаёт ИИ только их; утверждение без ссылки на статью не показывается. Если ответа в ваших статьях нет, ИИ так и скажет. Вопрос стоит около цента. Проверяйте по статьям: ИИ может ошибаться.</div>
+        <div class="recognized" id="ask-status" style="margin-top: 8px"></div>
+        <div id="ask-result"></div>
+      </div>
+    </div>
     <div class="card" id="fd-card">
       <h2><span>🔍 Поиск по тексту статей</span><small>где в скачанных PDF написано то, что вам нужно</small></h2>
       <div class="fd-row"><input id="fd-q" spellcheck="false" autocomplete="off" placeholder="например: ultrasound 40 kHz">
@@ -1196,6 +1215,7 @@ extraction"></textarea>
     <h4>5. 📚 Список литературы и схема PRISMA</h4>
     <p>Готовый список литературы по ГОСТ, APA, Vancouver или в стиле нужного журнала (около 11 000 журналов) — скопировать в Word или сохранить файлом.</p>
     <p>Уже есть свой список литературы, но оформлен вразнобой? <b>«📄 Привести в порядок свой список»</b>: загрузите Word — программа найдёт каждый источник и оформит по ГОСТ или в нужном стиле.</p>
+    <p><b>«💬 Спросить по своим статьям»</b> (с ИИ-помощником): задайте вопрос, например «при какой частоте ультразвука выход наибольший?», — ИИ ответит только по вашим скачанным PDF, и у каждого пункта будет кнопка «📄 статья · стр. N». Нет ответа в статьях — так и скажет.</p>
     <p>Там же <b>«🔍 Поиск по тексту статей»</b>: напишите, что ищете (например, «ultrasound 40 kHz»), — программа покажет, в каких скачанных PDF и на какой странице это написано. Без ИИ, бесплатно.</p>
     <p><b>PRISMA</b> — международный стандарт: схема показывает, сколько статей нашли в базах, сколько отсеяли и почему и сколько вошло в обзор. Рецензенты журналов и диссертационные советы требуют её в систематических обзорах: по ней видно, что литература отобрана честно, а не «какие нашлись». Программа считает цифры сама по вашим отметкам на шаге 3 — сохраните схему картинкой и вставьте в раздел «Материалы и методы».</p>
 
@@ -1210,7 +1230,8 @@ extraction"></textarea>
       <li>предотбор: ИИ читает аннотации и советует, какие статьи подходят;</li>
       <li>перевод аннотаций на русский;</li>
       <li>таблица по скачанным статьям (объект, метод, условия, результаты) для Excel;</li>
-      <li>план обзора: разделы и какие статьи в какой раздел — черновик для текста.</li>
+      <li>план обзора: разделы и какие статьи в какой раздел — черновик для текста;</li>
+      <li>вопросы по своим статьям: ответ только по скачанным PDF, со ссылкой на статью и страницу.</li>
     </ul>
     <p>Нужен ваш ключ одного из сервисов: Perplexity, ChatGPT, Claude, GigaChat или YandexGPT. Запросы стоят центы.</p>
     <div class="about-acts"><button class="linkbtn" data-guide="ai">🤖 Подключить ИИ-помощник</button></div>
@@ -3038,6 +3059,7 @@ async function loadBiblio() {
   renderPrisma(d.prisma);
   loadTable();
   syncReflist();
+  loadAsk();
   loadFind();
   loadOutline();
   if (((d.job && d.job.running) || (sj && sj.running)) && view === "biblio") BB.timer = setTimeout(loadBiblio, 2000);
@@ -3319,6 +3341,69 @@ $("rf-inbox").onclick = async () => {
   $("rf-saved").innerHTML = res.error ? `<span style="color: var(--red)">${esc(res.error)}</span>`
     : `✅ Сохранено: <b>inbox\\${esc(res.name)}</b> — ${res.count} DOI. Его можно скачать или отобрать, как любой список.`;
 };
+
+// ---- ask the user's own papers (v9.0) -------------------------------------------------
+const ASK = { timer: 0, list: "", answer: null };
+function askCite(c) {
+  return `<button data-pdf="${esc(c.doi)}" data-page="${c.page}" title="Открыть PDF на этой странице">📄 ${esc(c.ref)} · стр. ${c.page}</button>`;
+}
+function askText(question, a) {
+  const lines = [`Вопрос: ${question}`, "", a.summary, ""];
+  a.points.forEach((p, i) => lines.push(`${i + 1}. ${p.text} (` + p.cites.map((c) => `${c.ref}, с. ${c.page}`).join("; ") + ")"));
+  return lines.join("\n");
+}
+async function loadAsk() {
+  clearTimeout(ASK.timer);
+  const on = aiOn();
+  $("ask-off").hidden = on; $("ask-on").hidden = !on;
+  if (!BB.list) return;
+  if (ASK.list !== BB.list) { ASK.list = BB.list; $("ask-status").textContent = ""; $("ask-result").innerHTML = ""; }
+  let res;
+  try { res = await api("/api/ask_state", { list: BB.list }); } catch (e) { return; }
+  const j = res.job;
+  if (!j) return;
+  let txt = "";
+  if (j.running) {
+    txt = j.stage === "terms" ? "⏳ ИИ подбирает слова для поиска…"
+      : j.stage === "read" ? `⏳ Ищу подходящие места в PDF: ${j.done} / ${j.total}… Первый раз программа читает PDF дольше.`
+      : "⏳ ИИ читает найденные места и пишет ответ…";
+  } else if (j.error) {
+    txt = `<span style="color: var(--red)">${esc(j.error)}</span>`;
+  } else if (j.answer) {
+    txt = j.answer.found ? `Ответ по ${j.answer.papers} ${plural(j.answer.papers, "статье", "статьям", "статьям")}.` + costText(j.cost)
+      : "В ваших статьях ответа не нашлось." + costText(j.cost);
+    if (j.no_pdf) txt += ` Без скачанного PDF: ${j.no_pdf}.`;
+    if (j.no_text) txt += ` PDF без текста (скан): ${j.no_text}.`;
+  }
+  $("ask-status").innerHTML = txt;
+  const a = j.answer;
+  ASK.answer = a && !j.running ? { question: j.question, a } : null;
+  $("ask-result").innerHTML = !a || j.running ? "" : a.found
+    ? `<div class="ask-ans"><p class="ask-sum"><b>${esc(j.question)}</b><br>${esc(a.summary)}</p><ol>` +
+      a.points.map((p) => `<li>${esc(p.text)}<span class="ask-cites">${p.cites.map(askCite).join("")}</span></li>`).join("") +
+      `</ol><div class="acts" style="margin-top: 8px"><button id="ask-copy">📋 Копировать ответ</button></div></div>`
+    : `<div class="note amber"><span style="font-size: 24px">🤷</span><span class="msg">${esc(a.summary)}</span></div>`;
+  if (j.running && view === "biblio") ASK.timer = setTimeout(loadAsk, 900);
+}
+async function runAsk() {
+  const q = $("ask-q").value.trim();
+  if (!q) { $("ask-q").focus(); return; }
+  $("ask-result").innerHTML = "";
+  const res = await api("/api/ask", { list: BB.list, scope: $("bb-scope").value, q });
+  if (res.error) { $("ask-status").innerHTML = `<span style="color: var(--red)">${esc(res.error)}</span>`; return; }
+  loadAsk();
+}
+$("ask-run").onclick = runAsk;
+$("ask-q").addEventListener("keydown", (e) => { if (e.key === "Enter") { e.preventDefault(); runAsk(); } });
+$("ask-result").addEventListener("click", async (e) => {
+  const b = e.target.closest("button");
+  if (!b) return;
+  if (b.id === "ask-copy" && ASK.answer) { flash(b, await copyText(askText(ASK.answer.question, ASK.answer.a))); return; }
+  if (b.dataset.pdf) {
+    const res = await api("/api/open_pdf", { doi: b.dataset.pdf, page: Number(b.dataset.page) || 0 });
+    if (res.error) flash(b, false);
+  }
+});
 
 // ---- search in the text of the PDFs (v8.4) -------------------------------------------
 const FD = { timer: 0, list: "" };
