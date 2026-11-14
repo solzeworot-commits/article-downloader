@@ -366,6 +366,24 @@
   ul.rf-list li.none { background: #fffbeb; }
   ul.rf-list li.ai { background: #f5f3ff; }
   ul.rf-list .was { display: block; color: var(--muted); font-size: 12px; margin-top: 2px; }
+  /* v9.1: the map of the papers */
+  .mp-layout { display: flex; gap: 16px; flex-wrap: wrap; margin-top: 10px; align-items: flex-start; }
+  #mp-svg { flex: 2 1 480px; width: 100%; height: 520px; border: 1px solid var(--line); border-radius: 12px; background: #fcfcfb; }
+  .mp-side { flex: 1 1 260px; display: flex; flex-direction: column; gap: 12px; font-size: 14px; min-width: 0; }
+  .mp-side h4 { margin: 0 0 4px; font-size: 14px; }
+  .mp-info { border: 1px solid var(--line); border-radius: 12px; padding: 10px 12px; }
+  .mp-info .acts { margin-top: 8px; }
+  .mp-dot { display: inline-block; flex: none; width: 12px; height: 12px; border-radius: 50%; }
+  .mp-row { display: flex; align-items: baseline; gap: 8px; margin: 5px 0; }
+  .mp-row button { padding: 1px 8px; font-size: 13px; text-align: left; }
+  #mp-svg .edge { stroke: #94a3b8; stroke-opacity: .5; stroke-width: 1.2; }
+  #mp-svg .edge.hot { stroke: #334155; stroke-opacity: .95; stroke-width: 2; }
+  #mp-svg .node { stroke: #fcfcfb; stroke-width: 2; cursor: pointer; }
+  #mp-svg .node.sel { stroke: #0f172a; stroke-width: 3; }
+  #mp-svg .dim { opacity: .2; }
+  #mp-svg text { font-size: 13px; fill: #334155; pointer-events: none; paint-order: stroke; stroke: #fcfcfb; stroke-width: 3px; }
+  .mp-groups details { margin-top: 6px; }
+  .mp-groups li { margin-bottom: 3px; }
   /* v9.0: ask the user's own papers */
   .ask-ans { border: 1px solid var(--line); border-radius: 12px; padding: 12px 16px; margin-top: 10px; }
   .ask-ans .ask-sum { font-size: 16px; margin: 0 0 8px; }
@@ -848,6 +866,19 @@ https://link.springer.com/article/10.1007/s12393-026-09447-8
         <div id="ol-plan"></div>
       </div>
     </div>
+    <div class="card" id="mp-card">
+      <h2><span>🕸 Карта статей</span><small>кто кого цитирует среди ваших статей — группы по направлениям и ключевые работы</small></h2>
+      <div class="acts"><button class="linkbtn" id="mp-run">🕸 Построить карту</button><span class="recognized" id="mp-status"></span></div>
+      <div class="recognized" style="margin-top: 6px">Берутся статьи из списка выше («Какие статьи»), связи — из OpenAlex. Точка — статья, линия со стрелкой — одна цитирует другую. Чем крупнее точка, тем больше ваших статей на неё ссылаются: это ключевые работы. Цвет — группа статей, которые цитируют друг друга; часто это одно направление, подсказка для разделов обзора. Нажмите на точку, чтобы увидеть статью. Без ИИ, бесплатно.</div>
+      <div class="mp-layout" id="mp-wrap" hidden>
+        <svg id="mp-svg" role="img" aria-label="Карта статей: кто кого цитирует"></svg>
+        <div class="mp-side">
+          <div class="mp-info" id="mp-info"></div>
+          <div id="mp-keys"></div>
+          <div class="mp-groups" id="mp-groups"></div>
+        </div>
+      </div>
+    </div>
     <div class="card">
       <h2><span>Схема отбора PRISMA</span><small>для раздела «Материалы и методы»</small></h2>
       <div id="prisma"></div>
@@ -1215,6 +1246,7 @@ extraction"></textarea>
     <h4>5. 📚 Список литературы и схема PRISMA</h4>
     <p>Готовый список литературы по ГОСТ, APA, Vancouver или в стиле нужного журнала (около 11 000 журналов) — скопировать в Word или сохранить файлом.</p>
     <p>Уже есть свой список литературы, но оформлен вразнобой? <b>«📄 Привести в порядок свой список»</b>: загрузите Word — программа найдёт каждый источник и оформит по ГОСТ или в нужном стиле.</p>
+    <p><b>«🕸 Карта статей»</b>: точки — ваши статьи, линии — кто кого цитирует. Крупные точки — ключевые работы, на которые ссылаются многие ваши статьи; цвет — группа статей одного направления (подсказка для разделов обзора). Без ИИ, бесплатно.</p>
     <p><b>«💬 Спросить по своим статьям»</b> (с ИИ-помощником): задайте вопрос, например «при какой частоте ультразвука выход наибольший?», — ИИ ответит только по вашим скачанным PDF, и у каждого пункта будет кнопка «📄 статья · стр. N». Нет ответа в статьях — так и скажет.</p>
     <p>Там же <b>«🔍 Поиск по тексту статей»</b>: напишите, что ищете (например, «ultrasound 40 kHz»), — программа покажет, в каких скачанных PDF и на какой странице это написано. Без ИИ, бесплатно.</p>
     <p><b>PRISMA</b> — международный стандарт: схема показывает, сколько статей нашли в базах, сколько отсеяли и почему и сколько вошло в обзор. Рецензенты журналов и диссертационные советы требуют её в систематических обзорах: по ней видно, что литература отобрана честно, а не «какие нашлись». Программа считает цифры сама по вашим отметкам на шаге 3 — сохраните схему картинкой и вставьте в раздел «Материалы и методы».</p>
@@ -3062,6 +3094,7 @@ async function loadBiblio() {
   loadAsk();
   loadFind();
   loadOutline();
+  loadMap();
   if (((d.job && d.job.running) || (sj && sj.running)) && view === "biblio") BB.timer = setTimeout(loadBiblio, 2000);
 }
 function prismaLines(p) {
@@ -3341,6 +3374,163 @@ $("rf-inbox").onclick = async () => {
   $("rf-saved").innerHTML = res.error ? `<span style="color: var(--red)">${esc(res.error)}</span>`
     : `✅ Сохранено: <b>inbox\\${esc(res.name)}</b> — ${res.count} DOI. Его можно скачать или отобрать, как любой список.`;
 };
+
+// ---- the map of the papers (v9.1): who cites whom, groups, key papers ----------------
+const MP = { timer: 0, list: "", map: null, pos: null, posFor: "", nodes: [], sel: "" };
+// The validated categorical order (dataviz palette, light); groups past the eighth are grey.
+const MP_COLORS = ["#2a78d6", "#eb6834", "#1baf7a", "#eda100", "#e87ba4", "#008300", "#6250d6", "#e34948"];
+function mpColor(g) { return g >= 0 && g < MP_COLORS.length ? MP_COLORS[g] : "#94a3b8"; }
+function mpRadius(d) { return 6 + 3 * Math.sqrt(d.cited_in || 0); }
+function mpLayout(nodes, edges, aspect) {
+  // Fruchterman-Reingold in the shape of the picture, started from the groups on a circle
+  // (the same list draws the same way).
+  const n = nodes.length, W = 1000, H = 1000 * (aspect || 0.65), k = Math.sqrt(W * H / Math.max(1, n)) * 0.9;
+  const idx = new Map(nodes.map((d, i) => [d.doi, i]));
+  const groups = Math.max(1, ...nodes.map((d) => d.group + 1));
+  const p = nodes.map((d, i) => {
+    const a = 2 * Math.PI * (d.group + 0.5) / groups;
+    return { x: W / 2 + Math.cos(a) * W * 0.28 + ((i * 37) % 60 - 30), y: H / 2 + Math.sin(a) * H * 0.28 + ((i * 53) % 60 - 30) };
+  });
+  const E = edges.map(([a, b]) => [idx.get(a), idx.get(b)]).filter(([a, b]) => a !== undefined && b !== undefined);
+  let t = W / 10;
+  for (let it = 0; it < 300; it++) {
+    const dx = new Float64Array(n), dy = new Float64Array(n);
+    for (let i = 0; i < n; i++) for (let j = i + 1; j < n; j++) {
+      const x = p[i].x - p[j].x, y = p[i].y - p[j].y, f = k * k / ((x * x + y * y) || 0.01);
+      dx[i] += x * f; dy[i] += y * f; dx[j] -= x * f; dy[j] -= y * f;
+    }
+    for (const [a, b] of E) {
+      const x = p[a].x - p[b].x, y = p[a].y - p[b].y, f = Math.sqrt(x * x + y * y) / k;
+      dx[a] -= x * f; dy[a] -= y * f; dx[b] += x * f; dy[b] += y * f;
+    }
+    for (let i = 0; i < n; i++) {
+      dx[i] += (W / 2 - p[i].x) * 0.03; dy[i] += (H / 2 - p[i].y) * 0.03;
+      const d = Math.sqrt(dx[i] * dx[i] + dy[i] * dy[i]) || 1, m = Math.min(d, t);
+      p[i].x += dx[i] / d * m; p[i].y += dy[i] / d * m;
+    }
+    t *= 0.985;
+  }
+  return p;
+}
+function mpNear(doi) {
+  const out = new Set([doi]);
+  for (const [a, b] of MP.map.edges) { if (a === doi) out.add(b); if (b === doi) out.add(a); }
+  return out;
+}
+function mpDraw() {
+  const m = MP.map, nodes = MP.nodes;
+  const idx = new Map(nodes.map((d, i) => [d.doi, i]));
+  // Fit the layout into the real size of the picture, so 1 unit is 1 pixel and the text stays readable.
+  const svg = $("mp-svg"), W = Math.max(320, svg.clientWidth || 800), H = Math.max(320, svg.clientHeight || 520), pad = 40;
+  const xs0 = MP.pos.map((q) => q.x), ys0 = MP.pos.map((q) => q.y);
+  const minX = Math.min(...xs0), minY = Math.min(...ys0), spanX = (Math.max(...xs0) - minX) || 1, spanY = (Math.max(...ys0) - minY) || 1;
+  const sc = Math.min((W - 2 * pad - 80) / spanX, (H - 2 * pad) / spanY);
+  const offX = (W - 80 - spanX * sc) / 2, offY = (H - spanY * sc) / 2;
+  const pos = MP.pos.map((q) => ({ x: offX + (q.x - minX) * sc, y: offY + (q.y - minY) * sc }));
+  const near = MP.sel ? mpNear(MP.sel) : null;
+  let out = `<defs><marker id="mp-arrow" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse">` +
+    `<path d="M0,0 L10,5 L0,10 z" fill="#64748b"/></marker></defs>`;
+  for (const [a, b] of m.edges) {
+    const i = idx.get(a), j = idx.get(b);
+    if (i === undefined || j === undefined) continue;
+    const ax = pos[i].x, ay = pos[i].y, bx = pos[j].x, by = pos[j].y, d = Math.hypot(bx - ax, by - ay) || 1;
+    const rb = mpRadius(nodes[j]) + 3, ra = mpRadius(nodes[i]);
+    const hot = MP.sel && (a === MP.sel || b === MP.sel);
+    out += `<line class="edge${hot ? " hot" : ""}${near && !hot ? " dim" : ""}" x1="${ax + (bx - ax) * ra / d}" y1="${ay + (by - ay) * ra / d}" ` +
+      `x2="${bx - (bx - ax) * rb / d}" y2="${by - (by - ay) * rb / d}" marker-end="url(#mp-arrow)"/>`;
+  }
+  nodes.forEach((d, i) => {
+    out += `<circle class="node${d.doi === MP.sel ? " sel" : ""}${near && !near.has(d.doi) ? " dim" : ""}" data-doi="${esc(d.doi)}" ` +
+      `cx="${pos[i].x}" cy="${pos[i].y}" r="${mpRadius(d)}" fill="${mpColor(d.group)}"><title>${esc(d.ref)} — ${esc(d.title)}</title></circle>`;
+  });
+  // Names of the key papers (and the chosen one), never on top of each other.
+  let labelled = [...nodes].filter((d) => d.cited_in > 0).sort((a, b) => b.cited_in - a.cited_in).slice(0, 10);
+  if (MP.sel) labelled = [nodes[idx.get(MP.sel)], ...labelled.filter((d) => d.doi !== MP.sel)];
+  const boxes = [];
+  for (const d of labelled) {
+    const i = idx.get(d.doi), x = pos[i].x + mpRadius(d) + 4, y = pos[i].y + 4, w = 7.2 * d.ref.length;
+    if (boxes.some((b) => x < b.x + b.w && b.x < x + w && y - 12 < b.y && b.y - 12 < y)) continue;
+    boxes.push({ x, y, w });
+    out += `<text class="${near && !near.has(d.doi) ? "dim" : ""}" x="${x}" y="${y}">${esc(d.ref)}</text>`;
+  }
+  svg.setAttribute("viewBox", `0 0 ${W} ${H}`);
+  svg.innerHTML = out;
+}
+function mpInfo() {
+  const d = MP.sel && MP.map.nodes.find((n) => n.doi === MP.sel);
+  $("mp-info").innerHTML = !d ? "Нажмите на точку на карте или на работу в списке ниже — здесь появится статья."
+    : `<b>${esc(d.ref)}</b><div>${esc(d.title)}</div>` +
+      `<div class="recognized" style="margin-top: 4px">Её цитируют ваших статей: <b>${d.cited_in}</b> · она ссылается на ваши: <b>${d.cites}</b>` +
+      (d.cited ? ` · всего цитирований (OpenAlex): ${d.cited}` : "") + `</div>` +
+      `<div class="acts">${d.pdf ? `<button data-mppdf="${esc(d.doi)}">📄 Открыть PDF</button>` : ""}` +
+      `<button data-mpdoi="${esc(d.doi)}">🔗 Страница статьи</button></div>`;
+}
+function mpSide() {
+  const m = MP.map, byGroup = {};
+  for (const d of m.nodes) if (d.group >= 0) (byGroup[d.group] = byGroup[d.group] || []).push(d);
+  const keys = m.nodes.filter((d) => d.cited_in > 0).sort((a, b) => b.cited_in - a.cited_in).slice(0, 5);
+  $("mp-keys").innerHTML = !keys.length ? "" : "<h4>Ключевые работы — их цитируют больше всего ваших статей</h4>" +
+    keys.map((d) => `<div class="mp-row"><span class="mp-dot" style="background: ${mpColor(d.group)}"></span>` +
+      `<button data-mpsel="${esc(d.doi)}" title="${esc(d.title)}">${esc(d.ref)}</button><span class="recognized">цитируют: ${d.cited_in}</span></div>`).join("");
+  $("mp-groups").innerHTML = "<h4>Группы — статьи, которые цитируют друг друга</h4>" +
+    m.groups.map((g) => `<div class="mp-row"><span class="mp-dot" style="background: ${mpColor(g.n)}"></span>` +
+      `<span><b>Группа ${g.n + 1}</b> · ${g.size} ${plural(g.size, "статья", "статьи", "статей")}${g.words.length ? " · " + esc(g.words.join(", ")) : ""}</span></div>`).join("") +
+    `<details><summary>Статьи по группам — списком</summary>` +
+    m.groups.map((g) => `<div style="margin-top: 6px"><b>Группа ${g.n + 1}</b>${g.words.length ? " (" + esc(g.words.join(", ")) + ")" : ""}<ol>` +
+      (byGroup[g.n] || []).sort((a, b) => b.cited_in - a.cited_in).map((d) => `<li>${esc(d.ref)} — ${esc(d.title)}</li>`).join("") + "</ol></div>").join("") +
+    `</details>`;
+}
+async function loadMap() {
+  clearTimeout(MP.timer);
+  if (!BB.list) return;
+  if (MP.list !== BB.list) { MP.list = BB.list; MP.map = null; MP.sel = ""; MP.posFor = ""; $("mp-wrap").hidden = true; $("mp-status").textContent = ""; }
+  let res;
+  try { res = await api("/api/map", { list: BB.list }); } catch (e) { return; }
+  const j = res.job || {}, m = res.map;
+  $("mp-run").textContent = m ? "🔄 Перестроить карту" : "🕸 Построить карту";
+  if (j.running) {
+    $("mp-status").textContent = `⏳ Загружаю связи из OpenAlex: ${j.done} / ${j.total}…`;
+    MP.timer = setTimeout(loadMap, 900);
+    return;
+  }
+  if (j.error) { $("mp-status").innerHTML = `<span style="color: var(--red)">${esc(j.error)}</span>`; return; }
+  if (!m) return;
+  MP.map = m;
+  const linked = m.nodes.filter((d) => d.group >= 0);
+  let txt = `Статей на карте: ${linked.length}, связей: ${m.edges.length}.`;
+  if (m.alone) txt += ` Без связей с другими статьями списка: ${m.alone}.`;
+  if (m.unknown) txt += ` Нет в OpenAlex: ${m.unknown}.`;
+  $("mp-status").textContent = txt + ` Построена ${m.made}.`;
+  if (!linked.length) {
+    $("mp-wrap").hidden = true;
+    $("mp-status").textContent = "Статьи этого списка не цитируют друг друга — карта пустая. Так бывает в небольших или очень разных списках.";
+    return;
+  }
+  $("mp-wrap").hidden = false;
+  if (MP.posFor !== m.made) {
+    const svg = $("mp-svg"), aspect = (svg.clientHeight || 520) / Math.max(320, (svg.clientWidth || 800) - 80);
+    MP.nodes = linked; MP.pos = mpLayout(linked, m.edges, aspect); MP.posFor = m.made;
+  }
+  mpDraw(); mpInfo(); mpSide();
+}
+$("mp-run").onclick = async () => {
+  const res = await api("/api/map_start", { list: BB.list, scope: $("bb-scope").value });
+  if (res.error) { $("mp-status").innerHTML = `<span style="color: var(--red)">${esc(res.error)}</span>`; return; }
+  MP.posFor = "";
+  loadMap();
+};
+function mpSelect(doi) { MP.sel = MP.sel === doi ? "" : doi; mpDraw(); mpInfo(); }
+$("mp-svg").addEventListener("click", (e) => {
+  const c = e.target.closest("circle[data-doi]");
+  mpSelect(c ? c.dataset.doi : MP.sel);
+});
+$("mp-card").addEventListener("click", async (e) => {
+  const b = e.target.closest("button");
+  if (!b) return;
+  if (b.dataset.mpsel) { MP.sel = ""; mpSelect(b.dataset.mpsel); $("mp-svg").scrollIntoView({ block: "nearest" }); }
+  if (b.dataset.mppdf) { const res = await api("/api/open_pdf", { doi: b.dataset.mppdf, page: 0 }); if (res.error) flash(b, false); }
+  if (b.dataset.mpdoi) api("/api/open_doi", { doi: b.dataset.mpdoi });
+});
 
 // ---- ask the user's own papers (v9.0) -------------------------------------------------
 const ASK = { timer: 0, list: "", answer: null };

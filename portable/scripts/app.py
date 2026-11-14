@@ -85,7 +85,7 @@ PDF_TEXT_CACHE = ROOT / "logs" / "pdf_text"      # the pages of the PDFs, for «
 BIBLIO_DIR = ROOT / "Список литературы"
 
 UI_PORT = 17865
-APP_VERSION = "9.0"
+APP_VERSION = "9.1"
 APP_AUTHOR = "Bucaneiro"
 OFFICIAL_URL = "https://github.com/solzeworot-commits/article-downloader"
 DOWNLOAD_URL = OFFICIAL_URL + "/releases/tag/portable-latest"
@@ -452,6 +452,7 @@ class State:
         self.find_jobs: dict[str, dict] = {}     # list file name -> search in the text of the PDFs
         self.outline_jobs: dict[str, dict] = {}  # list file name -> AI draft outline of the review
         self.ask_jobs: dict[str, dict] = {}      # list file name -> «💬 Спросить по своим статьям» (v9.0)
+        self.map_jobs: dict[str, dict] = {}      # list file name -> «🕸 Карта статей» (v9.1)
         self.reflist: dict = {}                   # «Привести в порядок свой список» (v8.7): the last one
         # v8.8 «☁ Облако»: the lists taken from the cloud (work computer), the last
         # status written, the size/mtime of the lists seen once (taken when unchanged
@@ -1792,6 +1793,69 @@ def start_ask(name: str, scope: str, question: str) -> dict:
 
     threading.Thread(target=run, daemon=True).start()
     return {}
+
+
+# ---------------------------------------------------------------------------
+# v9.1 «🕸 Карта статей»: who cites whom among the papers of a list (OpenAlex,
+# free, no AI); the groups and the key papers. Kept in the list's review file.
+# ---------------------------------------------------------------------------
+
+def start_map(name: str, scope: str) -> dict:
+    data = get_review(name)
+    with S.lock:
+        job = S.map_jobs.get(data["list"])
+        if job and job["running"]:
+            return {}
+        dois = scope_records(data, scope)
+        titles = {d: data["records"][d].get("title") or "" for d in dois}
+    if len(dois) < 2:
+        return {"error": tr("Для карты нужно хотя бы две статьи: отметьте их «✓ Подходит» или выберите выше «все статьи списка».")}
+    job = {"running": True, "done": 0, "total": len(dois), "error": ""}
+    with S.lock:
+        S.map_jobs[data["list"]] = job
+    keys = ds.load_keys()
+
+    def progress(done, total):
+        with S.lock:
+            job.update(done=done, total=total)
+
+    def run():
+        try:
+            links = rv.citation_links(dois, keys, progress)
+            graph = rv.map_graph(links, titles)
+            with S.lock:
+                data["map"] = dict(graph, made=time.strftime("%Y-%m-%d %H:%M"), scope=scope, asked=len(dois),
+                                   unknown=len(dois) - len(links))
+                rv.save_review(INBOX, data)
+            app_log(f"Map of {data['list']}: {len(graph['nodes'])} papers, {len(graph['edges'])} links, "
+                    f"{len(graph['groups'])} groups")
+        except Exception as exc:
+            app_log(f"Map error: {exc}\n{traceback.format_exc()}")
+            with S.lock:
+                job["error"] = tr("Карта не построилась: {error}", error=exc)
+        finally:
+            with S.lock:
+                job["running"] = False
+
+    threading.Thread(target=run, daemon=True).start()
+    return {}
+
+
+def map_state(name: str) -> dict:
+    """The map with what the window needs about each paper (name, title, year, downloaded)."""
+    data = get_review(name)
+    with S.lock:
+        job = dict(S.map_jobs.get(data["list"]) or {})
+        graph = json.loads(json.dumps(data.get("map"))) if data.get("map") else None
+        records = {d: dict(r) for d, r in data["records"].items()}
+        items = [dict(i) for i in S.items]
+    if graph:
+        pdfs = pt.find_pdfs([n["doi"] for n in graph["nodes"]], pdf_dir(), REPORT_PATH, items)
+        for n in graph["nodes"]:
+            rec = records.get(n["doi"], {})
+            n.update(ref=short_ref(rec) if rec else n["doi"], title=rec.get("title") or n["doi"],
+                     year=rec.get("year") or "", pdf=n["doi"] in pdfs)
+    return {"job": job, "map": graph}
 
 
 def open_pdf(doi: str, page: int = 0) -> dict:
@@ -3152,6 +3216,14 @@ def handle_api(path: str, body: dict) -> dict:
                 saved = save_table(name, scope, columns)
                 return {"name": saved.name, "folder": str(BIBLIO_DIR)}
             return table_rows(name, scope, columns)
+        except FileNotFoundError:
+            return {"error": tr("Список не найден в папке inbox.")}
+
+    if path in ("/api/map_start", "/api/map"):              # v9.1 «🕸 Карта статей»
+        try:
+            if path == "/api/map_start":
+                return start_map(body.get("list"), str(body.get("scope") or "included"))
+            return map_state(body.get("list"))
         except FileNotFoundError:
             return {"error": tr("Список не найден в папке inbox.")}
 
