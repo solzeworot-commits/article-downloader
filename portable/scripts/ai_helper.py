@@ -621,6 +621,101 @@ def extract_table(provider: str, keys: dict, columns: list[str], title: str, tex
     return cells, float(answer["cost"] or 0)
 
 
+# ---------------------------------------------------------------------------
+# v9.0 «💬 Спросить по своим статьям»: the words to look for, then an answer
+# only from the excerpts the program found in the user's own PDFs.
+# ---------------------------------------------------------------------------
+TERMS_SCHEMA = ("question_terms", {
+    "type": "object",
+    "properties": {"groups": {"type": "array", "items": {"type": "array", "items": {"type": "string"}}}},
+    "required": ["groups"],
+    "additionalProperties": False,
+})
+TERMS_INSTRUCTIONS = """A researcher asks a question about their scientific papers (mostly in English).
+Give the words to look for in the text of the papers: 2 to 6 groups, one group per idea of the question,
+each group 1 to 6 English words or short phrases as they would appear in a paper (synonyms, other spellings,
+units, abbreviations), in lower case; word stems are welcome (extract also finds extraction).
+Reply with JSON only: {"groups": [["ultrasound", "ultrasonic", "sonication"], ["frequency", "khz"]]}"""
+
+ANSWER_SCHEMA = ("answer_from_papers", {
+    "type": "object",
+    "properties": {
+        "found": {"type": "boolean"},
+        "points": {"type": "array", "items": {
+            "type": "object",
+            "properties": {"text": {"type": "string"},
+                           "sources": {"type": "array", "items": {"type": "integer"}}},
+            "required": ["text", "sources"],
+            "additionalProperties": False}},
+        "summary": {"type": "string"},
+    },
+    "required": ["found", "points", "summary"],
+    "additionalProperties": False,
+})
+ANSWER_INSTRUCTIONS = """You answer a researcher's question using ONLY the numbered excerpts from their own papers below
+(E1, E2, … each with its paper and page).
+- Answer in {lang_name}, briefly and concretely: numbers, conditions, materials, as the excerpts give them.
+- "points": 1 to 8 statements in {lang_name}; each has "sources": the numbers of the excerpts it rests on
+  (E3 is 3). Every statement must be supported by its excerpts; add nothing from elsewhere.
+- If the papers disagree, say so, with the sources of each side.
+- "summary": one or two sentences in {lang_name} with the overall answer.
+- If the excerpts do not answer the question, set "found" to false, leave "points" empty and say in
+  "summary" what is missing.
+Do not search the web and do not invent papers, numbers or pages. Reply with JSON only:
+{"found": true, "points": [{"text": "...", "sources": [1, 3]}], "summary": "..."}"""
+ASK_EXCERPT_CHARS = 1400
+
+
+def question_terms(provider: str, keys: dict, question: str, lang: str = "ru") -> tuple[list, float]:
+    """The groups of words to look for in the papers, and the cost."""
+    answer = ask(provider, keys, TERMS_INSTRUCTIONS, f"Question: {str(question or '').strip()[:1000]}",
+                 search=False, max_tokens=400, lang=lang, timeout=120, schema=TERMS_SCHEMA)
+    data = _json_part(answer["text"])
+    groups = []
+    for group in (data.get("groups") if isinstance(data, dict) else data) or []:
+        words = [re.sub(r"\s+", " ", str(w)).strip().lower() for w in (group if isinstance(group, list) else [group])]
+        words = [w for w in words if 2 <= len(w) <= 60][:8]
+        if words:
+            groups.append(words)
+    if not groups:
+        raise AIError("bad_answer", tr("ИИ ответил не по форме. Нажмите кнопку ещё раз."))
+    return groups[:6], float(answer["cost"] or 0)
+
+
+def answer_from_papers(provider: str, keys: dict, question: str, excerpts: list[dict],
+                       lang: str = "ru") -> tuple[dict, float]:
+    """excerpts: [{"label", "page", "text"}] -> ({"found", "points": [{"text", "sources": [i]}], "summary"}, cost);
+    the sources are indexes into excerpts; a statement without a valid source is dropped."""
+    lang_name = "Russian" if lang == "ru" else "English"
+    parts = [f"Question: {str(question or '').strip()[:1000]}", ""]
+    for i, ex in enumerate(excerpts, 1):
+        parts.append(f"E{i} — {ex.get('label', '')}, page {ex.get('page', '?')}:\n"
+                     f"{str(ex.get('text') or '')[:ASK_EXCERPT_CHARS]}\n")
+    answer = ask(provider, keys, ANSWER_INSTRUCTIONS.replace("{lang_name}", lang_name), "\n".join(parts),
+                 search=False, max_tokens=1500, lang=lang, timeout=240, schema=ANSWER_SCHEMA)
+    data = _json_part(answer["text"])
+    if not isinstance(data, dict):
+        raise AIError("bad_answer", tr("ИИ ответил не по форме. Нажмите кнопку ещё раз."))
+    points = []
+    for pt_ in data.get("points") or []:
+        if not isinstance(pt_, dict):
+            continue
+        text = re.sub(r"\s+", " ", str(pt_.get("text") or "")).strip()[:1200]
+        src = []
+        for n in pt_.get("sources") or []:
+            try:
+                n = int(str(n).lstrip("Ee"))
+            except (TypeError, ValueError):
+                continue
+            if 1 <= n <= len(excerpts) and n - 1 not in src:
+                src.append(n - 1)
+        if text and src:                     # no source — not from the papers: dropped
+            points.append({"text": text, "sources": src})
+    summary = re.sub(r"\s+", " ", str(data.get("summary") or "")).strip()[:1500]
+    found = bool(data.get("found")) and bool(points)
+    return {"found": found, "points": points if found else [], "summary": summary}, float(answer["cost"] or 0)
+
+
 OUTLINE_SCHEMA = ("review_outline", {
     "type": "object",
     "properties": {

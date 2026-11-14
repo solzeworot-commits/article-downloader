@@ -150,6 +150,45 @@ def search_pages(pages: list[str], terms: list[str], max_hits: int = 3, near: in
     return hits, count
 
 
+def rank_passages(pages: list[str], groups: list[list[str]], size: int = 1400, top: int = 3) -> list[dict]:
+    """v9.0 «💬 Спросить по своим статьям»: the best stretches of an article's pages for a question.
+
+    groups: one group per idea of the question, any word of a group counts for it
+    (["ultrasound", "sonication"], ["khz", "frequency"]). A page counts when it has at
+    least two ideas (one, if the question has one); its stretch of `size` characters
+    with the most ideas and words is taken. [{"page", "text", "score"}], the best first.
+    """
+    groups = [[str(w).lower().strip() for w in g if len(str(w).strip()) >= 2] for g in groups or []]
+    groups = [g for g in groups if g]
+    if not groups:
+        return []
+    need = 1 if len(groups) == 1 else 2
+    found = []
+    for number, text in enumerate(pages, 1):
+        low = text.lower()
+        hits = sorted((m.start(), gi) for gi, group in enumerate(groups) for w in group
+                      for m in re.finditer(re.escape(w), low))
+        if len({gi for _, gi in hits}) < need:
+            continue
+        best = None
+        for pos, _ in hits:
+            a = max(0, pos - size // 3)
+            inside = [gi for p_, gi in hits if a <= p_ < a + size]
+            key = (len(set(inside)), len(inside))
+            if best is None or key > best[0]:
+                best = (key, a)
+        (ideas, count), a = best
+        if ideas < need:
+            continue
+        a = text.rfind(" ", 0, a) + 1 if a else 0
+        b = text.find(" ", min(len(text), a + size))
+        b = len(text) if b < 0 else b
+        found.append({"page": number, "text": re.sub(r"\s+", " ", text[a:b]).strip(),
+                      "score": ideas * 100 + min(count, 50)})
+    found.sort(key=lambda x: -x["score"])
+    return found[:top]
+
+
 def sanitized(doi: str) -> str:
     """The DOI as it appears in the names of the downloaded files (see article_downloader.sanitize_filename)."""
     return re.sub(r"\s+", "_", re.sub(r'[<>:"/\\|?*]+', "_", doi)).strip("._ ").lower()

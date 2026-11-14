@@ -85,7 +85,7 @@ PDF_TEXT_CACHE = ROOT / "logs" / "pdf_text"      # the pages of the PDFs, for «
 BIBLIO_DIR = ROOT / "Список литературы"
 
 UI_PORT = 17865
-APP_VERSION = "8.9"
+APP_VERSION = "9.0"
 APP_AUTHOR = "Bucaneiro"
 OFFICIAL_URL = "https://github.com/solzeworot-commits/article-downloader"
 DOWNLOAD_URL = OFFICIAL_URL + "/releases/tag/portable-latest"
@@ -451,6 +451,7 @@ class State:
         self.table_jobs: dict[str, dict] = {}    # list file name -> AI table progress
         self.find_jobs: dict[str, dict] = {}     # list file name -> search in the text of the PDFs
         self.outline_jobs: dict[str, dict] = {}  # list file name -> AI draft outline of the review
+        self.ask_jobs: dict[str, dict] = {}      # list file name -> «💬 Спросить по своим статьям» (v9.0)
         self.reflist: dict = {}                   # «Привести в порядок свой список» (v8.7): the last one
         # v8.8 «☁ Облако»: the lists taken from the cloud (work computer), the last
         # status written, the size/mtime of the lists seen once (taken when unchanged
@@ -1696,6 +1697,95 @@ def start_pdf_find(name: str, scope: str, query: str) -> dict:
             app_log(f"PDF search error: {exc}\n{traceback.format_exc()}")
             with S.lock:
                 job["error"] = tr("Поиск прервался: {error}", error=exc)
+        finally:
+            with S.lock:
+                job["running"] = False
+
+    threading.Thread(target=run, daemon=True).start()
+    return {}
+
+
+# ---------------------------------------------------------------------------
+# v9.0 «💬 Спросить по своим статьям»: an answer only from the user's PDFs.
+# The AI turns the question into words to look for; the program finds the best
+# stretches of the PDFs (pdf_table.rank_passages) and gives the AI only those;
+# every statement of the answer points to its excerpts (paper and page).
+# ---------------------------------------------------------------------------
+ASK_EXCERPTS = 14          # excerpts sent to the AI (about 1400 characters each)
+ASK_PER_PAPER = 3
+
+
+def start_ask(name: str, scope: str, question: str) -> dict:
+    data = get_review(name)
+    provider, keys = ai_service()
+    if not provider:
+        return {"error": tr("ИИ-помощник не подключён: вставьте ключ (кнопка «🤖 ИИ-помощник» на главной).")}
+    question = re.sub(r"\s+", " ", str(question or "")).strip()[:1000]
+    if len(question) < 5:
+        return {"error": tr("Напишите вопрос — например, при какой температуре выход наибольший.")}
+    with S.lock:
+        old = S.ask_jobs.get(data["list"])
+        if old and old["running"]:
+            return {}
+        recs = {d: dict(data["records"][d]) for d in scope_records(data, scope)}
+        items = [dict(i) for i in S.items]
+    if not recs:
+        return {"error": tr("В списке нет статей для поиска — выберите выше «все статьи списка».")}
+    pdfs = pt.find_pdfs(list(recs), pdf_dir(), REPORT_PATH, items)
+    if not pdfs:
+        return {"error": tr("У этих статей ещё нет скачанных PDF — скачайте их на шаге «⬇ Скачать статьи».")}
+    job = {"running": True, "stage": "terms", "done": 0, "total": len(pdfs), "question": question,
+           "no_pdf": len(recs) - len(pdfs), "no_text": 0, "answer": None, "error": "", "cost": 0.0,
+           "provider": provider}
+    with S.lock:
+        S.ask_jobs[data["list"]] = job
+    lang = i18n.LANG
+
+    def run():
+        try:
+            groups, cost = ai.question_terms(provider, keys, question, lang)
+            with S.lock:
+                job.update(stage="read", cost=cost, words=[w for g in groups for w in g][:24])
+            found = []
+            for doi, path in pdfs.items():
+                pages = pt.pdf_pages(path, PDF_TEXT_CACHE)
+                for ex in pt.rank_passages(pages, groups, top=ASK_PER_PAPER) if pages else []:
+                    found.append(dict(ex, doi=doi))
+                with S.lock:
+                    job["done"] += 1
+                    job["no_text"] += 0 if pages else 1
+            found.sort(key=lambda x: -x["score"])
+            excerpts = found[:ASK_EXCERPTS]
+            if not excerpts:
+                with S.lock:
+                    job["answer"] = {"found": False, "points": [], "papers": 0, "summary": tr(
+                        "В скачанных PDF не нашлось мест об этом. Переформулируйте вопрос или проверьте, что нужные "
+                        "статьи скачаны.")}
+                return
+            for ex in excerpts:
+                ex["ref"] = short_ref(recs[ex["doi"]])
+            with S.lock:
+                job["stage"] = "answer"
+            result, cost2 = ai.answer_from_papers(
+                provider, keys, question,
+                [{"label": f"{ex['ref']} — {recs[ex['doi']].get('title') or ex['doi']}", "page": ex["page"],
+                  "text": ex["text"]} for ex in excerpts], lang)
+            points = [{"text": p_["text"],
+                       "cites": [{"doi": excerpts[i]["doi"], "page": excerpts[i]["page"], "ref": excerpts[i]["ref"]}
+                                 for i in p_["sources"]]} for p_ in result["points"]]
+            with S.lock:
+                job["cost"] = cost + cost2
+                job["answer"] = {"found": result["found"], "summary": result["summary"], "points": points,
+                                 "papers": len({ex["doi"] for ex in excerpts})}
+            app_log(f"Asked {data['list']}: {len(points)} points from {len(excerpts)} excerpts, "
+                    f"cost ${cost + cost2:.4f}")
+        except ai.AIError as exc:
+            with S.lock:
+                job["error"] = exc.message
+        except Exception as exc:
+            app_log(f"Ask error: {exc}\n{traceback.format_exc()}")
+            with S.lock:
+                job["error"] = tr("Ответ не получился: {error}", error=exc)
         finally:
             with S.lock:
                 job["running"] = False
@@ -3062,6 +3152,17 @@ def handle_api(path: str, body: dict) -> dict:
                 saved = save_table(name, scope, columns)
                 return {"name": saved.name, "folder": str(BIBLIO_DIR)}
             return table_rows(name, scope, columns)
+        except FileNotFoundError:
+            return {"error": tr("Список не найден в папке inbox.")}
+
+    if path in ("/api/ask", "/api/ask_state"):              # v9.0 «💬 Спросить по своим статьям»
+        try:
+            if path == "/api/ask":
+                return start_ask(body.get("list"), str(body.get("scope") or ""), str(body.get("q") or ""))
+            data = get_review(body.get("list"))
+            with S.lock:
+                job = S.ask_jobs.get(data["list"])
+                return {"job": json.loads(json.dumps(job)) if job else None, "ai": bool(ai_service()[0])}
         except FileNotFoundError:
             return {"error": tr("Список не найден в папке inbox.")}
 
