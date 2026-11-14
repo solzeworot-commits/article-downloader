@@ -90,6 +90,8 @@ jobs:
           if ($LASTEXITCODE) { throw "cloud_test: облачный мост (дом ↔ работа)" }
           & $py -E -s -X utf8 tests\tray_test.py (Join-Path $app "scripts")
           if ($LASTEXITCODE) { throw "tray_test: значок в трее" }
+          & $py -E -s -X utf8 tests\supplementary_test.py (Join-Path $app "scripts")
+          if ($LASTEXITCODE) { throw "supplementary_test: дополнительные материалы (Edge)" }
           & $py -E -s -X utf8 tests\table_test.py (Join-Path $app "scripts")
           if ($LASTEXITCODE) { throw "table_test: таблица по статьям" }
           & $py -E -s -X utf8 tests\ai_test.py (Join-Path $app "scripts")

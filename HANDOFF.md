@@ -901,6 +901,36 @@ https://github.com/solzeworot-commits/article-downloader/releases/download/porta
 - Пользователь прислал в чат настоящий ключ — попросили отозвать его в console.anthropic.com. Ключи никуда, кроме
   окна программы (`%LOCALAPPDATA%\ArticleDownloader\keys.json`), не вставлять.
 
+## 2я. Версия 8.9: дополнительные материалы (Supplementary)
+
+- Пользователь: «саплиментари скачивает? … по умолчанию скачивает, а если не нужны пусть снимает пользователь, но
+  надо чтобы эту кнопку было видно». Раньше загрузчик Supplementary намеренно пропускал (`is_supplement_url` в
+  `discover_pdf_candidates`, чтобы не сохранить SI вместо статьи) — это осталось.
+- `article_downloader.py`, раздел «v8.9: supplementary materials»: после того как статья сохранена, в
+  `_process_one_once` (все издательства, кроме eLIBRARY и CNKI) `download_supplements(context, landing, path)`
+  открывает страницу статьи (`resolved` или `https://doi.org/<doi>`) в новой вкладке, `supplement_links(page)`
+  берёт ссылки по адресу (`is_supplement_url`: suppl/supporting/_si_001/esm/mmc; MDPI `…/s1`) или по тексту
+  («Supplementary…», «Supporting information», «Data Sheet», «дополнительн…» — если ссылка ведёт на файл или в
+  тексте «Download»), без картинок/видео/HTML. Каждую — `context.request` той же вошедшей сессией: сначала HEAD
+  (HTML и > 50 МБ — пропуск), потом GET; не 2xx, HTML, картинки/видео, < 100 байт, > 50 МБ и копия самой статьи
+  (тот же SHA-1) — пропуск. Не больше 15 файлов, пауза 2 с, уважается `ARTICLE_JOB_DEADLINE`; страница с проверкой
+  «я не робот» — пропуск (капчи не трогаем). Имя — из Content-Disposition или адреса (`_supplement_name`), папка
+  `<pdf_dir>/<имя статьи>_supplementary/`. Ошибки этого шага статью не роняют. В stdout — `SUPPLEMENTS|n|папка`.
+  `ARTICLE_SUPPLEMENTARY=0` — выключено.
+- `app.py`: настройка `supplementary` (по умолчанию True) → `ARTICLE_SUPPLEMENTARY` в `child_env`; `_run_item` читает
+  `SUPPLEMENTS|`, у статьи `supp` и `supp_dir`; `/api/open {what: "supp", id}` открывает папку.
+- UI: синяя полоса `#supp-bar` с галочкой вверху экрана «⬇ Скачать статьи» (снята — серая), та же галочка в
+  «⚙ Настройках», кнопка «📎 N доп.» у статьи в очереди, абзац в инструкции. `pdf_table.find_pdfs` смотрит только
+  `pdf_dir/*.pdf` — файлы из `_supplementary` не путаются со статьями.
+- Тест `tests/supplementary_test.py` — настоящий браузер (Edge/Chrome или `ARTICLE_TEST_BROWSER`): ссылки ACS/Springer/
+  Elsevier/MDPI/по тексту и ловушки (видео, картинка, страница журнала, 60 МБ — только HEAD, 403, копия статьи,
+  повтор), страница без материалов, страница проверки, галочка выключена. В CI Windows (Edge) и Mac (Chrome).
+  `tests/fake_site.py`: у поддельных статей есть Supporting Information и Supplementary Data. Стенд (Chromium в Xvfb,
+  `harness.py`, капча пройдена `pass_captcha.py`): обе статьи + по 2 файла, видео пропущено; галочка снята в окне —
+  третья статья без папки `_supplementary`.
+- Не проверено на настоящих сайтах (из среды сборки они закрыты): ScienceDirect рисует ссылки mmc скриптом, у Wiley
+  и T&F бывает Cloudflare для запросов без браузера (тогда файл просто не скачается, статья остаётся).
+
 ## 3. Что проверено в 6.0 (Linux, Chromium в Xvfb, поддельное издательство)
 
 Настоящие сайты издательств из среды сборки были закрыты сетью, поэтому всё

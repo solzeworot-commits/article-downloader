@@ -412,6 +412,16 @@
                       font-size: 14px; letter-spacing: .05em; white-space: nowrap; }
   .ai-bar.ok { background: linear-gradient(135deg, #22c55e, #15803d); animation: none; }
   .ai-bar.warn { background: linear-gradient(135deg, #f59e0b, #b45309); animation: none; }
+  /* v8.9: the supplementary tick on the download screen — big enough to be seen */
+  .supp-bar { display: flex; align-items: center; gap: 14px; margin: 0 0 14px; padding: 12px 18px; border-radius: 14px;
+              border: 2px solid #93c5fd; background: var(--blue-soft); cursor: pointer; }
+  .supp-bar input { width: 22px; height: 22px; flex: none; cursor: pointer; }
+  .supp-bar .ico { font-size: 28px; line-height: 1; }
+  .supp-bar .txt { display: flex; flex-direction: column; gap: 2px; }
+  .supp-bar b { font-size: 17px; }
+  .supp-bar small { font-size: 13px; color: var(--muted); }
+  .supp-bar.off { border-color: var(--line); background: var(--card); }
+  .supp-bar.off b { color: var(--muted); }
   /* v8.8: the cloud bar next to the AI helper (one row) */
   .cl-row { display: flex; flex-wrap: wrap; gap: 14px; margin: 0 0 16px; }
   .cl-row > .ai-bar, .cl-row > .cloud-bar { flex: 1 1 360px; width: auto; margin: 0; }
@@ -576,6 +586,11 @@
 
   <section id="view-download" class="view" hidden>
   <div id="banner" class="banner grey"><span class="msg">Подключаюсь…</span></div>
+
+  <label class="supp-bar" id="supp-bar" title="Supplementary — дополнительные материалы к статье: таблицы с данными, приложения, методики">
+    <input type="checkbox" id="supp-tick" checked><span class="ico">📎</span>
+    <span class="txt"><b>Скачивать и дополнительные материалы (Supplementary)</b>
+      <small>таблицы с данными, приложения и другие файлы к статье — в папку рядом с её PDF. Не нужны — снимите галочку.</small></span></label>
 
   <div class="card" id="first-run" hidden>
     <h2><span>👋 Первый запуск на этом компьютере</span><span class="grow"></span><button id="btn-first-ok">Понятно</button></h2>
@@ -1176,6 +1191,7 @@ extraction"></textarea>
     <p>Когда выберете список, программа откроет базы (ScienceDirect, Springer, Wiley…) в своём браузере. Некоторые сайты сначала просят пройти проверку «я не робот» — пройдите её, дальше программа качает сама, можно уходить.</p>
     <p>Ждать, пока откроются все базы, не обязательно: нажмите <b>«Начать, не дожидаясь»</b>. Скачивание начнётся сразу, а капчу пройдёте, когда сайт её покажет — программа подскажет.</p>
     <p>На новом компьютере сначала один раз войдите через университет: кнопка <b>«🏛 Вход через организацию»</b>.</p>
+    <p>📎 Вместе со статьёй программа скачивает и её <b>дополнительные материалы (Supplementary)</b>: таблицы с данными, приложения, методики. Они ложатся в папку рядом с PDF, а в очереди у статьи появляется кнопка «📎 N доп.». Не нужны — снимите галочку вверху экрана «⬇ Скачать статьи».</p>
 
     <h4>5. 📚 Список литературы и схема PRISMA</h4>
     <p>Готовый список литературы по ГОСТ, APA, Vancouver или в стиле нужного журнала (около 11 000 журналов) — скопировать в Word или сохранить файлом.</p>
@@ -1242,6 +1258,10 @@ extraction"></textarea>
     <div class="form-row">
       <label for="s-shortcut">Значок «Скачать статьи» на рабочем столе</label>
       <span><input type="checkbox" id="s-shortcut"></span>
+    </div>
+    <div class="form-row">
+      <label for="s-supp">Скачивать и дополнительные материалы (Supplementary)</label>
+      <span><input type="checkbox" id="s-supp"></span>
     </div>
     <div class="form-row" id="s-tray-row">
       <label for="s-tray">Сворачивать окно в трей (значок у часов)</label>
@@ -1460,6 +1480,7 @@ function renderItems() {
     else if (it.message) msg = it.message;
     const acts = [];
     if (it.status === "success") acts.push(`<button data-open="${it.id}">Открыть</button>`);
+    if (it.status === "success" && it.supp) acts.push(`<button data-supp="${it.id}" title="Открыть папку с дополнительными материалами">📎 ${it.supp} доп.</button>`);
     if (it.attempts) acts.push(`<button data-log="${it.id}">Журнал</button>`);
     if (it.status !== "running") acts.push(`<button data-remove="${it.id}" title="Убрать из списка">✕</button>`);
     return `<tr class="${it.status}"><td class="num">${n + 1}</td>` +
@@ -1579,6 +1600,7 @@ document.addEventListener("click", async (e) => {
   if (!t) return;
   if (t.dataset.login) api("/api/login", { key: t.dataset.login });
   if (t.dataset.open) api("/api/open", { what: "file", id: +t.dataset.open });
+  if (t.dataset.supp) api("/api/open", { what: "supp", id: +t.dataset.supp });
   if (t.dataset.remove) api("/api/remove", { id: +t.dataset.remove });
   if (t.dataset.log) {
     const it = items.find((x) => x.id === +t.dataset.log);
@@ -1602,6 +1624,7 @@ $("btn-settings").onclick = () => {
   $("s-pdf").value = s.pdf_dir;
   $("s-shortcut").checked = s.desktop_shortcut;
   $("s-tray").checked = s.minimize_to_tray !== false;
+  $("s-supp").checked = s.supplementary !== false;
   $("s-tray-row").hidden = state.platform !== "windows";
   $("s-bases").innerHTML = state.warm.bases.map((b) =>
     `<label><input type="checkbox" data-base="${b.key}" ${s.bases[b.key] !== false ? "checked" : ""}> ${esc(b.name)}</label>`).join("");
@@ -1619,6 +1642,7 @@ $("btn-save").onclick = async () => {
     pdf_dir: $("s-pdf").value,
     desktop_shortcut: $("s-shortcut").checked,
     minimize_to_tray: $("s-tray").checked,
+    supplementary: $("s-supp").checked,
     bases,
   });
   $("dlg-settings").close();
@@ -1714,6 +1738,7 @@ function renderExtra() {
   renderApiHub(s.keys);
   renderAi();
   renderCloud();
+  renderSupp();
   renderUpdateJob(s.update_job);
   renderKeysNote();
   renderSources();
@@ -2382,6 +2407,21 @@ function renderAi() {
   $("rv-ai-off").hidden = on;
   $("rv-ai-on").hidden = !on;
 }
+// ---- supplementary materials (v8.9): the tick on the download screen ----------------
+let suppSaving = false;
+function renderSupp() {
+  if (!state || !state.settings || suppSaving) return;
+  const on = state.settings.supplementary !== false;
+  $("supp-tick").checked = on;
+  $("supp-bar").classList.toggle("off", !on);
+}
+$("supp-tick").onchange = async () => {
+  const on = $("supp-tick").checked;
+  $("supp-bar").classList.toggle("off", !on);
+  suppSaving = true;
+  try { await api("/api/settings", { supplementary: on }); if (state && state.settings) state.settings.supplementary = on; }
+  finally { suppSaving = false; }
+};
 // ---- the cloud bridge (v8.8): the home computer sends lists, the work computer downloads ----
 const CL_COLOR = { never: "red", stale: "red", nofolder: "red", stopped: "red", wait: "red",
   run: "yellow", limit: "yellow", captcha: "orange", done: "green", idle: "green" };

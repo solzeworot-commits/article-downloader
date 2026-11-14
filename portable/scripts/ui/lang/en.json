@@ -1018,7 +1018,15 @@
   "Отключить облако на этом компьютере? Файлы в облаке останутся.": "Turn the cloud off on this computer? The files in the cloud stay.",
   "Облако на этом компьютере отключено.": "The cloud is turned off on this computer.",
   "или вставьте путь к папке облака на этом компьютере (не ссылку из браузера), например G:\\Мой диск": "or paste the path of the cloud folder on this computer (not a link from the browser), for example G:\\My Drive",
-  "Сворачивать окно в трей (значок у часов)": "Minimize the window to the tray (the icon by the clock)"
+  "Сворачивать окно в трей (значок у часов)": "Minimize the window to the tray (the icon by the clock)",
+  "Supplementary — дополнительные материалы к статье: таблицы с данными, приложения, методики": "Supplementary — the article's additional materials: data tables, appendices, methods",
+  "Скачивать и дополнительные материалы (Supplementary)": "Also download the supplementary materials",
+  "таблицы с данными, приложения и другие файлы к статье — в папку рядом с её PDF. Не нужны — снимите галочку.": "data tables, appendices and other files of the article — into a folder next to its PDF. Not needed — untick.",
+  "📎 Вместе со статьёй программа скачивает и её": "📎 Together with an article the program also downloads its",
+  "дополнительные материалы (Supplementary)": "supplementary materials",
+  ": таблицы с данными, приложения, методики. Они ложатся в папку рядом с PDF, а в очереди у статьи появляется кнопка «📎 N доп.». Не нужны — снимите галочку вверху экрана «⬇ Скачать статьи».": ": data tables, appendices, methods. They go into a folder next to the PDF, and the article in the queue gets a «📎 N suppl.» button. Not needed — untick the box at the top of the «⬇ Download articles» screen.",
+  "Открыть папку с дополнительными материалами": "Open the folder with the supplementary materials",
+  "доп.": "suppl."
  },
  "messages": {
   "экспорт": "export",

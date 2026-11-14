@@ -1,4 +1,4 @@
-﻿ARTICLE DOWNLOADER, portable version 8.8.3
+﻿ARTICLE DOWNLOADER, portable version 8.9
 ========================================
 
 Runs on any computer with Windows 10 or 11. Nothing to install: Python and everything
@@ -45,6 +45,10 @@ HOW TO USE
    The program opens the database sites in the downloader's browser. If a site asks you
    to pass a check («I am not a robot»), pass it. Then you can leave: downloading starts
    by itself.
+   📎 Together with an article its supplementary materials are downloaded too: data tables,
+   appendices, methods — into the «<article name>_supplementary» folder next to the PDF, and
+   the article in the queue gets a «📎 N suppl.» button. Not needed — untick the blue bar at
+   the top of the «⬇ Download articles» screen. Videos, pictures and files over 50 MB are skipped.
    No access to the databases at home? The «☁ To work» button on a list sends it to the
    work computer through the cloud — see the «CLOUD» section below.
 

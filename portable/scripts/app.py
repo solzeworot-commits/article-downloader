@@ -85,7 +85,7 @@ PDF_TEXT_CACHE = ROOT / "logs" / "pdf_text"      # the pages of the PDFs, for «
 BIBLIO_DIR = ROOT / "Список литературы"
 
 UI_PORT = 17865
-APP_VERSION = "8.8.3"
+APP_VERSION = "8.9"
 APP_AUTHOR = "Bucaneiro"
 OFFICIAL_URL = "https://github.com/solzeworot-commits/article-downloader"
 DOWNLOAD_URL = OFFICIAL_URL + "/releases/tag/portable-latest"
@@ -182,6 +182,7 @@ DEFAULT_SETTINGS = {
     "screen": None,        # {"w", "h", "x", "y"} the screen's work area the window reported (CSS pixels)
     "cloud": {},           # v8.8 «☁ Облако»: {"dir", "role": home|work, "pdf", "prev_pdf_dir"}
     "minimize_to_tray": True,   # v8.8.1: on Windows the minimized window goes to the tray (tray.py)
+    "supplementary": True,      # v8.9: also the article's supplementary files («📎 Supplementary»)
     "tray_hint_shown": False,   # the «программа здесь, у часов» notification was shown once
     "bases": {b[0]: True for b in BASES},
 }
@@ -252,6 +253,7 @@ def child_env(deadline_sec: float | None = None) -> dict:
         ARTICLE_BROWSER=str(S.settings.get("browser") or "auto"),
         ARTICLE_PDF_DIR=str(pdf_dir()),
         ARTICLE_LOG_DIR=str(LOGS),
+        ARTICLE_SUPPLEMENTARY="1" if S.settings.get("supplementary", True) else "0",
     )
     if deadline_sec:
         env["ARTICLE_JOB_DEADLINE"] = f"{time.time() + deadline_sec:.0f}"
@@ -823,6 +825,10 @@ def _run_item(item: dict):
             if line.startswith("RESULT|"):
                 status, _, message = line[7:].partition("|")
                 result.update(status=status, message=message)
+            elif line.startswith("SUPPLEMENTS|"):            # v8.9: «SUPPLEMENTS|<count>|<folder>»
+                count, _, folder = line[12:].partition("|")
+                if count.isdigit():
+                    result.update(supp=int(count), supp_dir=folder)
 
     reader = threading.Thread(target=read_output, daemon=True)
     reader.start()
@@ -865,6 +871,8 @@ def _run_item(item: dict):
         item["status"] = status
         item["message"] = message[:500]
         item["file"] = message if status == "success" else ""
+        item["supp"] = result.get("supp", 0) if status == "success" else 0
+        item["supp_dir"] = result.get("supp_dir", "") if status == "success" else ""
         item["finished"] = time.strftime("%Y-%m-%d %H:%M")
         S.touch_items()
 
@@ -2761,7 +2769,7 @@ def public_state(known_version: int) -> dict:
         if known_version != S.items_version:
             data["items"] = [
                 {k: i.get(k, "") for k in ("id", "query", "status", "file",
-                                            "message", "attempts")}
+                                            "message", "attempts", "supp")}
                 for i in S.items
             ]
     data["cloud"] = cloud_state()      # outside the lock: a cloud folder can be slow to read
@@ -2780,7 +2788,7 @@ def update_settings(new: dict):
                     S.settings[key] = max(0, int(value))
                 except (TypeError, ValueError):
                     pass
-            elif key in ("title_for_plain_lines", "desktop_shortcut", "minimize_to_tray"):
+            elif key in ("title_for_plain_lines", "desktop_shortcut", "minimize_to_tray", "supplementary"):
                 S.settings[key] = bool(value)
             elif key in ("browser", "pdf_dir"):
                 S.settings[key] = str(value or "").strip()
@@ -2869,6 +2877,10 @@ def handle_api(path: str, body: dict) -> dict:
             item = S.item(body.get("id"))
             if item and item.get("file") and Path(item["file"]).exists():
                 open_path(Path(item["file"]))
+        elif what == "supp":                     # v8.9: the article's supplementary files
+            item = S.item(body.get("id"))
+            if item and item.get("supp_dir") and Path(item["supp_dir"]).is_dir():
+                open_path(Path(item["supp_dir"]))
         return {}
 
     if path == "/api/login":

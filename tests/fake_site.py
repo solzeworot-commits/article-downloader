@@ -1,4 +1,5 @@
-"""Fake publisher for testing: Cloudflare-like check page until a cookie is set."""
+"""Fake publisher for testing: Cloudflare-like check page until a cookie is set;
+article pages with supplementary files (v8.9)."""
 import io
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pypdf import PdfWriter
@@ -43,11 +44,20 @@ class H(BaseHTTPRequestHandler):
 <meta name="citation_title" content="Fake article {n}">
 <meta name="citation_pdf_url" content="http://127.0.0.1:8000/pdf/{n}.pdf"></head>
 <body><h1>Fake article {n}</h1><p>Abstract text of a fake article used for testing the downloader.</p>
-<a href="/pdf/{n}.pdf">Download PDF</a></body></html>""".encode()
+<a href="/pdf/{n}.pdf">Download PDF</a>
+<h2>Supporting Information</h2>
+<a href="/doi/suppl/{n}/fake{n}_si_001.pdf">Supporting Information (PDF)</a>
+<a href="/esm/{n}/MediaObjects/{n}_MOESM1_ESM.csv">Supplementary Data 1</a>
+<a href="/suppl/{n}/movie_si_002.mp4">Video S1</a></body></html>""".encode()
             return self.send(200, body)
         if self.path.startswith("/pdf/"):
             n = self.path.rsplit("/", 1)[-1].split(".")[0]
             return self.send(200, pdf_bytes(n), "application/pdf")
+        # v8.9: the supplementary files of a fake article
+        if self.path.startswith("/doi/suppl/"):
+            return self.send(200, pdf_bytes("SI " + self.path.split("/")[3]), "application/pdf")
+        if self.path.startswith("/esm/"):
+            return self.send(200, b"sample;value\n" * 50, "text/csv")
         self.send(404, b"not found")
 
 
