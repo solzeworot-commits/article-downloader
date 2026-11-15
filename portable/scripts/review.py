@@ -296,6 +296,127 @@ def _candidate(work: dict) -> dict:
     }
 
 
+# ---------------------------------------------------------------------------
+# v9.1 «🕸 Карта статей»: who cites whom among the papers of a list (OpenAlex),
+# the groups of papers that cite each other and the words of their titles.
+# ---------------------------------------------------------------------------
+MAP_STOP = set("""a an and are as at be by for from has in into is it its of on or that the their this to was were
+which with without study studies effect effects using based analysis review novel new different evaluation
+approach approaches application applications role recent advances research method methods potential""".split())
+MAP_GROUPS = 8                         # coloured groups; the rest are drawn grey
+
+
+def citation_links(dois: list[str], keys: dict | None = None, progress=None) -> dict:
+    """{doi: {"id", "refs": [OpenAlex ids], "cited": cited_by_count}} for the DOIs OpenAlex knows."""
+    out, todo = {}, [d for d in dois if "," not in d and "|" not in d]
+    for i, chunk in enumerate(_chunks(todo, 50)):
+        data = _openalex(f"per-page=50&filter={_doi_filter(chunk)}&select=id,doi,referenced_works,cited_by_count", keys)
+        for work in data.get("results") or []:
+            doi = ds.normalize_doi(work.get("doi"))
+            if doi:
+                out[doi] = {"id": _work_id(work.get("id")), "refs": [_work_id(r) for r in work.get("referenced_works") or []],
+                            "cited": int(work.get("cited_by_count") or 0)}
+        if progress:
+            progress(min(len(todo), (i + 1) * 50), len(todo))
+    return out
+
+
+def _title_words(title: str) -> set:
+    return {w for w in re.findall(r"[a-zа-яё]{4,}", str(title or "").lower()) if w not in MAP_STOP}
+
+
+def _louvain(adj: dict) -> dict:
+    """{node: community} for an undirected graph {node: {neighbour: weight}} (Louvain: local moving,
+    then the communities become nodes, until nothing moves). Deterministic: sorted order, ties kept."""
+    nodes = sorted(adj)
+    member = {u: u for u in nodes}                       # original node -> current super-node
+    graph = {u: {v: w for v, w in adj[u].items() if v != u} for u in nodes}
+    loop = {u: 0.0 for u in nodes}
+    for _ in range(10):
+        k = {u: sum(graph[u].values()) + 2 * loop[u] for u in graph}
+        m2 = sum(k.values()) or 1.0
+        comm = {u: u for u in graph}
+        tot = dict(k)
+        moved_any = False
+        for _pass in range(30):
+            moved = False
+            for u in sorted(graph):
+                own = comm[u]
+                tot[own] -= k[u]
+                k_in = {}
+                for v, w in graph[u].items():
+                    k_in[comm[v]] = k_in.get(comm[v], 0.0) + w
+                def gain(c):
+                    return k_in.get(c, 0.0) - tot.get(c, 0.0) * k[u] / m2
+                best = own
+                for c in sorted(k_in, key=str):
+                    if gain(c) > gain(best) + 1e-9:
+                        best = c
+                comm[u] = best
+                tot[best] = tot.get(best, 0.0) + k[u]
+                if best != own:
+                    moved = moved_any = True
+            if not moved:
+                break
+        if not moved_any:
+            break
+        # The communities become the nodes of the next level.
+        new_graph, new_loop = {}, {}
+        for u in graph:
+            c = comm[u]
+            new_graph.setdefault(c, {})
+            new_loop[c] = new_loop.get(c, 0.0) + loop[u]
+            for v, w in graph[u].items():
+                cv = comm[v]
+                if cv == c:
+                    new_loop[c] += w / 2                 # an inner link, seen from both ends
+                else:
+                    new_graph[c][cv] = new_graph[c].get(cv, 0.0) + w
+        member = {o: comm[s_] for o, s_ in member.items()}
+        graph, loop = new_graph, new_loop
+    return member
+
+
+def map_graph(links: dict, titles: dict) -> dict:
+    """The map of a list from citation_links(): nodes, edges (citing -> cited, both in the list),
+    groups (papers that cite each other more than the rest: Louvain local moving) with the common
+    words of their titles."""
+    by_id = {v["id"]: d for d, v in links.items() if v.get("id")}
+    edges = sorted({(d, by_id[r]) for d, v in links.items() for r in v.get("refs") or [] if r in by_id and by_id[r] != d})
+    near = {d: set() for d in links}
+    for a, b in edges:
+        near[a].add(b)
+        near[b].add(a)
+    cited_in = {d: 0 for d in links}
+    cites = {d: 0 for d in links}
+    for a, b in edges:
+        cites[a] += 1
+        cited_in[b] += 1
+    # Groups: Louvain (modularity), in a fixed order so the same list always gives the same groups.
+    linked = sorted(d for d in links if near[d])
+    community = _louvain({d: {n: 1.0 for n in near[d]} for d in linked})
+    label = {d: community[d] for d in linked}
+    members = {}
+    for d in linked:
+        members.setdefault(label[d], []).append(d)
+    order = sorted(members.values(), key=lambda m: (-len(m), m[0]))
+    group = {}
+    groups = []
+    for n, mem in enumerate(order):
+        for d in mem:
+            group[d] = n
+        freq = {}
+        for d in mem:
+            for w in _title_words(titles.get(d, "")):
+                freq[w] = freq.get(w, 0) + 1
+        words = [w for w, c in sorted(freq.items(), key=lambda x: (-x[1], x[0])) if c >= max(2, len(mem) * 0.3)][:3]
+        groups.append({"n": n, "size": len(mem), "words": words})
+    nodes = [{"doi": d, "group": group.get(d, -1), "cited_in": cited_in[d], "cites": cites[d],
+              "cited": int(links[d].get("cited") or 0)} for d in links]
+    return {"nodes": nodes, "edges": [list(e) for e in edges], "groups": groups,
+            "alone": sum(1 for d in links if not near[d])}
+
+
 def snowball(dois: list[str], known: set[str], keys: dict | None = None, progress=None, stop=None,
              per_article: int = 200, limit: int = 60) -> dict:
     """Articles linked to the selected ones by citations ("snowballing").
