@@ -68,6 +68,8 @@ jobs:
           if ($LASTEXITCODE) { throw "parse_test" }
           & $py -E -s -X utf8 tests\search_test.py (Join-Path $app "scripts")
           if ($LASTEXITCODE) { throw "search_test" }
+          & $py -E -s -X utf8 tests\crossref_test.py (Join-Path $app "scripts")
+          if ($LASTEXITCODE) { throw "crossref_test: Crossref вместо OpenAlex после дневного лимита" }
           & $py -E -s -X utf8 tests\review_test.py (Join-Path $app "scripts")
           if ($LASTEXITCODE) { throw "review_test" }
           & $py -E -s -X utf8 tests\donate_test.py (Join-Path $app "scripts")

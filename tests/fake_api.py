@@ -13,6 +13,9 @@ Point the program at it with
 Keys: "good-scopus-key-1234" / "good-wos-key-5678" work; a key starting with
 "noaccess" gets Scopus' "not entitled" answer, "quota" a 429, "pending" the
 WoS 403 of an unapproved subscription; anything else is an invalid key.
+OPENALEX_QUOTA = True (or the word "dailylimit" in a search, for ui_flow.py) makes
+OpenAlex answer 429 — the daily limit of a keyless IP address; Crossref searches
+by query.bibliographic (v9.2) and keeps every search request in CROSSREF_SEEN.
 The response shapes copy the published examples of each API.
 """
 
@@ -22,7 +25,9 @@ import threading
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from urllib.parse import parse_qs, urlparse
 
-SCOPUS_TOTAL, WOS_TOTAL, OPENALEX_TOTAL = 60, 40, 30
+SCOPUS_TOTAL, WOS_TOTAL, OPENALEX_TOTAL, CROSSREF_TOTAL = 60, 40, 30, 500
+OPENALEX_QUOTA = False
+CROSSREF_SEEN = []
 # Stands in for ArticleDownloader_Portable.zip in the update tests.
 UPDATE_ZIP = b"PK\x05\x06" + b"\x00" * 18 + b"fake update archive " * 3000
 
@@ -47,6 +52,15 @@ def openalex_work(i):
     return {"doi": f"https://doi.org/10.9999/openalex.{i}" if i % 6 else None,
             "display_name": f"OpenAlex work {i}", "publication_year": 2020,
             "primary_location": {"source": {"display_name": "Molecules"}}}
+
+
+def crossref_work(i):
+    # Titles carry JATS markup as in real Crossref records; the first five works
+    # share DOIs with Scopus and WoS (10.9999/common.N, upper case as Crossref writes it).
+    return {"DOI": f"10.9999/COMMON.{i}" if i < 5 else f"10.8888/crossref.{i}",
+            "title": [f"Crossref work {i} on <i>Vitis vinifera</i> pomace"],
+            "container-title": ["Food &amp; Function"] if i % 2 else ["Food Chemistry"],
+            "issued": {"date-parts": [[2018 + i % 6, 3]]}, "type": "journal-article"}
 
 
 class Handler(BaseHTTPRequestHandler):
@@ -101,6 +115,10 @@ class Handler(BaseHTTPRequestHandler):
                                         "hits": [wos_hit(i) for i in ids]},
                                   {"X-RateLimit-Remaining-Day": "48"})
 
+        if url.path == "/openalex" and (OPENALEX_QUOTA or "dailylimit" in q.get("search", "")):
+            return self.send_json(429, {"error": "Rate limit exceeded",
+                                        "message": "Daily request budget for this IP address is used up. Add an api_key."})
+
         if url.path == "/openalex" and "abstract_inverted_index" in q.get("select", ""):
             # Lookup by DOI for screening: every DOI ending in ".7" is unknown.
             dois = q.get("filter", "")[len("doi:"):].split("|")
@@ -126,6 +144,16 @@ class Handler(BaseHTTPRequestHandler):
             result = [{"doi": d, "abstractText": f"<p>Europe PMC abstract of {d} on grape pomace.</p>"}
                       for d in dois if d.endswith(".6")]
             return self.send_json(200, {"hitCount": len(result), "resultList": {"result": result}})
+
+        if url.path == "/crossref" and "query.bibliographic" in q:
+            # Keyword search (v9.2): every work that shares a word, best first, cursor paging.
+            CROSSREF_SEEN.append(q)
+            start = 0 if q.get("cursor", "*") == "*" else int(q["cursor"][1:])
+            rows = int(q.get("rows", 20))
+            ids = range(start, min(start + rows, CROSSREF_TOTAL))
+            return self.send_json(200, {"status": "ok", "message-type": "work-list", "message": {
+                "total-results": CROSSREF_TOTAL, "next-cursor": f"c{start + rows}", "items-per-page": rows,
+                "items": [crossref_work(i) for i in ids]}})
 
         if url.path == "/crossref":
             dois = [f[len("doi:"):] for f in q.get("filter", "").split(",") if f.startswith("doi:")]
