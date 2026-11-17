@@ -85,7 +85,7 @@ PDF_TEXT_CACHE = ROOT / "logs" / "pdf_text"      # the pages of the PDFs, for «
 BIBLIO_DIR = ROOT / "Список литературы"
 
 UI_PORT = 17865
-APP_VERSION = "9.1"
+APP_VERSION = "9.2"
 APP_AUTHOR = "Bucaneiro"
 OFFICIAL_URL = "https://github.com/solzeworot-commits/article-downloader"
 DOWNLOAD_URL = OFFICIAL_URL + "/releases/tag/portable-latest"
@@ -2238,7 +2238,7 @@ def search_meta(body: dict, saved: list[dict]) -> dict:
             "unique": unique, "saved": len(saved), "deselected": max(0, unique - len(saved))}
     if summary.get("from") == "api":
         ok = {k: v for k, v in (summary.get("per_source") or {}).items() if v.get("ok")}
-        meta["per_source"] = {ds.SOURCE_TITLES.get(k, k): v["taken"] for k, v in ok.items()}
+        meta["per_source"] = {ds.SERVICE_TITLES.get(k, k): v["taken"] for k, v in ok.items()}
         meta["no_doi"] = int(summary.get("no_doi") or 0)
         meta["duplicates"] = max(0, sum(v["with_doi"] for v in ok.values()) - unique)
     elif summary.get("from") == "export":
@@ -2344,7 +2344,9 @@ def check_topic(topic_id: str) -> dict:
         try:
             result = ds.run_search(params, sources, ds.load_keys())
             per = result["per_source"]
-            failed = [f"{ds.SOURCE_TITLES.get(k, k)}: {v.get('message', '')}" for k, v in per.items() if not v.get("ok")]
+            # OpenAlex out of its limit with Crossref standing in: its message says it all.
+            failed = [v["message"] if v.get("fallback") else f"{ds.SERVICE_TITLES.get(k, k)}: {v.get('message', '')}"
+                      for k, v in per.items() if not v.get("ok")]
             if not any(v.get("ok") for v in per.values()):
                 with S.lock:
                     job["error"] = " ".join(failed) or tr("Поиск не удался.")
@@ -2354,7 +2356,7 @@ def check_topic(topic_id: str) -> dict:
             if new:
                 saved = ds.save_list(INBOX, tr("новое") + "_" + ds.query_slug(params), new)
                 name = saved.name
-                counts = Counter(ds.SOURCE_TITLES.get(src, src) for r in new for src in r.get("sources") or [])
+                counts = Counter(ds.SERVICE_TITLES.get(src, src) for r in new for src in r.get("sources") or [])
                 rv.save_meta(INBOX, name, {"created": time.strftime("%Y-%m-%d %H:%M"), "topic": topic_id,
                                            "keywords": ds._terms(params.get("keywords") or ""),
                                            "per_source": dict(counts) or {tr("Новое по теме"): len(new)},

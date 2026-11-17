@@ -32,7 +32,7 @@ with sync_playwright() as p:
     ctx = br.new_context(viewport={"width": 1180, "height": 900}, locale="ru-RU")
     page = ctx.new_page()
     errors = []
-    page.on("pageerror", lambda e: errors.append(str(e)))
+    page.on("pageerror", lambda e: (errors.append(str(e)), print("PAGE ERROR:", e.stack)))
     page.goto(URL)
     shot(page, "1_home.png")
 
@@ -45,8 +45,33 @@ with sync_playwright() as p:
     print("wos query:", page.input_value("#q-wos"))
     shot(page, "2_search_no_keys.png")
 
-    # Key guide: Scopus
+    # v9.2: a newcomer without keys searches at once — automatic mode, OpenAlex ticked, a calm note
+    assert page.is_visible("#mode-api") and page.is_hidden("#mode-browser"), "no keys: the automatic mode should be on"
+    assert page.is_checked("#src-openalex"), "OpenAlex should be ticked by default"
+    assert page.is_disabled("#src-scopus") and page.is_disabled("#src-wos")
+    assert page.locator("#keys-note .note.blue").count() == 1, page.inner_html("#keys-note")
+    assert "работает без ключей" in page.text_content("#keys-note"), page.text_content("#keys-note")
+    page.click("#btn-search")
+    page.wait_for_selector("#results table", timeout=30000)
+    src = page.text_content("#res-sources")
+    assert "OpenAlex: найдено 30" in src and "Scopus" not in src, src
+    print("no keys:", page.text_content("#res-summary"), "|", src)
+    shot(page, "2b_results_no_keys.png")
+
+    # OpenAlex past its daily limit (the fake answers 429 to "dailylimit"): Crossref steps in, the window says so
+    page.fill("#kw", "dailylimit grape")
+    page.click("#btn-search")
+    page.wait_for_function("document.getElementById('res-sources').textContent.includes('Crossref')", timeout=30000)
+    src = page.text_content("#res-sources")
+    assert "Лимит OpenAlex на сегодня исчерпан" in src and "Crossref: взято самых подходящих — 200" in src, src
+    assert page.locator("#results .src-badge", has_text="Crossref").count() > 0
+    print("OpenAlex limit:", src)
+    shot(page, "2c_crossref_instead.png")
+    page.fill("#kw", "grape pomace\npolyphenols")
+
+    # Key guide: Scopus (since v7.5 the guide opens on the OpenAlex tab)
     page.click("#keys-note button[data-go=keys]")
+    page.click("button[data-ktab=scopus]")
     shot(page, "3_keys_scopus.png")
     page.fill("#key-input", "wrong-key-1111")
     page.click("#key-check")
@@ -72,9 +97,10 @@ with sync_playwright() as p:
 
     # Search through the APIs
     page.click("#btn-home"); page.click("#go-search")
-    page.check("#src-openalex")
+    assert page.is_checked("#src-openalex"), "OpenAlex is ticked by default (v9.2)"
     page.click("#btn-search")
-    page.wait_for_selector("#results table", timeout=30000)
+    # The table of the keyless search is still there: wait for the new results.
+    page.wait_for_function("document.getElementById('res-sources').textContent.includes('Scopus')", timeout=30000)
     print("summary:", page.text_content("#res-summary"), "|", page.text_content("#res-sources"))
     shot(page, "5_search_results.png")
     page.uncheck("input[data-sel='10.9999/scopus.10']")
@@ -83,6 +109,7 @@ with sync_playwright() as p:
     page.click("#btn-save-list")
     page.wait_for_selector("#save-note .note.green")
     print("saved:", page.text_content("#save-note"))
+    assert page.locator("#save-note button[data-biblio]").count() == 1, "v9.2: «📚 Список литературы» right after saving"
     shot(page, "6_saved.png", full=False)
 
     # v7.0: screening by abstracts, straight from the saved list
@@ -173,8 +200,9 @@ with sync_playwright() as p:
     assert page.input_value("#kw") == "" and page.is_hidden("#results-card"), "new topic did not clear"
     print("new topic: cleared")
 
-    # v6.2: archive a list
-    page.click("#btn-home"); page.click("#go-download")
+    # v6.2: archive a list. Straight to the download screen: «⬇ Скачать статьи» on the home
+    # screen also opens the Windows / Mac file dialog, which a test cannot answer.
+    page.click("#btn-home"); page.evaluate("show('download')")
     page.wait_for_selector("#lists [data-archive]")
     name = page.get_attribute("#lists [data-archive]", "data-archive")
     page.click("#lists [data-archive]")

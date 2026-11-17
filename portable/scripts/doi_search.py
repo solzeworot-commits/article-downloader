@@ -46,12 +46,20 @@ ROOT = SCRIPT_DIR.parent
 SCOPUS_URL = "https://api.elsevier.com/content/search/scopus"
 WOS_URL = "https://api.clarivate.com/apis/wos-starter/v1/documents"
 OPENALEX_URL = "https://api.openalex.org/works"
+CROSSREF_URL = "https://api.crossref.org/works"
+# Crossref's "polite pool" (v9.2): requests that say whom to contact get a separate,
+# steadier rate limit. It must be the program's contact address, never a user's —
+# nothing about the user goes to Crossref. Empty: the public pool (works, lower limit).
+CROSSREF_MAILTO = ""
 
 KEY_FIELDS = ("scopus", "scopus_insttoken", "wos", "openalex",
               # AI helper (ai_helper.KEY_FIELDS)
               "perplexity", "openai", "anthropic", "gigachat", "yandex", "yandex_folder")
+# The sources the user ticks in the search window.
 SOURCE_TITLES = {"scopus": "Scopus", "wos": "Web of Science", "openalex": "OpenAlex"}
-# Services the review module also asks (names for error messages only).
+# Every service the program asks: names for messages and for "where found". Crossref is
+# also a search source since v9.2 — not ticked by the user, it stands in for OpenAlex
+# when OpenAlex is out of its daily limit (run_search).
 SERVICE_TITLES = {**SOURCE_TITLES, "crossref": "Crossref", "europepmc": "Europe PMC"}
 MAX_RESULTS_CAP = 2000
 
@@ -227,7 +235,19 @@ def build_queries(params: dict) -> dict:
         filters.append("type:" + oa_type)
     openalex = {"search": "" if title_only else inner, "filter": ",".join(filters)}
 
-    return {"scopus": scopus, "wos": wos, "openalex": openalex}
+    # Crossref (v9.2, stands in for OpenAlex past its daily limit) has no AND/OR and no
+    # abstracts: all the words go to query.bibliographic and Crossref ranks the works by
+    # how well they match. It has no "review" type either — reviews are journal articles.
+    cr_filters = []
+    if year_from:
+        cr_filters.append(f"from-pub-date:{year_from}-01-01")
+    if year_to:
+        cr_filters.append(f"until-pub-date:{year_to}-12-31")
+    if doc_type in ("article", "review", "both"):
+        cr_filters.append("type:journal-article")
+    crossref = {"query": " ".join(terms), "filter": ",".join(cr_filters)}
+
+    return {"scopus": scopus, "wos": wos, "openalex": openalex, "crossref": crossref}
 
 
 def query_slug(params: dict) -> str:
@@ -439,6 +459,58 @@ def search_openalex(params: dict, keys: dict, max_results: int, progress=None) -
     return {"records": records, "total": total, "no_doi": no_doi, "quota": ""}
 
 
+def crossref_mailto() -> str:
+    return (os.environ.get("ARTICLE_CROSSREF_MAILTO") or CROSSREF_MAILTO).strip()
+
+
+def _plain(text) -> str:
+    """Crossref titles carry JATS markup (<i>, <sub>…) and entities (&amp;): plain text."""
+    return html.unescape(re.sub(r"<[^>]+>", "", str(text or "")))
+
+
+def search_crossref(params: dict, max_results: int, progress=None) -> dict:
+    """
+    Crossref /works by keywords (v9.2): query.bibliographic, date and type filters,
+    cursor paging, the polite pool (mailto) and a pause between pages. No key is
+    needed; Crossref only ranks by match, so it is less precise than the other sources.
+    """
+    base = os.environ.get("ARTICLE_CROSSREF_URL") or CROSSREF_URL
+    delay = float(os.environ.get("ARTICLE_CROSSREF_DELAY") or 1.0)
+    mailto = crossref_mailto()
+    records, total, no_doi, cursor, seen = [], 0, 0, "*", 0
+    rows = min(200, max_results)
+    while seen < max_results:
+        # With a cursor Crossref returns the works in index order unless told to sort:
+        # without sort=score the first page was junk that shared one word (checked live).
+        url = (f"{base}?query.bibliographic={quote(params.get('query') or '')}&rows={rows}"
+               f"&sort=score&order=desc&cursor={quote(cursor)}&select=DOI,title,container-title,issued")
+        if params.get("filter"):
+            url += "&filter=" + quote(params["filter"], safe=":,-")
+        if mailto:
+            url += "&mailto=" + quote(mailto, safe="@")
+        data, _ = _get_json("crossref", url, {})
+        message = data.get("message") or {}
+        total = int(message.get("total-results") or 0)
+        items = message.get("items") or []
+        for item in items[: max_results - seen]:
+            doi = normalize_doi(item.get("DOI"))
+            if not doi:
+                no_doi += 1
+                continue
+            parts = ((item.get("issued") or {}).get("date-parts") or [[None]])[0] or [None]
+            records.append(_record(doi, _plain((item.get("title") or [""])[0]), parts[0],
+                                   _plain((item.get("container-title") or [""])[0]), "crossref"))
+        seen += len(items)
+        if progress:
+            progress(min(seen, max_results), min(total, max_results))
+        next_cursor = message.get("next-cursor")
+        if not items or not next_cursor or seen >= min(total, max_results):
+            break
+        cursor = next_cursor
+        time.sleep(delay)   # one page at a time, with a pause: Crossref asks tools to be gentle
+    return {"records": records, "total": total, "no_doi": no_doi, "quota": ""}
+
+
 def check_key(source: str, keys: dict) -> dict:
     """One tiny request; the answer for the "Проверить ключ" button."""
     try:
@@ -524,6 +596,9 @@ def merge(record_lists: list[list[dict]]) -> list[dict]:
 def run_search(params: dict, sources: list[str], keys: dict, progress=None) -> dict:
     """
     Search every chosen source; a failing source does not stop the others.
+    OpenAlex out of its daily limit: Crossref searches instead (v9.2) — the OpenAlex
+    entry then says so (kind "quota", "fallback": "crossref") and the Crossref one has
+    "instead_of": "openalex".
     Returns {"queries", "per_source": {src: {...}}, "records", "no_doi"}.
     """
     queries = build_queries(params)
@@ -538,6 +613,16 @@ def run_search(params: dict, sources: list[str], keys: dict, progress=None) -> d
     max_results = max(1, min(MAX_RESULTS_CAP, max_results))
 
     per_source, lists, no_doi = {}, [], 0
+
+    def take(source, result):
+        nonlocal no_doi
+        lists.append(result["records"])
+        no_doi += result["no_doi"]
+        per_source[source] = {"ok": True, "total": result["total"],
+                              "taken": len(result["records"]) + result["no_doi"],
+                              "with_doi": len(result["records"]),
+                              "no_doi": result["no_doi"], "quota": result["quota"]}
+
     for source in sources:
         def report(done, of, source=source):
             if progress:
@@ -553,13 +638,26 @@ def run_search(params: dict, sources: list[str], keys: dict, progress=None) -> d
                 continue
         except SearchError as exc:
             per_source[source] = {"ok": False, "kind": exc.kind, "message": exc.message}
+            if source == "openalex" and exc.kind == "quota":
+                # Without a key OpenAlex has a small daily budget per IP address, and a
+                # whole university goes out through one address: rather than send the
+                # user off for a key, search Crossref and say so plainly.
+                def report_cr(done, of):
+                    if progress:
+                        progress("crossref", done, of)
+                try:
+                    result = search_crossref(queries["crossref"], max_results, report_cr)
+                except SearchError as cr_exc:
+                    per_source["crossref"] = {"ok": False, "kind": cr_exc.kind, "message": cr_exc.message}
+                else:
+                    take("crossref", result)
+                    per_source["crossref"]["instead_of"] = "openalex"
+                    notice = tr("Лимит OpenAlex на сегодня исчерпан, результаты взяты из Crossref (поиск менее точный).")
+                    if params.get("doc_type") == "review":
+                        notice += " " + tr("Обзоры от статей Crossref не отличает.")
+                    per_source["openalex"].update(message=notice, fallback="crossref")
             continue
-        lists.append(result["records"])
-        no_doi += result["no_doi"]
-        per_source[source] = {"ok": True, "total": result["total"],
-                              "taken": len(result["records"]) + result["no_doi"],
-                              "with_doi": len(result["records"]),
-                              "no_doi": result["no_doi"], "quota": result["quota"]}
+        take(source, result)
     return {"queries": queries, "per_source": per_source, "records": merge(lists),
             "no_doi": no_doi}
 
@@ -689,5 +787,5 @@ def save_list(inbox: Path, slug: str, records: list[dict], dated: bool = True) -
         writer.writerow(["DOI"] + [tr(x) for x in ("Название", "Год", "Журнал", "Где найдено")])
         for r in records:
             writer.writerow([r["doi"], r["title"], r["year"], r["journal"],
-                             ", ".join(SOURCE_TITLES.get(s, tr("экспорт")) for s in r["sources"])])
+                             ", ".join(SERVICE_TITLES.get(s, tr("экспорт")) for s in r["sources"])])
     return path

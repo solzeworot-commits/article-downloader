@@ -583,7 +583,7 @@
         <span class="sub2">Выберите список DOI из папки inbox — программа откроет базы и скачает PDF.</span></button>
       <button class="big-choice teal" id="go-biblio"><span class="step-n">5</span><span class="ico">📚</span><b>Список литературы</b>
         <span class="sub2">По ГОСТ Р 7.0.100-2018, файлы для Zotero и EndNote, схема отбора PRISMA.</span></button>
-      <button class="api-hub" id="go-api" title="Шаг 1: бесплатные ключи API — без них поиск статей часто не работает">
+      <button class="api-hub" id="go-api" title="Ключи API — по желанию: искать статьи можно и без них, через OpenAlex. С ключами добавятся Scopus и Web of Science">
         <span class="step-n">1</span><b id="api-hub-label">API</b><small id="api-hub-sub">получить ключи</small></button>
     </div>
     <div class="cl-row">
@@ -891,7 +891,7 @@ https://link.springer.com/article/10.1007/s12393-026-09447-8
     <div id="keys-note"></div>
     <div class="card" id="tp-card" hidden>
       <h2><span>🔔 Мои темы</span><small>что нового вышло с прошлого поиска</small></h2>
-      <div class="recognized">Программа запоминает каждый сохранённый поиск по ключам API и через месяц напоминает на главной проверить новые статьи. «Проверить новое» ищет заново и показывает только статьи, которых не было в прошлых результатах, — они сохраняются отдельным списком.</div>
+      <div class="recognized">Программа запоминает каждый сохранённый автоматический поиск и через месяц напоминает на главной проверить новые статьи. «Проверить новое» ищет заново и показывает только статьи, которых не было в прошлых результатах, — они сохраняются отдельным списком.</div>
       <div id="tp-list"></div>
     </div>
     <div class="card">
@@ -935,7 +935,7 @@ extraction"></textarea>
         <label id="src-openalex-l"><input type="checkbox" id="src-openalex"> OpenAlex <small id="src-openalex-note"></small></label>
       </div>
       <div class="seg" id="mode-seg">
-        <button data-mode="api" class="on">⚡ Автоматически (по ключам API)</button>
+        <button data-mode="api" class="on">⚡ Автоматически (OpenAlex — без ключей)</button>
         <button data-mode="browser">🌐 Через браузер (вы нажимаете «Экспорт»)</button>
       </div>
       <div class="q-row" style="margin-top: 14px"><span>Запрос для Scopus</span><input id="q-scopus" spellcheck="false"></div>
@@ -1012,7 +1012,7 @@ extraction"></textarea>
         <b>Никому не показывайте ключ.</b></div>
       <div class="why-keys">
         <div><b class="src">1. OpenAlex</b> бесплатно, для всех. Без ключа OpenAlex даёт мало запросов в день на один
-          интернет-адрес, и поиск может остановиться с ошибкой «слишком много запросов». С ключом у вас свой лимит.</div>
+          интернет-адрес; когда они кончатся, программа поищет в Crossref, но менее точно. С ключом у вас свой лимит.</div>
         <div><b class="src">2. Web of Science</b> бесплатный ключ Starter API, план «Free Trial»: подписка организации не нужна,
           до 50 запросов в день (это до 2500 статей). Без ключа Web of Science программу не пустит.</div>
         <div><b class="src">3. Scopus</b> ключ бесплатный, но работает, только если ваша организация подписана на Scopus: из её
@@ -1141,7 +1141,7 @@ extraction"></textarea>
     <details><summary>Статья не скачалась: «нет доступа»</summary><div>Войдите через организацию на сайте базы (кнопки входа на экране «Скачать статьи»). Если вход есть, а статьи нет, у университета может не быть подписки на этот журнал.</div></details>
     <details><summary>Ключ Scopus или Web of Science не работает</summary><div>Откройте «🔑 Ключи API» и нажмите «Проверить». «Нет доступа» у Scopus обычно значит, что компьютер не в сети университета: подключитесь из университета или через его VPN.</div></details>
     <details><summary>Поиск ничего не нашёл</summary><div>Уберите лишние слова, выберите «любое слово», расширьте годы. Слова нужны на английском — помогут подсказки «💡».</div></details>
-    <details><summary>«Исчерпан дневной лимит OpenAlex»</summary><div>Возьмите бесплатный ключ OpenAlex («🔑 Ключи API» → вкладка OpenAlex) или попробуйте завтра.</div></details>
+    <details><summary>«Исчерпан дневной лимит OpenAlex»</summary><div>Поиск статей в такой день сам переходит на Crossref (менее точно). Чтобы лимит был свой, возьмите бесплатный ключ OpenAlex («🔑 Ключи API» → вкладка OpenAlex) или попробуйте завтра.</div></details>
     <details><summary>У статей нет аннотаций</summary><div>Elsevier не отдаёт аннотации в открытые базы. Часть программа находит в Europe PMC, остальные откройте по DOI.</div></details>
     <details><summary>Скачивает медленно</summary><div>Между статьями пауза 10 секунд и не больше 300 статей в день — это специально, чтобы издательства не заблокировали доступ всему университету.</div></details>
     </div>
@@ -1217,10 +1217,10 @@ extraction"></textarea>
 <dialog id="dlg-guide" style="width: min(860px, calc(100vw - 32px))">
   <div class="head"><h3>📖 Инструкция — с чего начать и зачем</h3><button data-close>✕</button></div>
   <div class="body">
-    <h4>1. 🔑 Ключи API — один раз, в самом начале</h4>
-    <p>Ключ — бесплатный «пропуск», по которому база отвечает программе. С ключами программа сама ищет статьи в Scopus, Web of Science и OpenAlex и собирает список DOI. Без ключей придётся искать на сайтах вручную и выгружать файлы.</p>
+    <h4>1. 🔑 Ключи API — по желанию, один раз</h4>
+    <p>Искать статьи можно сразу, без ключей: программа бесплатно ищет в OpenAlex, а если его дневной лимит кончится — в Crossref. Ключ — бесплатный «пропуск», по которому база отвечает программе: с ключами Scopus и Web of Science программа ищет и в этих базах.</p>
     <ul>
-      <li><b>OpenAlex</b> — бесплатно для всех; без ключа поиск быстро упирается в лимит запросов.</li>
+      <li><b>OpenAlex</b> — бесплатно для всех и без ключа; с бесплатным ключом лимит запросов больше.</li>
       <li><b>Web of Science</b> — бесплатный план, подписка вуза не нужна; без ключа не пустит.</li>
       <li><b>Scopus</b> — только если ваш вуз подписан на Scopus.</li>
     </ul>
@@ -1703,7 +1703,8 @@ $("btn-save").onclick = async () => {
 $("btn-restart-browser").onclick = () => api("/api/restart_browser");
 
 // ===== v6.1: screens, lists in inbox, DOI search, key guide ===================
-const SRC = { scopus: "Scopus", wos: "Web of Science", openalex: "OpenAlex", export: "экспорт" };
+// crossref: not ticked by the user — it stands in for OpenAlex past its daily limit (v9.2).
+const SRC = { scopus: "Scopus", wos: "Web of Science", openalex: "OpenAlex", crossref: "Crossref", export: "экспорт" };
 const AI_TABS = ["perplexity", "openai", "anthropic", "gigachat", "yandex"];
 const AI_TITLE = { perplexity: "Perplexity", openai: "ChatGPT", anthropic: "Claude", gigachat: "GigaChat", yandex: "YandexGPT" };
 const AI_INFO = {
@@ -1878,21 +1879,25 @@ async function buildQueries() {
   } catch (e) {}
 }
 function currentMode() {
-  // Until the user picks a mode, keys decide: with a key the API is easier.
-  return searchMode || recall("ad_mode", null) || (hasKey("scopus") || hasKey("wos") ? "api" : "browser");
+  // v9.2: until the user picks a mode, search automatically — OpenAlex needs no key,
+  // so a newcomer without keys gets results at once (keys only add Scopus and WoS).
+  return searchMode || recall("ad_mode", null) || "api";
 }
 function setMode(m) {
   searchMode = m;
   store("ad_mode", m);
   if (m === "browser") api("/api/export_watch", { on: true });
   if (view !== "search") show("search");
-  if (state) { renderSources(); renderExports(); }
+  if (state) { renderKeysNote(); renderSources(); renderExports(); }
 }
 function renderKeysNote() {
   const el = $("keys-note");
   if (!hasKey("scopus") && !hasKey("wos")) {
-    note(el, "amber", "🔑", "Чтобы искать автоматически, нужны ключи <b>Scopus</b> и <b>Web of Science</b> — бесплатно, один раз. " +
-      "Или выберите режим «🌐 Через браузер»: он работает без ключей.", '<button class="linkbtn" data-go="keys">Получить ключи по шагам</button>');
+    // No warning: the search works without keys (OpenAlex), keys are an extra.
+    note(el, "blue", "✅", "Поиск уже работает без ключей — через <b>OpenAlex</b>, бесплатно. " +
+      "Ключи <b>Scopus</b> и <b>Web of Science</b> добавят их базы — по желанию.",
+      (currentMode() === "browser" ? '<button class="linkbtn" data-mode="api">⚡ Искать автоматически</button>' : "") +
+      '<button data-go="keys">Получить ключи по шагам</button>');
   } else {
     note(el, "", "🔑", `Scopus: <b>${esc(keyLine("scopus"))}</b> · Web of Science: <b>${esc(keyLine("wos"))}</b>`,
       '<button data-go="keys">Ключи API</button>');
@@ -1908,9 +1913,10 @@ function renderSources() {
     $("src-" + src + "-note").textContent = missing ? "(нет ключа)" : "";
   }
   $("src-openalex-l").hidden = !apiMode;
-  // OpenAlex: ticked when there is a key, unless the user took the tick off themselves (remembered).
+  // OpenAlex: ticked by default (it works without a key, v9.2), unless the user took
+  // the tick off themselves — that choice is remembered.
   const oa = $("src-openalex"), oaChoice = recall("ad_src_openalex", null);
-  if (!oa.dataset.touched) oa.checked = oaChoice === null ? hasKey("openalex") : !!oaChoice;
+  if (!oa.dataset.touched) oa.checked = oaChoice === null ? true : !!oaChoice;
   $("src-openalex-note").textContent = hasKey("openalex") ? "(ключ есть ✓)" : "(бесплатно; с ключом лимит больше)";
   document.querySelectorAll("#mode-seg button").forEach((b) => b.classList.toggle("on", b.dataset.mode === currentMode()));
   $("mode-api").hidden = !apiMode;
@@ -1948,9 +1954,13 @@ function renderResults() {
   $("results-card").hidden = !sm;
   if (!sm) return;
   if (sm.from === "api") {
+    // Crossref in place of OpenAlex: it ranks every work that shares a word, so its
+    // "found" count means nothing — only how many of the best matches were taken.
     $("res-sources").innerHTML = Object.entries(sm.per_source).map(([k, v]) => v.ok
-      ? `<span>✅ ${SRC[k]}: найдено ${v.total}, взято ${v.taken}${v.no_doi ? `, из них без DOI ${v.no_doi}` : ""}${v.quota ? ` · осталось запросов: ${esc(v.quota)}` : ""}</span>`
-      : `<span style="color: var(--red)">✖ ${SRC[k]}: ${esc(v.message)}` +
+      ? (v.instead_of ? `<span>✅ ${SRC[k] || k}: взято самых подходящих — ${v.taken}</span>`
+        : `<span>✅ ${SRC[k]}: найдено ${v.total}, взято ${v.taken}${v.no_doi ? `, из них без DOI ${v.no_doi}` : ""}${v.quota ? ` · осталось запросов: ${esc(v.quota)}` : ""}</span>`)
+      : v.fallback ? `<span style="color: var(--amber)">⚠ ${esc(v.message)} <button class="link" data-go="keys">ключ OpenAlex снимет лимит</button></span>`
+      : `<span style="color: var(--red)">✖ ${SRC[k] || k}: ${esc(v.message)}` +
         (["no_key", "bad_key", "no_access", "pending"].includes(v.kind) ? ' <button class="link" data-go="keys">ключи</button>' : "") +
         (v.kind === "no_access" ? ' <button class="link" data-mode="browser">искать через браузер</button>' : "") + "</span>").join("");
   } else {
@@ -2015,7 +2025,8 @@ async function saveList() {
   note($("save-note"), "green", "✅", `Сохранено: <b>inbox\\${esc(res.name)}</b> — ${res.count} DOI.` +
     (res.topic ? `<br>🔔 Тема запомнена: через месяц программа напомнит проверить новые статьи.` : ""),
     `<button class="linkbtn" data-review="${esc(res.name)}">📝 Отобрать по аннотациям</button>` +
-    `<button data-list="${esc(res.name)}">⬇ Скачать все сразу</button><button data-act="open-inbox">📂 Открыть папку inbox</button>`);
+    `<button data-list="${esc(res.name)}">⬇ Скачать все сразу</button><button data-biblio="${esc(res.name)}">📚 Список литературы</button>` +
+    `<button data-act="open-inbox">📂 Открыть папку inbox</button>`);
 }
 
 // ---- key guide ----------------------------------------------------------------

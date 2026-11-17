@@ -1,4 +1,4 @@
-﻿ARTICLE DOWNLOADER, portable version 9.1
+﻿ARTICLE DOWNLOADER, portable version 9.2
 ========================================
 
 Runs on any computer with Windows 10 or 11. Nothing to install: Python and everything
@@ -11,8 +11,9 @@ HOW TO USE
    icon on the desktop). On the first start Windows may ask «Run this file?» — click «Run».
    A window with four big buttons opens: the steps of a literature review, in order.
    The yellow «📖 HOW TO START» bar above them explains briefly where to begin and why.
-   Step 1 is the red «API» circle in the middle: get the free keys (OpenAlex and Web of
-   Science, step by step with pictures; once). When the keys are saved, it turns green.
+   You can search right away, without keys. The red «API» circle in the middle is for
+   keys if you want them: Scopus and Web of Science keys add those databases (free, step
+   by step with pictures; once). When the keys are saved, the circle turns green.
 
 2. «🔎 Get a DOI list» — if you have no list of articles yet.
    Type keywords (each word or phrase on a new line; synonyms on one line separated by
@@ -20,10 +21,13 @@ HOW TO USE
    «💡 Suggest words» offers frequent keywords on your topic (free) — click the ones you
    want. «🧹 New topic» clears everything for the next search. Look through the results,
    untick the extra ones and click «Save the list to inbox».
-   This search needs Scopus and Web of Science keys: the «API» circle in the middle of the home screen walks you
-   through getting them (free, once). Without keys choose «🌐 Through the browser»: you
-   click «Export» on the Scopus or Web of Science site and the program takes the file.
-   🔔 The program remembers a saved search made with the keys. In a month the home screen
+   Without keys the program searches OpenAlex — free, at once. If the OpenAlex daily
+   limit is used up for today, it searches Crossref by itself (less precise) and says so.
+   Scopus and Web of Science keys add those databases: the «API» circle in the middle of
+   the home screen walks you through getting them (free, once). There is also «🌐 Through
+   the browser»: you click «Export» on the Scopus or Web of Science site and the program
+   takes the file.
+   🔔 The program remembers a saved automatic search. In a month the home screen
    shows «What is new on the topic?»: «🔔 Check for new» searches again and saves as a separate
    list only the articles that were not in the earlier results. All topics are in the
    «🔔 My topics» card at the top of the search window («✕ Forget» — no more reminders).
