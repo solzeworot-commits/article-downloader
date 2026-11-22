@@ -53,6 +53,17 @@ assert len(dois) == 54 + 35 + 25 - 8, len(dois)
 res = ds.run_search({"keywords": "grape", "max_results": 25}, ["scopus", "wos"], GOOD)
 assert res["per_source"]["scopus"]["taken"] == 25 and res["per_source"]["wos"]["taken"] == 25, res["per_source"]
 
+# v9.2.1: OpenAlex looks in titles and abstracts only (plain `search` also reads the full text,
+# several times more hits than WoS TS / Scopus TITLE-ABS-KEY); «only in the title» stays a filter.
+fake_api.OPENALEX_SEEN.clear()
+ds.run_search({"keywords": "grape pomace\npolyphenols", "max_results": 10}, ["openalex"], GOOD)
+sent = fake_api.OPENALEX_SEEN[0]
+assert sent.get("search.title_and_abstract") == '"grape pomace" AND polyphenols' and "search" not in sent, sent
+fake_api.OPENALEX_SEEN.clear()
+ds.run_search({"keywords": "spent grain\nbrewery", "field": "title", "max_results": 10}, ["openalex"], GOOD)
+sent = fake_api.OPENALEX_SEEN[0]
+assert sent.get("filter", "").startswith("title.search:") and not any(k.startswith("search") for k in sent), sent
+
 # --- errors: one failing source does not stop the others ---------------------
 cases = [
     ({"scopus": "wrong-key-0000"}, "scopus", "bad_key"),

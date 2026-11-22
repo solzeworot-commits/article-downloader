@@ -433,7 +433,10 @@ def search_openalex(params: dict, keys: dict, max_results: int, progress=None) -
         url = (f"{base}?per-page={per_page}&cursor={quote(cursor)}"
                "&select=doi,display_name,publication_year,primary_location")
         if params.get("search"):
-            url += "&search=" + quote(params["search"])
+            # v9.2.1: title and abstract only, like Scopus TITLE-ABS-KEY and WoS TS. Plain
+            # `search` also reaches into the full text: on 22.11.2026 «"deep eutectic
+            # solvent" AND delignification» gave 3206 works that way and 491 this way.
+            url += "&search.title_and_abstract=" + quote(params["search"])
         if params.get("filter"):
             url += "&filter=" + quote(params["filter"], safe=":,|-")
         if keys.get("openalex"):
