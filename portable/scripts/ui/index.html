@@ -468,6 +468,11 @@
   @keyframes cl-glow { 0%, 100% { box-shadow: 0 0 0 0 rgba(234,88,12,.55); } 50% { box-shadow: 0 0 20px 6px rgba(234,88,12,.55); } }
   .cl-where { font-size: 14px; color: var(--muted); margin: 0 0 12px; overflow-wrap: anywhere; }
   .cl-send { display: flex; gap: 10px; align-items: center; flex-wrap: wrap; margin: 4px 0 6px; }
+  .cl-probs { margin-top: 6px; }
+  .cl-probs summary { cursor: pointer; color: var(--amber); font-weight: 600; }
+  .cl-probs .acts { margin: 6px 0; }
+  .cl-probs ol { max-height: 240px; overflow: auto; margin: 0; padding-left: 26px; font-size: 13px; }
+  .cl-probs li small { color: var(--muted); overflow-wrap: anywhere; }
   .cl-send select { flex: 1; min-width: 220px; max-width: 420px; padding: 8px 10px; border-radius: 8px; border: 1px solid var(--line);
                     font: inherit; color: var(--text); background: var(--card); }
   .linkbtn.cloudbtn { background: #0284c7; border-color: #0284c7; }
@@ -1168,6 +1173,7 @@ extraction"></textarea>
       <div id="cl-send-note" class="recognized"></div>
     </div>
     <div id="cl-lists"></div>
+    <div id="cl-prob-note" class="recognized"></div>
 
     <h4>Что это и как работает</h4>
     <p>Дома нет доступа к платным базам, а на работе (в вузе) есть? Оставьте программу открытой на рабочем компьютере и отправляйте ей списки DOI из дома. Рабочий компьютер скачает статьи через подписку вуза, а PDF сами появятся у вас дома.</p>
@@ -2499,13 +2505,32 @@ function cloudTexts(c) {
     case "stale": return [`рабочий компьютер не отвечает (на связи был ${c.seen})`, "НЕТ СВЯЗИ"];
     case "stopped": return [work ? "скачивание остановлено на этом компьютере" : "на рабочем компьютере остановили скачивание", "СТОП"];
     case "wait": return [work ? "беру список из облака…" : "список в облаке — ждёт рабочий компьютер", "ЖДЁТ"];
-    case "run": return [(work ? "качаю списки из облака: " : "рабочий компьютер качает: ") + `${c.done} из ${c.total}`, n];
-    case "limit": return [work ? "дневной лимит — продолжу завтра сам" : "дневной лимит на рабочем компьютере — продолжит завтра", n];
+    case "run": return [(work ? "качаю списки из облака: " : "рабочий компьютер качает: ") + `${c.done} из ${c.total}` + clProbText(c), n];
+    case "limit": return [(work ? "дневной лимит — продолжу завтра сам" : "дневной лимит на рабочем компьютере — продолжит завтра") + clProbText(c), n];
     case "captcha": return [work ? "капча — пройдите проверку в окне браузера загрузчика" : "капча на рабочем компьютере — нужен человек рядом с ним", "КАПЧА"];
-    case "done": return [`готово: скачано ${c.done} из ${c.total}` + (work ? "" : " — PDF в облаке"), "ГОТОВО ✓"];
+    case "done": return [`готово: скачано ${c.done} из ${c.total}` + clProbText(c) + (work ? "" : " — PDF в облаке"), "ГОТОВО ✓"];
     default: return [work ? "это рабочий компьютер: жду списки из облака" : "рабочий компьютер на связи — отправьте ему список", work ? "ЖДУ" : "НА СВЯЗИ"];
   }
 }
+// v9.2.2: the articles that did not download come home at once, to look for them elsewhere.
+const CL_OPEN = new Set();        // lists whose «not downloaded» block is open: the table is redrawn
+const CL_PROB = { no_access: "🔒 нет доступа", captcha: "🧩 капча", failed: "✖ не скачалась" };
+let clListsHtml = "";
+function clProbText(c) { return c.problems ? ` · не скачались: ${c.problems}` : ""; }
+function cloudProblems(x) {
+  const p = x.problems || [];
+  if (!p.length) return "";
+  return `<details class="cl-probs" data-clprob="${esc(x.name)}" ${CL_OPEN.has(x.name) ? "open" : ""}>` +
+    `<summary>Не скачались: ${p.length} — можно искать в других местах, пока качаются остальные</summary>` +
+    `<div class="acts"><button data-clcopy="${esc(x.name)}">📋 Скопировать DOI</button>` +
+    `<button data-clsave="${esc(x.name)}">💾 Сохранить списком в inbox</button></div>` +
+    "<ol>" + p.map((y) => `<li><span class="query">${esc(y.q)}</span> — ${CL_PROB[y.status] || CL_PROB.failed}` +
+      (y.why ? `<br><small>${esc(y.why)}</small>` : "") + "</li>").join("") + "</ol></details>";
+}
+document.addEventListener("toggle", (e) => {
+  const d = e.target;
+  if (d && d.dataset && d.dataset.clprob) { if (d.open) CL_OPEN.add(d.dataset.clprob); else CL_OPEN.delete(d.dataset.clprob); }
+}, true);
 function cloudListText(x) {
   if (x.state === "wait") return "⏳ ждёт рабочий компьютер";
   let t = (x.state === "run" ? "⬇ скачано " : "✅ скачано ") + `${x.done} из ${x.total}`;
@@ -2531,12 +2556,14 @@ function renderCloudDialog(c) {
     (c.computer && !work ? ` · рабочий компьютер: <b>${esc(c.computer)}</b>` : "") + "</div>";
   $("cl-send-box").hidden = c.role !== "home";
   const lists = c.lists || [];
-  $("cl-lists").innerHTML = !c.role ? "" : !lists.length
+  const html = !c.role ? "" : !lists.length
     ? `<div class="empty">${work ? "Списков из облака пока нет. Их отправляют с домашнего компьютера." : "В облаке пока нет списков. Отправьте список кнопкой выше или «☁ На рабочий» на экране «⬇ Скачать статьи»."}</div>`
     : `<table><thead><tr><th>${work ? "Списки из облака" : "Списки в облаке"}</th><th>Состояние</th><th></th></tr></thead><tbody>` +
       lists.map((x) => `<tr><td class="query"><b>${esc(x.name)}</b>${x.taken ? `<br><small>взят ${esc(x.taken)}</small>` : ""}</td>` +
-        `<td>${cloudListText(x)}</td><td class="act">${work ? "" : `<button data-cloudrm="${esc(x.name)}" title="Убрать список из облака (на рабочем компьютере он останется)">🗑</button>`}</td></tr>`).join("") +
+        `<td>${cloudListText(x)}${cloudProblems(x)}</td><td class="act">${work ? "" : `<button data-cloudrm="${esc(x.name)}" title="Убрать список из облака (на рабочем компьютере он останется)">🗑</button>`}</td></tr>`).join("") +
       "</tbody></table>";
+  // Redrawn only when it changed: an open list and a click on its buttons survive the refresh.
+  if (html !== clListsHtml) { $("cl-lists").innerHTML = html; clListsHtml = html; }
   $("cl-home").classList.toggle("on", c.role === "home");
   $("cl-work").classList.toggle("on", c.role === "work");
   $("cl-open").hidden = $("cl-off").hidden = !c.role;
@@ -2610,6 +2637,18 @@ document.addEventListener("click", (e) => {
   if (!t) return;
   if (t.dataset.cloudsend) cloudSend(t.dataset.cloudsend, $("choose-note"));
   if (t.dataset.cloudrm) api("/api/cloud_remove", { name: t.dataset.cloudrm }).then(openCloudRefresh);
+  if (t.dataset.clcopy) {
+    const x = ((state && state.cloud && state.cloud.lists) || []).find((l) => l.name === t.dataset.clcopy);
+    copyText(((x && x.problems) || []).map((y) => y.q).join("\n")).then((ok) => {
+      $("cl-prob-note").textContent = ok ? `📋 Скопировано DOI: ${((x && x.problems) || []).length}` : "Не скопировалось — выделите список и нажмите Ctrl+C";
+    });
+  }
+  if (t.dataset.clsave) {
+    api("/api/cloud_problems_save", { name: t.dataset.clsave }).then((res) => {
+      $("cl-prob-note").innerHTML = res.error ? `<span style="color: var(--red)">${esc(res.error)}</span>`
+        : `💾 Сохранено: <b>inbox\\${esc(res.name)}</b> — ${res.count} DOI. Его можно открыть, отобрать или отправить заново.`;
+    });
+  }
 });
 async function aiSearch() {
   if (!aiOn()) { show("ai"); return; }

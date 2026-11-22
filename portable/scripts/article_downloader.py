@@ -803,6 +803,7 @@ def download_springer(context, raw: str, doi: str | None) -> Path:
         wait_page_ready(page, "Springer")
         page.wait_for_timeout(2500)
         wait_for_manual_verification(page, "Springer", 900)
+        note_supplements(page)      # v9.2.2: from this page, no second visit
 
         if page.url:
             article_url = page.url
@@ -869,6 +870,7 @@ def download_springer(context, raw: str, doi: str | None) -> Path:
         raise DownloadError("SPRINGER_PDF_CONTROL_NOT_FOUND")
 
     finally:
+        note_supplements(page)      # once more, as the page is now
         try:
             close_page_safely(page)
         except Exception:
@@ -1023,6 +1025,49 @@ def find_wiley_pdfdirect(page, timeout_sec: int = 45):
     return None, None, None
 
 
+# v9.2.2: Wiley's login service. Where the network cuts it (22.11.2026, from Russia: by the name,
+# the same Cloudflare server answers for onlinelibrary.wiley.com), every Wiley article spent
+# minutes on PDF routes and retries before failing. Now the first failed top-level visit there
+# ends the article at once as «нет доступа», with a reason the user can act on (app.readable_reason).
+LOGIN_SERVICE_HOSTS = ("scienceconnect.io",)
+LOGIN_BLOCKED_MESSAGE = "WILEY_LOGIN_BLOCKED: wiley.scienceconnect.io (Wiley sign-in) not reachable from this network"
+# Failures that do not mean the service is cut off: the program itself stopped a slow visit there
+# (closed the tab, went elsewhere), or this computer's own network dropped for a moment.
+# Where the service is cut off, the connection hangs ~20 s and then breaks (ERR_CONNECTION_RESET).
+NOT_A_CUT_OFF = ("ERR_ABORTED", "ERR_INTERNET_DISCONNECTED", "ERR_NETWORK_CHANGED", "ERR_NETWORK_IO_SUSPENDED")
+
+
+class LoginServiceWatch:
+    """Notes a failed top-level visit to a login service in this browser context."""
+
+    def __init__(self, context):
+        self.context, self.url = context, ""
+        context.on("requestfailed", self._failed)
+
+    def _failed(self, request):
+        try:
+            host = (urlparse(request.url).hostname or "").lower()
+            failure = str(request.failure or "")            # "net::ERR_CONNECTION_RESET"
+            if (any(host == h or host.endswith("." + h) for h in LOGIN_SERVICE_HOSTS)
+                    and failure.rsplit(":", 1)[-1].strip() not in NOT_A_CUT_OFF
+                    and request.is_navigation_request() and request.frame.parent_frame is None):
+                if not self.url:
+                    log_line(f"Login service not reachable: {request.url} ({failure})")
+                self.url = request.url
+        except Exception:
+            pass
+
+    def check(self):
+        if self.url:
+            raise NoAccess(LOGIN_BLOCKED_MESSAGE)
+
+    def close(self):
+        try:
+            self.context.remove_listener("requestfailed", self._failed)
+        except Exception:
+            pass
+
+
 def download_wiley(context, raw: str, doi: str | None, resolved_url: str | None) -> Path:
     """
     Wiley v5.8: click the REAL visible PDF/ePDF control first.
@@ -1057,6 +1102,7 @@ def download_wiley(context, raw: str, doi: str | None, resolved_url: str | None)
     pdfdirect_url = f"{host}/doi/pdfdirect/{doi}?download=true"
 
     page = context.new_page()
+    watch = LoginServiceWatch(context)      # v9.2.2: fail fast when the login service is cut off
 
     def wiley_access_denied() -> bool:
         """
@@ -1101,15 +1147,18 @@ def download_wiley(context, raw: str, doi: str | None, resolved_url: str | None)
             dest.unlink()
         except Exception:
             pass
+        watch.check()
         return None
 
     try:
         log_line(f"Wiley article open: {article_url}")
         safe_goto(page, article_url, 60000)
         page.wait_for_timeout(2500)
+        watch.check()
 
         # Manual verification only; no bypass.
         wait_for_manual_verification(page, "Wiley", 900)
+        note_supplements(page)      # v9.2.2: before the PDF click moves this page to the viewer
 
         # ------------------------------------------------------------------
         # PRIMARY v5.8 ROUTE: click the exact visible PDF/ePDF toolbar anchor.
@@ -1155,6 +1204,7 @@ def download_wiley(context, raw: str, doi: str | None, resolved_url: str | None)
                 log_line(f"Wiley after PDF control click: {page.url}")
             except Exception as exc:
                 log_line(f"Wiley PDF control click error: {exc}")
+            watch.check()
 
             wait_for_manual_verification(page, "Wiley", 900)
 
@@ -1265,6 +1315,8 @@ def download_wiley(context, raw: str, doi: str | None, resolved_url: str | None)
         )
 
     finally:
+        watch.close()
+        note_supplements(page)      # once more, if the page is still the article
         try:
             close_page_safely(page)
         except Exception:
@@ -1518,6 +1570,7 @@ def download_elsevier(context, raw: str, doi: str | None, resolved_url: str | No
 
         if looks_like_captcha(page):
             wait_for_manual_verification(page, "Elsevier", 900)
+        note_supplements(page)      # v9.2.2: from this page, no second visit to ScienceDirect
 
         identity = doi or urlparse(article_url).path.strip("/").split("/")[-1] or "elsevier"
 
@@ -1579,6 +1632,7 @@ def download_elsevier(context, raw: str, doi: str | None, resolved_url: str | No
         raise DownloadError("ELSEVIER_PDF_NOT_CAPTURED")
 
     finally:
+        note_supplements(page)      # once more: «Supplementary data» is drawn late
         try:
             close_page_safely(page)
         except Exception:
@@ -2246,6 +2300,7 @@ def download_browser_pdf_platform(
         page.wait_for_timeout(1800)
 
         wait_for_manual_verification(page, label, 900)
+        note_supplements(page)      # v9.2.2: from this page, no second visit
 
         def find_candidates():
             found = discover_pdf_candidates(
@@ -2342,6 +2397,7 @@ def download_browser_pdf_platform(
         )
 
     finally:
+        note_supplements(page)      # once more, as the page is now
         try:
             close_page_safely(page)
         except Exception:
@@ -5029,51 +5085,75 @@ def supplement_links(page) -> list:
     return out
 
 
-def _supplement_name(url: str, headers: dict, used: set) -> str:
+# v9.2.2: the supplementary links are read from the article page the downloader already
+# has open — right after it is ready and again just before it closes (ScienceDirect draws
+# its «Supplementary data» late; Wiley's PDF click may move the page to the viewer). No
+# second visit: ScienceDirect asked for a new check every few page views. One article per
+# process; _process_one_once starts every attempt with reset_supplements().
+_SUPP_LINKS: list[str] = []
+_SUPP_PAGE_SEEN = False
+
+
+def reset_supplements() -> None:
+    global _SUPP_PAGE_SEEN
+    _SUPP_LINKS.clear()
+    _SUPP_PAGE_SEEN = False
+
+
+def note_supplements(page) -> None:
+    """Remember the supplementary links of the open article page. Never raises."""
+    global _SUPP_PAGE_SEEN
+    if not supplements_enabled():
+        return
+    try:
+        if page.is_closed() or looks_like_captcha(page):
+            return
+    except Exception:
+        return
+    links = supplement_links(page)
+    _SUPP_PAGE_SEEN = True
+    known = {u.lower() for u in _SUPP_LINKS}
+    new = [u for u in links if u.lower() not in known]
+    _SUPP_LINKS.extend(new)
+    if new:
+        log_line(f"Supplementary links on the article page: +{len(new)} (total {len(_SUPP_LINKS)})")
+
+
+def _supplement_ext(url: str, headers: dict) -> str:
     disp = headers.get("content-disposition") or ""
     m = (re.search(r"filename\*\s*=\s*(?:UTF-8'')?([^;]+)", disp, re.I)
          or re.search(r'filename\s*=\s*"?([^";]+)"?', disp, re.I))
     name = unquote(m.group(1)).strip().strip('"') if m else unquote(Path(urlparse(url).path).name)
-    stem, ext = os.path.splitext(name)
-    if not ext:                                   # MDPI …/s1: the type says it is a zip
+    ext = os.path.splitext(name)[1].lower()
+    if not ext or not re.fullmatch(r"\.[a-z0-9]{1,8}", ext):    # MDPI …/s1: the type says it is a zip
         ctype = (headers.get("content-type") or "").split(";")[0].strip().lower()
         ext = mimetypes.guess_extension(ctype) or ".bin"
-        stem = stem or "supplementary"
-    stem = sanitize_filename(stem)[:120] or "supplementary"
-    name, n = f"{stem}{ext.lower()}", 2
-    while name.lower() in used:
-        name, n = f"{stem}_{n}{ext.lower()}", n + 1
-    used.add(name.lower())
-    return name
+    return ext
 
 
-def download_supplements(context, landing: str | None, article: Path) -> tuple[int, Path | None]:
-    """Fetch the supplementary files of a saved article. (number saved, folder) — never raises."""
-    if not supplements_enabled() or not landing:
+def download_supplements(context, article: Path, doi: str | None = None) -> tuple[int, Path | None]:
+    """
+    Fetch the supplementary files remembered from the article page (note_supplements),
+    with the browser's own session, without opening a page. They go to
+    «<article>_supplementary» as «<DOI>_supl.<ext>», or «<DOI>_supl1…N» when there are
+    several. (number saved, folder) — never raises.
+    """
+    if not supplements_enabled():
         return 0, None
+    if not _SUPP_PAGE_SEEN:
+        log_line("Supplementary skipped: the PDF came without the article page")
+        return 0, None
+    links = list(_SUPP_LINKS)
     deadline = float(os.environ.get("ARTICLE_JOB_DEADLINE") or 0)
-    if deadline and deadline - time.time() < 90:
+    if links and deadline and deadline - time.time() < 60:
         log_line("Supplementary skipped: the time for this article is almost up")
         return 0, None
-    page = None
-    try:
-        page = context.new_page()
-        safe_goto(page, landing, timeout=45000, attempts=1)
-        wait_page_ready(page, "Supplementary", timeout_sec=15)
-        if looks_like_captcha(page):
-            log_line("Supplementary skipped: the article page asks for a verification")
-            return 0, None
-        links = supplement_links(page)
-    except Exception as exc:
-        log_line(f"Supplementary skipped: the article page did not open: {type(exc).__name__}: {exc}")
-        return 0, None
-    finally:
-        if page is not None:
-            close_page_safely(page)
     log_line(f"Supplementary links: {len(links)}" + (f" (only the first {SUPP_MAX_FILES})" if len(links) > SUPP_MAX_FILES else ""))
     article_hash = hashlib.sha1(article.read_bytes()).hexdigest() if article.is_file() else ""
     folder = article.parent / f"{article.stem}_supplementary"
-    saved, used = 0, set()
+    base = sanitize_filename(doi)[:120] if doi else article.stem
+    saved_files: list[Path] = []
+    saved = 0
     for i, url in enumerate(links[:SUPP_MAX_FILES]):
         if deadline and deadline - time.time() < 30:
             log_line("Supplementary: the time for this article is up, the rest left")
@@ -5108,13 +5188,20 @@ def download_supplements(context, landing: str | None, article: Path) -> tuple[i
             continue
         try:
             folder.mkdir(parents=True, exist_ok=True)
-            name = _supplement_name(url, resp.headers, used)
-            (folder / name).write_bytes(data)
+            target = folder / f"{base}_supl{saved + 1}{_supplement_ext(url, resp.headers)}"
+            target.write_bytes(data)
         except OSError as exc:
             log_line(f"Supplementary not saved: {url}: {exc}")
             continue
         saved += 1
-        log_line(f"Supplementary saved: {name} ({len(data)} bytes)")
+        saved_files.append(target)
+        log_line(f"Supplementary saved: {target.name} ({len(data)} bytes) from {url}")
+    if saved == 1:                                # a single file needs no number
+        single = saved_files[0]
+        try:
+            single.replace(single.with_name(f"{base}_supl{single.suffix}"))
+        except OSError as exc:
+            log_line(f"Supplementary not renamed: {single.name}: {exc}")
     return saved, (folder if saved else None)
 
 
@@ -5208,6 +5295,7 @@ def _process_one_once(raw: str) -> Path:
     doi = extract_doi(raw)
     log_line(f"Input: {raw}")
     log_line(f"DOI: {doi or '-'}")
+    reset_supplements()
 
     # Fast classification first. This lets known Elsevier inputs go directly
     # to the dedicated browser without an extra resolution step.
@@ -5250,11 +5338,11 @@ def _process_one_once(raw: str) -> Path:
             edge_context = edge_browser.contexts[0]
 
         path = _download_routed(edge_context, source, raw, doi, resolved)
-        # v8.9: the supplementary files of the article (not for eLIBRARY / CNKI).
+        # v8.9: the supplementary files of the article (not for eLIBRARY / CNKI); since
+        # v9.2.2 from the links read on the article page while it was open — after the PDF.
         if source not in ("elibrary", "cnki"):
-            landing = resolved or (f"https://doi.org/{doi}" if doi else None)
             try:
-                count, folder = download_supplements(edge_context, landing, path)
+                count, folder = download_supplements(edge_context, path, doi)
                 if count:
                     safe_console_print(f"SUPPLEMENTS|{count}|{folder}")
             except Exception as exc:

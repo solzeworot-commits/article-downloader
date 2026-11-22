@@ -94,6 +94,8 @@ jobs:
           if ($LASTEXITCODE) { throw "tray_test: значок в трее" }
           & $py -E -s -X utf8 tests\supplementary_test.py (Join-Path $app "scripts")
           if ($LASTEXITCODE) { throw "supplementary_test: дополнительные материалы (Edge)" }
+          & $py -E -s -X utf8 tests\wiley_login_test.py (Join-Path $app "scripts")
+          if ($LASTEXITCODE) { throw "wiley_login_test: вход Wiley недоступен — сразу «нет доступа» (Edge)" }
           & $py -E -s -X utf8 tests\ask_test.py (Join-Path $app "scripts")
           if ($LASTEXITCODE) { throw "ask_test: спросить по своим статьям" }
           & $py -E -s -X utf8 tests\map_test.py (Join-Path $app "scripts")

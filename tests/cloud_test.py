@@ -111,6 +111,7 @@ check("not taken twice", len(app.S.items), 3)
 app.S.items[0]["status"] = "success"
 app.S.captcha_now = True
 app.cloud_tick()
+check("v9.2.2: nothing to look for elsewhere yet", cloud.read_status(shared)["lists"][LIST]["problems"], [])
 as_home()
 view = state()
 check("home: captcha", (view["state"], view["done"], view["total"]), ("captcha", 1, 3))
@@ -131,10 +132,31 @@ check("home: stopped", state()["state"], "stopped")
 as_work()
 app.S.items[1]["status"] = "success"
 app.S.items[2]["status"] = "no_access"
+app.S.items[2]["message"] = "Wiley: служба входа  недоступна\n(из этой сети)"
 app.cloud_tick()
+check("v9.2.2: the article that did not download goes home with its reason",
+      cloud.read_status(shared)["lists"][LIST]["problems"],
+      [{"q": "10.1000/a3", "status": "no_access", "why": "Wiley: служба входа недоступна (из этой сети)"}])
+check("v9.2.2: the Wiley login cut off in words", (
+    app.readable_reason("no_access", "WILEY_LOGIN_BLOCKED: wiley.scienceconnect.io not reachable").startswith(
+        "Wiley: служба входа wiley.scienceconnect.io недоступна"),
+    app.readable_reason("failed", "WILEY_LOGIN_BLOCKED: x"), app.readable_reason("no_access", "ELIBRARY_IP_BLOCKED")),
+      (True, "WILEY_LOGIN_BLOCKED: x", "ELIBRARY_IP_BLOCKED"))
 as_home()
 view = state()
 check("home: done", (view["state"], view["done"], view["total"], view["lists"][0]["no_access"]), ("done", 2, 3, 1))
+check("home: what to look for elsewhere", (view["problems"], [p["q"] for p in view["lists"][0]["problems"]]), (1, ["10.1000/a3"]))
+saved = api("/api/cloud_problems_save", {"name": LIST})
+check("saved as a list in inbox", (saved.get("name"), saved.get("count")), ("Виноград_не_скачались.txt", 1))
+check("the list file", (app.INBOX / "Виноград_не_скачались.txt").read_text(encoding="utf-8"), "10.1000/a3\n")
+check("saved again: a new name", api("/api/cloud_problems_save", {"name": LIST}).get("name"), "Виноград_не_скачались_2.txt")
+check("a list without such articles", "error" in api("/api/cloud_problems_save", {"name": "нет.txt"}), True)
+items = [{"query": "10.1/A", "status": "failed", "message": "x"}, {"query": "10.1/a", "status": "success"},
+         {"query": "10.1/b", "status": "captcha", "message": "check"}, {"query": "10.1/c", "status": "unsupported", "message": "?"},
+         {"query": "10.1/d", "status": "pending"}]
+check("problems: the best attempt decides, list order; not in the queue (removed there by hand) — left out",
+      cloud.list_problems(["10.1/a", "10.1/b", "10.1/c", "10.1/d", "10.1/e"], items),
+      [{"q": "10.1/b", "status": "captcha", "why": "check"}, {"q": "10.1/c", "status": "failed", "why": "?"}])
 
 # not answering for a long time
 status = cloud.read_status(shared)
