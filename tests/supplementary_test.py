@@ -8,6 +8,9 @@ a 60 MB file (HEAD only), a closed file, the article itself under another
 name, a repeated link. Opened in a real browser (Edge / Chrome, or
 ARTICLE_TEST_BROWSER) the way the downloader does it. Also: a page without
 supplementary files, a verification page, the tick off.
+v9.2.2: the links are read from the article page while it is open
+(note_supplements) and the files are fetched after the PDF without opening any
+page, named «<DOI>_supl1…N» («<DOI>_supl» for a single file).
 """
 import io
 import os
@@ -72,6 +75,8 @@ PAGE = f"""<html><head><title>A fake article</title></head><body><h1>A fake arti
 <a href="/about">About the journal</a>
 </body></html>""".encode()
 EMPTY = b"<html><head><title>No extras</title></head><body><h1>An article</h1><a href='/pdf/1.pdf'>PDF</a></body></html>"
+ONE = (b"<html><head><title>One extra</title></head><body><h1>Third article</h1><a href='/pdf/1.pdf'>PDF</a>"
+       b"<a href='/content/1-s2.0-S0308814620300000-mmc2.docx'>Download: Download Word document (25KB)</a></body></html>")
 CHECK = (b"<!doctype html><html><head><title>Just a moment...</title></head><body><h1>Verify you are human</h1>"
          b"<p>Performance &amp; security by Cloudflare</p><a href='/doi/suppl/x_si_001.pdf'>Supporting Information</a>"
          b"</body></html>")
@@ -86,7 +91,7 @@ class H(BaseHTTPRequestHandler):
         path = self.path.split("#")[0]
         if with_body:
             GETS.append(path)
-        pages = {"/article/1": PAGE, "/article/2": EMPTY, "/check": CHECK}
+        pages = {"/article/1": PAGE, "/article/2": EMPTY, "/article/3": ONE, "/check": CHECK}
         if path in pages:
             ctype, body, extra = "text/html; charset=utf-8", pages[path], {}
         elif path == HUGE:
@@ -170,26 +175,65 @@ with sync_playwright() as p:
                            "/content/1-s2.0-S0308814620300000-mmc2.docx", "/article/10.3390/x1/s1",
                            "/files/raw-data.csv", "/journal/supplements", HUGE, LOCKED, "/suppl/1/same_si_005.pdf"])
 
-    count, folder = ad.download_supplements(context, BASE + "/article/1", article)
+    def open_and_note(path):
+        """What a download route does: the article page is open, its links are noted."""
+        ad.reset_supplements()
+        pg = context.new_page()
+        pg.goto(BASE + path)
+        ad.note_supplements(pg)
+        pg.close()
+
+    opened = []
+    real_new_page = context.new_page
+
+    def counting_new_page(*a, **k):
+        opened.append(1)
+        return real_new_page(*a, **k)
+
+    open_and_note("/article/1")
+    article_gets = GETS.count("/article/1")
+    context.new_page = counting_new_page
+    count, folder = ad.download_supplements(context, article, "10.9999/x1")
+    context.new_page = real_new_page
+    check("no page opened for the files", opened, [])
+    check("the article page not asked for again", GETS.count("/article/1"), article_gets)
     check("saved", count, 5)
     check("folder", folder, pdf_dir / "Fake_10.9999_x1_supplementary")
     names = sorted(x.name for x in folder.iterdir()) if folder else []
-    check("files", names, ["1-s2.0-S0308814620300000-mmc2.docx", "Table_S1.xlsx", "raw-data.csv", "s1.zip",
-                           "x1_si_001.pdf"])
+    check("files named by the DOI", names, ["10.9999_x1_supl1.pdf", "10.9999_x1_supl2.xlsx", "10.9999_x1_supl3.docx",
+                                            "10.9999_x1_supl4.zip", "10.9999_x1_supl5.csv"])
     if folder:
-        check("bytes", (folder / "x1_si_001.pdf").read_bytes(), FILES["/doi/suppl/10.9999/x1/suppl_file/x1_si_001.pdf"][1])
+        check("bytes", (folder / "10.9999_x1_supl1.pdf").read_bytes(), FILES["/doi/suppl/10.9999/x1/suppl_file/x1_si_001.pdf"][1])
+        check("the type gives the extension (MDPI …/s1)", (folder / "10.9999_x1_supl4.zip").read_bytes(),
+              FILES["/article/10.3390/x1/s1"][1])
     check("60 MB file not downloaded", HUGE in GETS, False)
     check("the video and the picture not asked for", any(x.endswith((".mp4", ".png")) for x in GETS), False)
     check("the article PDF next to it untouched", sorted(x.name for x in pdf_dir.iterdir()),
           ["Fake_10.9999_x1.pdf", "Fake_10.9999_x1_supplementary"])
 
+    # One file needs no number; without a DOI the article's own file name is used.
+    third = pdf_dir / "Fake_x3.pdf"
+    third.write_bytes(pdf("Third"))
+    open_and_note("/article/3")
+    count, folder = ad.download_supplements(context, third, None)
+    check("one file", (count, sorted(x.name for x in folder.iterdir()) if folder else []), (1, ["Fake_x3_supl.docx"]))
+
     other = pdf_dir / "Other.pdf"
     other.write_bytes(pdf("Other"))
-    check("no extras", ad.download_supplements(context, BASE + "/article/2", other), (0, None))
+    open_and_note("/article/2")
+    check("no extras", ad.download_supplements(context, other, "10.9999/x2"), (0, None))
     check("no empty folder", (pdf_dir / "Other_supplementary").exists(), False)
-    check("verification page left alone", ad.download_supplements(context, BASE + "/check", other), (0, None))
+    open_and_note("/check")
+    check("verification page left alone", ad.download_supplements(context, other, "10.9999/x2"), (0, None))
+    ad.reset_supplements()
+    context.new_page = counting_new_page
+    check("the PDF came without the article page: nothing opened", ad.download_supplements(context, other, "10.9999/x2"),
+          (0, None))
+    context.new_page = real_new_page
+    check("still no page opened", opened, [])
     os.environ["ARTICLE_SUPPLEMENTARY"] = "0"
-    check("tick off", ad.download_supplements(context, BASE + "/article/1", other), (0, None))
+    open_and_note("/article/1")
+    check("tick off", ad.download_supplements(context, other, "10.9999/x2"), (0, None))
     os.environ.pop("ARTICLE_SUPPLEMENTARY")
     browser.close()
 
