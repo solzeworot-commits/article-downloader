@@ -192,6 +192,30 @@ def list_counts(keys: list[str], status_of: dict) -> dict:
 
 
 RANK = {"success": 0, "running": 1, "pending": 2, "captcha": 3, "no_access": 4, "unsupported": 5, "failed": 6}
+# v9.2.2: the articles of a list that did not download go home with the status, so that they can
+# be looked for elsewhere while the work computer goes on (not only after the whole list).
+PROBLEMS_MAX = 500
+
+
+def list_problems(keys: list[str], items: list[dict]) -> list[dict]:
+    """The list's articles that did not download, in list order: {"q", "status", "why"}.
+    status as in list_counts: no_access, captcha or failed; the best attempt decides. An article
+    no longer in the queue was removed there by hand («Очистить», often once downloaded): left out,
+    so that nobody looks elsewhere for an article already downloaded."""
+    best: dict[str, dict] = {}
+    for item in items:
+        key, st = str(item.get("query") or "").lower(), item.get("status") or ""
+        if key not in best or RANK.get(st, 9) < RANK.get(best[key].get("status") or "", 9):
+            best[key] = item
+    out = []
+    for key in keys:
+        item = best.get(key)
+        st = (item or {}).get("status") or ""
+        if item is None or st in ("success", "pending", "running"):
+            continue
+        out.append({"q": item.get("query") or key, "status": st if st in ("no_access", "captcha") else "failed",
+                     "why": " ".join(str(item.get("message") or "").split())[:200]})
+    return out[:PROBLEMS_MAX]
 
 
 def best_status(items: list[dict]) -> dict:
@@ -224,9 +248,11 @@ def home_view(shared: Path, files: list[Path], status: dict | None, now: float |
             continue
         st = "run" if rec.get("queued") else "done"
         lists.append({"name": path.name, "state": st, "taken": rec.get("taken", ""),
-                      **{k: int(rec.get(k) or 0) for k in ("total", "done", "queued", "no_access", "captcha", "failed")}})
+                      **{k: int(rec.get(k) or 0) for k in ("total", "done", "queued", "no_access", "captcha", "failed")},
+                      "problems": list(rec.get("problems") or [])})
     view = {"lists": lists, "computer": (status or {}).get("computer", ""),
-            "seen": (status or {}).get("updated_text", "")}
+            "seen": (status or {}).get("updated_text", ""),
+            "problems": sum(len(x.get("problems") or []) for x in lists)}
     if not status:
         view["state"] = "never"
         return view

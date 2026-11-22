@@ -1025,6 +1025,49 @@ def find_wiley_pdfdirect(page, timeout_sec: int = 45):
     return None, None, None
 
 
+# v9.2.2: Wiley's login service. Where the network cuts it (22.11.2026, from Russia: by the name,
+# the same Cloudflare server answers for onlinelibrary.wiley.com), every Wiley article spent
+# minutes on PDF routes and retries before failing. Now the first failed top-level visit there
+# ends the article at once as «нет доступа», with a reason the user can act on (app.readable_reason).
+LOGIN_SERVICE_HOSTS = ("scienceconnect.io",)
+LOGIN_BLOCKED_MESSAGE = "WILEY_LOGIN_BLOCKED: wiley.scienceconnect.io (Wiley sign-in) not reachable from this network"
+# Failures that do not mean the service is cut off: the program itself stopped a slow visit there
+# (closed the tab, went elsewhere), or this computer's own network dropped for a moment.
+# Where the service is cut off, the connection hangs ~20 s and then breaks (ERR_CONNECTION_RESET).
+NOT_A_CUT_OFF = ("ERR_ABORTED", "ERR_INTERNET_DISCONNECTED", "ERR_NETWORK_CHANGED", "ERR_NETWORK_IO_SUSPENDED")
+
+
+class LoginServiceWatch:
+    """Notes a failed top-level visit to a login service in this browser context."""
+
+    def __init__(self, context):
+        self.context, self.url = context, ""
+        context.on("requestfailed", self._failed)
+
+    def _failed(self, request):
+        try:
+            host = (urlparse(request.url).hostname or "").lower()
+            failure = str(request.failure or "")            # "net::ERR_CONNECTION_RESET"
+            if (any(host == h or host.endswith("." + h) for h in LOGIN_SERVICE_HOSTS)
+                    and failure.rsplit(":", 1)[-1].strip() not in NOT_A_CUT_OFF
+                    and request.is_navigation_request() and request.frame.parent_frame is None):
+                if not self.url:
+                    log_line(f"Login service not reachable: {request.url} ({failure})")
+                self.url = request.url
+        except Exception:
+            pass
+
+    def check(self):
+        if self.url:
+            raise NoAccess(LOGIN_BLOCKED_MESSAGE)
+
+    def close(self):
+        try:
+            self.context.remove_listener("requestfailed", self._failed)
+        except Exception:
+            pass
+
+
 def download_wiley(context, raw: str, doi: str | None, resolved_url: str | None) -> Path:
     """
     Wiley v5.8: click the REAL visible PDF/ePDF control first.
@@ -1059,6 +1102,7 @@ def download_wiley(context, raw: str, doi: str | None, resolved_url: str | None)
     pdfdirect_url = f"{host}/doi/pdfdirect/{doi}?download=true"
 
     page = context.new_page()
+    watch = LoginServiceWatch(context)      # v9.2.2: fail fast when the login service is cut off
 
     def wiley_access_denied() -> bool:
         """
@@ -1103,12 +1147,14 @@ def download_wiley(context, raw: str, doi: str | None, resolved_url: str | None)
             dest.unlink()
         except Exception:
             pass
+        watch.check()
         return None
 
     try:
         log_line(f"Wiley article open: {article_url}")
         safe_goto(page, article_url, 60000)
         page.wait_for_timeout(2500)
+        watch.check()
 
         # Manual verification only; no bypass.
         wait_for_manual_verification(page, "Wiley", 900)
@@ -1158,6 +1204,7 @@ def download_wiley(context, raw: str, doi: str | None, resolved_url: str | None)
                 log_line(f"Wiley after PDF control click: {page.url}")
             except Exception as exc:
                 log_line(f"Wiley PDF control click error: {exc}")
+            watch.check()
 
             wait_for_manual_verification(page, "Wiley", 900)
 
@@ -1268,6 +1315,7 @@ def download_wiley(context, raw: str, doi: str | None, resolved_url: str | None)
         )
 
     finally:
+        watch.close()
         note_supplements(page)      # once more, if the page is still the article
         try:
             close_page_safely(page)

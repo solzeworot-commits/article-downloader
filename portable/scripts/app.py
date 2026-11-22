@@ -796,6 +796,13 @@ STATUS_BY_RESULT = {
 }
 
 
+def readable_reason(status: str, message: str) -> str:
+    """v9.2.2: a reason the downloader reports as a code, in words the user can act on."""
+    if status == "no_access" and message.startswith("WILEY_LOGIN_BLOCKED"):
+        return tr("Wiley: служба входа wiley.scienceconnect.io недоступна из этой сети — статью нужно найти другим путём")
+    return message
+
+
 def _run_item(item: dict):
     limit = max(2, int(S.settings.get("job_timeout_min") or 10)) * 60
     log = deque(maxlen=JOB_LOG_LINES)
@@ -869,6 +876,7 @@ def _run_item(item: dict):
         if status == "captcha" and item["attempts"] < 2:
             status = "pending"
             message = tr("была капча — повторю в конце очереди")
+        message = readable_reason(status, message)
 
         item["status"] = status
         item["message"] = message[:500]
@@ -2471,6 +2479,7 @@ def cloud_work_status(shared: Path, taken: dict) -> dict:
     """What the work computer writes to состояние.json: its queue and each list taken."""
     with S.lock:
         best = cloud.best_status(S.items)
+        items = [{"query": i.get("query"), "status": i.get("status"), "message": i.get("message")} for i in S.items]
         warm_captcha = S.warm["running"] and any(b.get("state") == "captcha" for b in S.warm["bases"].values())
         data = {"app": "ArticleDownloader", "version": APP_VERSION, "computer": computer_name(),
                 "running": S.running, "phase": S.phase, "limit": S.phase == "limit",
@@ -2481,7 +2490,8 @@ def cloud_work_status(shared: Path, taken: dict) -> dict:
         if not path.is_file():
             path = shared / cloud.TODO / name
         keys = [e.lower() for e in _list_entries(path)] if path.is_file() else []
-        lists[name] = {"size": rec.get("size"), "taken": rec.get("taken", ""), **cloud.list_counts(keys, best)}
+        lists[name] = {"size": rec.get("size"), "taken": rec.get("taken", ""), **cloud.list_counts(keys, best),
+                       "problems": cloud.list_problems(keys, items)}     # v9.2.2: home sees them at once
     data["lists"] = lists
     return data
 
@@ -2627,6 +2637,27 @@ def cloud_remove(name: str) -> dict:
     with S.lock:
         S.cloud_cache = None
     return {}
+
+
+def cloud_problems_save(name: str) -> dict:
+    """v9.2.2: the articles of a cloud list that did not download → a list in inbox, to look
+    for them elsewhere while the work computer goes on."""
+    role, shared = cloud_cfg()
+    if not role:
+        return {"error": tr("Облако не настроено.")}
+    status = S.cloud_status if role == "work" else cloud.read_status(shared)
+    rec = ((status or {}).get("lists") or {}).get(Path(name).name) or {}
+    queries = [p["q"] for p in rec.get("problems") or [] if p.get("q")]
+    if not queries:
+        return {"error": tr("У этого списка нет нескачанных статей.")}
+    INBOX.mkdir(parents=True, exist_ok=True)
+    stem = Path(name).stem
+    path, n = INBOX / f"{stem}_не_скачались.txt", 2
+    while path.exists():
+        path, n = INBOX / f"{stem}_не_скачались_{n}.txt", n + 1
+    path.write_text("".join(q + "\n" for q in queries), encoding="utf-8")
+    app_log(f"Cloud: {len(queries)} articles that did not download saved to {path.name}")
+    return {"name": path.name, "count": len(queries)}
 
 
 # ---------------------------------------------------------------------------
@@ -3338,6 +3369,8 @@ def handle_api(path: str, body: dict) -> dict:
         return cloud_send(str(body.get("name") or ""))
     if path == "/api/cloud_remove":
         return cloud_remove(str(body.get("name") or ""))
+    if path == "/api/cloud_problems_save":
+        return cloud_problems_save(str(body.get("name") or ""))
     if path == "/api/cloud_open":
         role, shared = cloud_cfg()
         if not role or not shared.is_dir():
