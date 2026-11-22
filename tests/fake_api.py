@@ -13,7 +13,7 @@ Point the program at it with
 Keys: "good-scopus-key-1234" / "good-wos-key-5678" work; a key starting with
 "noaccess" gets Scopus' "not entitled" answer, "quota" a 429, "pending" the
 WoS 403 of an unapproved subscription; anything else is an invalid key.
-OPENALEX_QUOTA = True (or the word "dailylimit" in a search, for ui_flow.py) makes
+OPENALEX_QUOTA = True (or the word "dailylimit" in a title-and-abstract search, for ui_flow.py) makes
 OpenAlex answer 429 — the daily limit of a keyless IP address; Crossref searches
 by query.bibliographic (v9.2) and keeps every search request in CROSSREF_SEEN.
 The response shapes copy the published examples of each API.
@@ -28,6 +28,7 @@ from urllib.parse import parse_qs, urlparse
 SCOPUS_TOTAL, WOS_TOTAL, OPENALEX_TOTAL, CROSSREF_TOTAL = 60, 40, 30, 500
 OPENALEX_QUOTA = False
 CROSSREF_SEEN = []
+OPENALEX_SEEN = []      # the parameters of every OpenAlex search request (v9.2.1)
 # Stands in for ArticleDownloader_Portable.zip in the update tests.
 UPDATE_ZIP = b"PK\x05\x06" + b"\x00" * 18 + b"fake update archive " * 3000
 
@@ -115,7 +116,7 @@ class Handler(BaseHTTPRequestHandler):
                                         "hits": [wos_hit(i) for i in ids]},
                                   {"X-RateLimit-Remaining-Day": "48"})
 
-        if url.path == "/openalex" and (OPENALEX_QUOTA or "dailylimit" in q.get("search", "")):
+        if url.path == "/openalex" and (OPENALEX_QUOTA or "dailylimit" in q.get("search.title_and_abstract", "")):
             return self.send_json(429, {"error": "Rate limit exceeded",
                                         "message": "Daily request budget for this IP address is used up. Add an api_key."})
 
@@ -178,6 +179,7 @@ class Handler(BaseHTTPRequestHandler):
             return self.send_json(200, {"meta": {"count": 1234}, "results": works})
 
         if url.path == "/openalex":
+            OPENALEX_SEEN.append(q)
             start = 0 if q.get("cursor", "*") == "*" else int(q["cursor"][1:])
             per_page = int(q.get("per-page", 25))
             ids = range(start, min(start + per_page, OPENALEX_TOTAL))

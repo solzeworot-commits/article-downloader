@@ -1007,6 +1007,23 @@ https://github.com/solzeworot-commits/article-downloader/releases/download/porta
   `cursor` — работают, 23 244 совпадения, лучшие — точно по теме. Не проверено: какой сейчас дневной лимит OpenAlex без
   ключа (поэтому подмена проверена только на поддельном 429).
 
+## 2я-4. Версия 9.2.1: OpenAlex — только название и аннотация
+
+- Автор сравнил выдачу с Web of Science: OpenAlex находил в разы больше. Причина — параметр `search` у OpenAlex
+  ищет в названии, аннотации **и полном тексте** (`fulltext.search` даёт столько же), а WoS `TS` и Scopus
+  `TITLE-ABS-KEY` — в названии, аннотации и ключевых словах. Проверено на настоящем API 22.11.2026:
+  «"deep eutectic solvent" AND delignification» — `search` 3206, `search.title_and_abstract` 491 (столько же, сколько
+  фильтр `title_and_abstract.search`; сортировка по релевантности и `cursor` работают, булевы скобки и кавычки тоже).
+- `search_openalex()`: в режиме «название, аннотация, ключ. слова» — `search.title_and_abstract=`; «только в названии»
+  — по-прежнему фильтр `title.search`. Неизвестный параметр или поле OpenAlex не пропускает молча, а отвечает 400.
+  Подсказки слов (`suggest_keywords`) остались на широком `search`: там нужна близость к теме, а не точность.
+- Цена: у работ без аннотации в OpenAlex (часто Elsevier) совпадение ищется только в названии; их добирают Scopus/WoS.
+- Тест: `search_test` проверяет, какой параметр уходит в OpenAlex (`fake_api.OPENALEX_SEEN`); слово `dailylimit`
+  для 429 в `fake_api` теперь ищется в `search.title_and_abstract`.
+- Выпуск 9.2 (17.11.2026): публикация для Mac не прошла — GitHub 15 минут не выделял машину macOS arm64 («The job was
+  not acquired by Runner… capacity constraints») и отменил задачу, поэтому на странице релиза не было архива для Mac.
+  Если повторится: Actions → «Сборка для Mac (бета)» → запуск с событием `workflow_run` → «Re-run jobs».
+
 ## 3. Что проверено в 6.0 (Linux, Chromium в Xvfb, поддельное издательство)
 
 Настоящие сайты издательств из среды сборки были закрыты сетью, поэтому всё
