@@ -1020,6 +1020,12 @@ https://github.com/solzeworot-commits/article-downloader/releases/download/porta
 - Цена: у работ без аннотации в OpenAlex (часто Elsevier) совпадение ищется только в названии; их добирают Scopus/WoS.
 - Тест: `search_test` проверяет, какой параметр уходит в OpenAlex (`fake_api.OPENALEX_SEEN`); слово `dailylimit`
   для 429 в `fake_api` теперь ищется в `search.title_and_abstract`.
+- Обновлятор (`support.UPDATER_PS1`) распаковывает архив через .NET `[IO.Compression.ZipFile]::ExtractToDirectory($Zip,
+  $tmp)` — два аргумента, есть во всех .NET (`$tmp` новый); `Expand-Archive` остался запасным путём. Причина: 22.11.2026
+  первая сборка 9.2.1 упала на шаге «Автообновление» — Windows PowerShell 5.1 на машинах GitHub взял новый модуль
+  Microsoft.PowerShell.Archive, его `Expand-Archive` зовёт `ExtractToDirectory` с тремя аргументами (только .NET Core):
+  «Cannot find an overload for "ExtractToDirectory" and the argument count: "3"». Со штатным модулем 1.0.1.0 обновление
+  работало (у автора 9.2 встала сама); новый путь проверен в PS 5.1.26100 с кириллицей в именах файлов.
 - Выпуск 9.2 (17.11.2026): публикация для Mac не прошла — GitHub 15 минут не выделял машину macOS arm64 («The job was
   not acquired by Runner… capacity constraints») и отменил задачу, поэтому на странице релиза не было архива для Mac.
   Если повторится: Actions → «Сборка для Mac (бета)» → запуск с событием `workflow_run` → «Re-run jobs».

@@ -139,7 +139,16 @@ try {
         Stop-Process -Force -ErrorAction SilentlyContinue
     Start-Sleep -Seconds 1
     $tmp = Join-Path ([IO.Path]::GetTempPath()) ('ArticleDownloader_update_' + [guid]::NewGuid().ToString('N'))
-    Expand-Archive -LiteralPath $Zip -DestinationPath $tmp -Force
+    # v9.2.1: .NET directly, the two-argument call that every .NET has ($tmp is new). A newer
+    # Archive module in Windows PowerShell 5.1 made Expand-Archive call a .NET Core-only
+    # ExtractToDirectory overload and fail (GitHub's Windows machines, November 2026).
+    try {
+        Add-Type -AssemblyName System.IO.Compression.FileSystem
+        [IO.Compression.ZipFile]::ExtractToDirectory($Zip, $tmp)
+    } catch {
+        Log ("ZipFile failed, trying Expand-Archive: " + $_)
+        Expand-Archive -LiteralPath $Zip -DestinationPath $tmp -Force
+    }
     $src = Join-Path $tmp 'ArticleDownloader'
     if (-not (Test-Path -LiteralPath (Join-Path $src 'scripts\app.py'))) { throw "no ArticleDownloader\scripts\app.py in the archive" }
     & robocopy $src $Root /E /IS /IT /R:3 /W:1 /NFL /NDL /NJH /NJS /NP | Out-Null
