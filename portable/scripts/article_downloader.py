@@ -221,25 +221,7 @@ def extract_doi(text: str) -> str | None:
 
 
 def looks_like_captcha(page) -> bool:
-    words = (
-        "verify you are human",
-        "checking your browser",
-        "security verification",
-        "cloudflare",
-    )
-
-    try:
-        title = page.title().lower()
-    except Exception:
-        title = ""
-
-    try:
-        body = page.locator("body").inner_text(timeout=5000).lower()
-    except Exception:
-        body = ""
-
-    hay = title + "\n" + body
-    return any(w in hay for w in words)
+    return _verification_state(page)[0] == "captcha"
 
 
 def job_bounded_wait(timeout_sec: int, margin_sec: int = 25) -> int:
@@ -259,17 +241,18 @@ def job_bounded_wait(timeout_sec: int, margin_sec: int = 25) -> int:
     return max(0, min(timeout_sec, left))
 
 
-def wait_for_manual_verification(page, source: str, timeout_sec: int = 900):
+def wait_for_manual_verification(page, source: str, timeout_sec: int = 90, *, download_ready=None) -> float:
     """
     If the site presents a human-verification page, keep the real browser open
     and wait for the user to complete it manually. No CAPTCHA solving or bypass.
 
-    Returns when the verification page disappears. Raises CaptchaRequired only
-    after the timeout expires.
+    Returns seconds spent waiting once a challenge was detected. Raises CaptchaRequired
+    if the tab is closed or the timeout expires.
     """
     if not looks_like_captcha(page):
-        return
+        return 0.0
 
+    started = time.monotonic()
     timeout_sec = job_bounded_wait(timeout_sec)
     if timeout_sec <= 0:
         raise CaptchaRequired(
@@ -295,23 +278,24 @@ def wait_for_manual_verification(page, source: str, timeout_sec: int = 900):
     )
     print("=" * 70, flush=True)
 
-    deadline = time.time() + timeout_sec
+    deadline = started + timeout_sec
     last_print = 0
+    clear_rounds = 0
 
-    while time.time() < deadline:
-        if not looks_like_captcha(page):
+    while time.monotonic() < deadline:
+        if download_ready and download_ready():
+            log_line(f"{source}: manual verification completed; download received.")
+            return time.monotonic() - started
+        state, _ = _verification_state(page)
+        if state == "closed":
+            raise CaptchaRequired(f"{source}: verification tab was closed")
+        # A challenge can briefly show an empty document while redirecting.
+        clear_rounds = clear_rounds + 1 if state == "ok" else 0
+        if clear_rounds >= 2:
             log_line(f"{source}: manual verification completed; continuing.")
-            print(
-                f"{source}: проверка пройдена — продолжаю автоматически.",
-                flush=True,
-            )
-            # The check reloads the real page; give it time to arrive.
-            page.wait_for_timeout(1500)
-            wait_page_ready(page, source, 20)
-            page.wait_for_timeout(1500)
-            return
+            return time.monotonic() - started
 
-        remaining = int(deadline - time.time())
+        remaining = max(0, int(deadline - time.monotonic()))
 
         # Avoid filling logs every few seconds.
         if time.time() - last_print >= 15:
@@ -322,7 +306,8 @@ def wait_for_manual_verification(page, source: str, timeout_sec: int = 900):
             )
             last_print = time.time()
 
-        page.wait_for_timeout(2000)
+        # A user may close the tab between probes. Check its state next round.
+        time.sleep(min(2, max(0, deadline - time.monotonic())))
 
     raise CaptchaRequired(
         f"{source}: manual verification was not completed within "
@@ -802,7 +787,7 @@ def download_springer(context, raw: str, doi: str | None) -> Path:
         safe_goto(page, article_url, 25000, attempts=2)
         wait_page_ready(page, "Springer")
         page.wait_for_timeout(2500)
-        wait_for_manual_verification(page, "Springer", 900)
+        wait_for_manual_verification(page, "Springer")
         note_supplements(page)      # v9.2.2: from this page, no second visit
 
         if page.url:
@@ -965,8 +950,7 @@ def wait_wiley_viewer(page, timeout_sec: int = 240):
     while time.time() < deadline:
         n += 1
 
-        if looks_like_captcha(page):
-            wait_for_manual_verification(page, "Wiley", 900)
+        deadline += wait_for_manual_verification(page, "Wiley")
 
         ev = wiley_viewer_evidence(page)
 
@@ -1157,7 +1141,7 @@ def download_wiley(context, raw: str, doi: str | None, resolved_url: str | None)
         watch.check()
 
         # Manual verification only; no bypass.
-        wait_for_manual_verification(page, "Wiley", 900)
+        wait_for_manual_verification(page, "Wiley")
         note_supplements(page)      # v9.2.2: before the PDF click moves this page to the viewer
 
         # ------------------------------------------------------------------
@@ -1206,7 +1190,7 @@ def download_wiley(context, raw: str, doi: str | None, resolved_url: str | None)
                 log_line(f"Wiley PDF control click error: {exc}")
             watch.check()
 
-            wait_for_manual_verification(page, "Wiley", 900)
+            wait_for_manual_verification(page, "Wiley")
 
             if wiley_access_denied():
                 raise NoAccess(
@@ -1331,8 +1315,7 @@ def find_elsevier_pdf_href(page, timeout_sec: int = 45) -> str:
     deadline = time.time() + timeout_sec
 
     while time.time() < deadline:
-        if looks_like_captcha(page):
-            wait_for_manual_verification(page, "Elsevier", 900)
+        deadline += wait_for_manual_verification(page, "Elsevier")
 
         # Machine-readable metadata is more stable than the visible toolbar.
         for selector in (
@@ -1486,32 +1469,27 @@ def capture_pdf_with_fetch(context, target_url: str, dest: Path, timeout_sec: in
         # A direct PDF navigation may report "Download is starting".
         log_line(f"{source_label} navigation message: {exc}")
 
-    deadline = time.time() + timeout_sec
+    try:
+        deadline = time.monotonic() + timeout_sec
+        while time.monotonic() < deadline and not saved["ok"] and not normal_downloads:
+            # Preserve time for the PDF response after the user returns.
+            deadline += wait_for_manual_verification(
+                page, source_label, download_ready=lambda: saved["ok"] or normal_downloads
+            )
+            page.wait_for_timeout(500)
 
-    while time.time() < deadline and not saved["ok"] and not normal_downloads:
-        if looks_like_captcha(page):
-            # Keep the visible page open and wait for the user to complete
-            # verification manually. Fetch remains attached and processing
-            # resumes afterwards.
-            wait_for_manual_verification(page, source_label, 900)
-        page.wait_for_timeout(500)
-
-    if not saved["ok"] and normal_downloads:
+        if not saved["ok"] and normal_downloads:
+            try:
+                normal_downloads[0].save_as(dest)
+                saved["ok"] = valid_pdf(dest)
+            except Exception:
+                pass
+    finally:
         try:
-            normal_downloads[0].save_as(dest)
-            saved["ok"] = valid_pdf(dest)
+            cdp.send("Fetch.disable")
         except Exception:
             pass
-
-    try:
-        cdp.send("Fetch.disable")
-    except Exception:
-        pass
-
-    try:
         close_page_safely(page)
-    except Exception:
-        pass
 
     if saved["ok"] and valid_pdf(dest):
         return True
@@ -1568,8 +1546,7 @@ def download_elsevier(context, raw: str, doi: str | None, resolved_url: str | No
         wait_page_ready(page, "Elsevier")
         page.wait_for_timeout(3500)
 
-        if looks_like_captcha(page):
-            wait_for_manual_verification(page, "Elsevier", 900)
+        wait_for_manual_verification(page, "Elsevier")
         note_supplements(page)      # v9.2.2: from this page, no second visit to ScienceDirect
 
         identity = doi or urlparse(article_url).path.strip("/").split("/")[-1] or "elsevier"
@@ -1577,6 +1554,8 @@ def download_elsevier(context, raw: str, doi: str | None, resolved_url: str | No
         candidates = []
         try:
             candidates.append(find_elsevier_pdf_href(page, 35))
+        except CaptchaRequired:
+            raise
         except DownloadError as exc:
             log_line(f"Elsevier visible PDF control not found: {exc}")
 
@@ -2299,7 +2278,7 @@ def download_browser_pdf_platform(
         wait_page_ready(page, label)
         page.wait_for_timeout(1800)
 
-        wait_for_manual_verification(page, label, 900)
+        wait_for_manual_verification(page, label)
         note_supplements(page)      # v9.2.2: from this page, no second visit
 
         def find_candidates():
@@ -2332,7 +2311,7 @@ def download_browser_pdf_platform(
             if access_denied_hint(page, label):
                 break
             page.wait_for_timeout(2500)
-            wait_for_manual_verification(page, label, 900)
+            wait_for_manual_verification(page, label)
             wait_page_ready(page, label, 10)
             candidates = find_candidates()
 
@@ -4863,47 +4842,46 @@ def connect_cdp_browser(playwright, cdp_url: str, ensure_func, label: str):
 # WARM-UP: open every database before the queue starts (v6.0)
 # ---------------------------------------------------------------------------
 
-# Wider than looks_like_captcha(): a false hit here only keeps the queue
-# waiting, while there it would stop a download.
-WARMUP_CHECK_WORDS = (
-    "verify you are human",
-    "verifying you are human",
-    "checking your browser",
-    "security verification",
-    "cloudflare",
-    "are you a robot",
-    "just a moment",
-    "один момент",
-    "подтвердите, что вы не робот",
-    "安全验证",
-    "拖动下方拼图",
+# Match verification prompts. Publisher footers also mention Cloudflare on
+# ordinary article pages, so the service name alone is insufficient.
+VERIFICATION_PROMPTS = (
+    "verify you are human", "verify that you are human", "verifying you are human",
+    "checking your browser", "security verification", "are you a robot",
+    "подтвердите, что вы не робот", "подтвердите, что вы человек",
 )
+VERIFICATION_TITLES = ("just a moment", "один момент", "checking your browser")
 WARMUP_ACCESS_RE = re.compile(
     r"(?:access provided by|доступ предоставлен)\s*:?\s*([^\n]{3,80})", re.I
 )
 WARMUP_LOAD_LIMIT_SEC = 90
 
 
-def _warmup_state(page) -> tuple[str, str]:
+def _verification_state(page, *, warmup=False) -> tuple[str, str]:
     try:
-        url, text = page.evaluate(
-            "() => [location.href, (document.title || '') + '\\n' + "
-            "(document.body ? document.body.innerText.slice(0, 8000) : '')]"
+        url, title, body, ready = page.locator("html").evaluate(
+            """() => [location.href, document.title.trim(),
+                document.body ? document.body.innerText.slice(0, 8000) : '',
+                document.readyState]""",
+            timeout=1500,
         )
     except Exception as exc:
-        return ("closed", "") if _target_closed_error(exc) else ("loading", "")
+        return ("closed", "") if page.is_closed() or _target_closed_error(exc) else ("loading", "")
 
-    low = (text or "").lower()
     if url in ("", "about:blank"):
         return "loading", ""
-    # The browser's own "site can't be reached" page.
-    if url.startswith("chrome-error:") or re.search(r"\bERR_[A-Z_]{4,}\b", text or ""):
+    if url.startswith("chrome-error:"):
         return "error", ""
-    if any(word in low for word in WARMUP_CHECK_WORDS):
+    heading = title.lower().strip(" .…")
+    intro = body.lstrip()[:1200].lower()
+    if (heading in VERIFICATION_TITLES
+            or any(w in heading or w in intro for w in VERIFICATION_PROMPTS)
+            or (warmup and any(w in intro for w in ("安全验证", "拖动下方拼图")))):
         return "captcha", ""
-    if len(low.strip()) < 20:
+    if ready == "loading" or not (title or body.strip()):
         return "loading", ""
-    m = WARMUP_ACCESS_RE.search(text)
+    if warmup and re.search(r"\bERR_[A-Z_]{4,}\b", body):
+        return "error", ""
+    m = WARMUP_ACCESS_RE.search(body) if warmup else None
     return "ok", (m.group(1).strip() if m else "")
 
 
@@ -4916,7 +4894,7 @@ def run_warmup(bases_file: Path) -> int:
     CAPTCHA is brought to the front, one after another.
     """
     bases = json.loads(bases_file.read_text(encoding="utf-8"))
-    wait_sec = job_bounded_wait(1800, margin_sec=5)
+    deadline = time.monotonic() + job_bounded_wait(1800, margin_sec=5)
 
     with sync_playwright() as p:
         browser = connect_cdp_browser(
@@ -4926,28 +4904,30 @@ def run_warmup(bases_file: Path) -> int:
         tabs = []
 
         for base in bases:
+            remaining = deadline - time.monotonic()
+            if remaining <= 0:
+                break
             page = context.new_page()
             safe_console_print(f"WARMUP|{base['key']}|loading|")
             try:
-                page.goto(base["url"], wait_until="commit", timeout=30000)
+                page.goto(base["url"], wait_until="commit", timeout=max(1, min(30000, int(remaining * 1000))))
             except Exception as exc:
                 log_line(f"Warm-up {base['key']}: {type(exc).__name__}: {exc}")
             tabs.append({"key": base["key"], "page": page,
                          "state": "loading", "opened": time.time()})
 
         log_line(f"Warm-up: {len(tabs)} database tab(s) opened")
-        deadline = time.time() + wait_sec
         front = None
         clear_rounds = 0
 
-        while time.time() < deadline:
+        while time.monotonic() < deadline:
             first_captcha = None
             blocking = 0
 
             for tab in tabs:
                 if tab["state"] == "closed":
                     continue
-                state, detail = _warmup_state(tab["page"])
+                state, detail = _verification_state(tab["page"], warmup=True)
                 if (state == "loading"
                         and time.time() - tab["opened"] > WARMUP_LOAD_LIMIT_SEC):
                     state = "error"
@@ -4993,6 +4973,7 @@ def run_warmup(bases_file: Path) -> int:
 
     left = [t["key"] for t in tabs if t["state"] in ("loading", "captcha")]
     log_line(f"Warm-up: time is up, still waiting: {', '.join(left)}")
+    left.extend(base["key"] for base in bases[len(tabs):])
     emit("CAPTCHA_REQUIRED", ", ".join(left))
     return EXIT_CAPTCHA
 
@@ -5208,6 +5189,9 @@ def download_supplements(context, article: Path, doi: str | None = None) -> tupl
 def _download_routed(context, source: str, raw: str, doi: str | None, resolved: str | None) -> Path:
     """Run the platform downloader for an identified source."""
     if source == "elsevier":
+        # A DOI can resolve to ScienceDirect even if its prefix was unfamiliar.
+        if os.environ.get("ARTICLE_ELSEVIER_ON_HOLD") == "1":
+            raise CaptchaRequired("Elsevier: waiting for the user to resume ScienceDirect")
         log_line("Browser route: Elsevier -> dedicated browser (port 9223)")
         return download_elsevier(context, raw, doi, resolved)
 

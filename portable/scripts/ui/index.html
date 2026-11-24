@@ -684,6 +684,7 @@ https://link.springer.com/article/10.1007/s12393-026-09447-8
     <div class="counts" id="counts"></div>
     <div class="tools">
       <button id="btn-pdf">📂 Открыть папку с PDF</button>
+      <button id="btn-elsevier" hidden>Продолжить Elsevier</button>
       <button id="btn-retry">↻ Повторить неудачные</button>
       <button id="btn-clear-done">Убрать скачанные из списка</button>
       <button id="btn-clear-all">Очистить список</button>
@@ -1210,7 +1211,7 @@ extraction"></textarea>
 
     <h4>Важно знать</h4>
     <ul>
-      <li><b>Капчу программа не обходит.</b> Если сайт спросит «я не робот», рабочий компьютер подождёт человека: проверку может пройти коллега. Если никого нет, статья повторится в конце очереди, а после второй капчи получит пометку «капча» — её можно скачать позже.</li>
+      <li><b>Капчу программа не обходит.</b> Если ScienceDirect ждёт проверки, статьи Elsevier останутся в очереди. После обработки остальных статей нажмите «Продолжить Elsevier» на рабочем компьютере. Для других издателей программа повторяет попытку в конце очереди.</li>
       <li>Паузы между статьями и дневной лимит работают как обычно. Дошёл до лимита — рабочий компьютер сам продолжит на следующий день.</li>
       <li>Облако переносит файлы не мгновенно: состояние обновляется с задержкой в минуту-две.</li>
       <li>PDF занимают место в облаке: 300 статей — примерно 0,5–1 ГБ.</li>
@@ -1455,7 +1456,7 @@ function render() {
     setBanner("red", "⛔", "<b>Не найден браузер.</b> Установите Яндекс.Браузер с сайта <a href='https://browser.yandex.ru/' target='_blank'>browser.yandex.ru</a> " +
       "(ставится без прав администратора) и запустите программу снова. Подойдёт и Microsoft Edge или Google Chrome.");
   } else if (s.captcha_now) {
-    setBanner("amber", "⚠", "<b>Сайт просит пройти проверку (капчу).</b> Перейдите в окно браузера загрузчика и пройдите её. Программа ждёт и продолжит сама.");
+    setBanner("amber", "⚠", "<b>Сайт просит пройти проверку (капчу).</b> Пройдите проверку в браузере загрузчика. На неё есть до 90 секунд. Если время выйдет, очередь продолжится.");
   } else if (w.running && captchaBases.length) {
     setBanner("amber", "⚠", `<b>Пройдите проверку в окне браузера:</b> ${captchaBases.map(esc).join(", ")}. ` +
       (s.running ? "Как только пройдёте, скачивание начнётся само, и можно уходить." : "Потом вставьте DOI и нажмите «Скачать статьи»."), skipBtn);
@@ -1468,6 +1469,8 @@ function render() {
     setBanner("green", "⬇", `<b>Идёт скачивание:</b> ${done + 1} из ${c.total} (${now}). Можно уходить: программа всё сделает сама.`);
   } else if (s.phase === "limit") {
     setBanner("amber", "⏸", esc(s.notice));
+  } else if (s.elsevier_waiting && !s.running) {
+    setBanner("amber", "⏸", "Статьи Elsevier ждут проверки в ScienceDirect. Нажмите «Продолжить Elsevier» и пройдите проверку в браузере загрузчика, если сайт её покажет.");
   } else if (s.notice) {
     setBanner("red", "⚠", esc(s.notice));
   } else if (c.total && !c.pending && !c.running) {
@@ -1495,6 +1498,7 @@ function render() {
     c.captcha ? `⚠ капча: <b>${c.captcha}</b>` : "",
     c.failed ? `✖ ошибки: <b>${c.failed}</b>` : "",
   ].filter(Boolean).map((x) => `<span>${x}</span>`).join("") : "";
+  $("btn-elsevier").hidden = !s.elsevier_waiting || s.running;
   $("btn-retry").disabled = !(c.failed + c.no_access + c.captcha);
   $("btn-clear-done").disabled = !c.success;
   $("btn-clear-all").disabled = !c.total;
@@ -1512,6 +1516,8 @@ function renderStart() {
   } else if (n) {
     btn.disabled = false;
     sub.textContent = (state.running ? "добавить в очередь: " : "начать: ") + n + " " + plural(n, "статья", "статьи", "статей");
+  } else if (state.elsevier_waiting && c.pending === state.elsevier_waiting && !state.running) {
+    btn.disabled = true; sub.textContent = "Нажмите «Продолжить Elsevier»";
   } else if (c.pending && !state.running) {
     btn.disabled = false; sub.textContent = "продолжить: в очереди " + c.pending;
   } else if (state.running) {
@@ -1536,6 +1542,7 @@ function renderItems() {
     const [label, icon] = STATUS[it.status] || [it.status, ""];
     let msg = "";
     if (it.status === "success") msg = it.file.split(/[\\/]/).pop();
+    else if (it.elsevier_hold) msg = "Ждёт проверки в ScienceDirect";
     else if (it.message) msg = it.message;
     const acts = [];
     if (it.status === "success") acts.push(`<button data-open="${it.id}">Открыть</button>`);
@@ -1637,6 +1644,7 @@ $("btn-first-ok").onclick = () => { $("first-run").hidden = true; };
 $("btn-login-toggle").onclick = () => { $("login-panel").hidden = !$("login-panel").hidden; };
 $("btn-pdf").onclick = () => api("/api/open", { what: "pdf_dir" });
 $("btn-report").onclick = () => api("/api/open", { what: "report" });
+$("btn-elsevier").onclick = () => api("/api/resume_elsevier");
 $("btn-retry").onclick = () => api("/api/retry");
 $("btn-clear-done").onclick = () => api("/api/clear", { what: "done" });
 $("btn-clear-all").onclick = () => { if (confirm("Убрать из списка все статьи? Скачанные PDF останутся в папке.")) api("/api/clear", { what: "all" }); };
@@ -1781,6 +1789,8 @@ function renderExtra() {
     note(home, "red", "⛔", "<b>Не найден браузер для скачивания.</b> Нужен Яндекс.Браузер (browser.yandex.ru, ставится без прав администратора), Microsoft Edge или Google Chrome.");
   } else if (s.running) {
     note(home, "green", "⬇", `<b>Идёт скачивание:</b> готово ${c.total - c.pending - c.running} из ${c.total}.`, '<button data-go="download">Открыть</button>');
+  } else if (s.elsevier_waiting) {
+    note(home, "amber", "⏸", "Статьи Elsevier ждут проверки в ScienceDirect.", '<button data-go="download">Открыть</button>');
   } else if (c.pending) {
     note(home, "amber", "⏸", `Есть незаконченный список: <b>${c.pending}</b> ${plural(c.pending, "статья ждёт", "статьи ждут", "статей ждут")} скачивания.`,
       '<button class="linkbtn" id="home-resume">▶ Продолжить</button>');

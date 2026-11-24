@@ -1,5 +1,10 @@
 {
  "page": {
+  "Продолжить Elsevier": "Resume Elsevier",
+  "Нажмите «Продолжить Elsevier»": "Click “Resume Elsevier”",
+  "Статьи Elsevier ждут проверки в ScienceDirect.": "The Elsevier articles are waiting for verification on ScienceDirect.",
+  "Нажмите «Продолжить Elsevier» и пройдите проверку в браузере загрузчика, если сайт её покажет.": "Click “Resume Elsevier” and complete the check in the downloader’s browser if prompted.",
+  "Ждёт проверки в ScienceDirect": "Waiting for verification on ScienceDirect",
   "!-- © 2026 Bucaneiro. Загрузчик статей — бесплатная программа; условия в файле ЛИЦЕНЗИЯ.txt. --": "!-- © 2026 Bucaneiro. Article Downloader is a free program; terms in ЛИЦЕНЗИЯ.txt. --",
   "Загрузчик статей": "Article Downloader",
   "Загрузчик статей‌​‌": "Article Downloader‌​‌",
@@ -260,7 +265,7 @@
   "Установите Яндекс.Браузер с сайта": "Install Yandex Browser from",
   "(ставится без прав администратора) и запустите программу снова. Подойдёт и Microsoft Edge или Google Chrome.": "(it installs without administrator rights) and start the program again. Microsoft Edge or Google Chrome will also do.",
   "Сайт просит пройти проверку (капчу).": "The site asks you to pass a check (CAPTCHA).",
-  "Перейдите в окно браузера загрузчика и пройдите её. Программа ждёт и продолжит сама.": "Go to the downloader's browser window and pass it. The program waits and carries on by itself.",
+  "Пройдите проверку в браузере загрузчика. На неё есть до 90 секунд. Если время выйдет, очередь продолжится.": "Complete the check in the downloader’s browser. You have up to 90 seconds. When time runs out, the queue continues.",
   "Пройдите проверку в окне браузера:": "Pass the check in the browser window:",
   "Как только пройдёте, скачивание начнётся само, и можно уходить.": "As soon as you pass it, downloading starts by itself and you can leave.",
   "Потом вставьте DOI и нажмите «Скачать статьи».": "Then paste DOIs and click «Download articles».",
@@ -945,7 +950,6 @@
   "— всё скачано или рабочий компьютер на связи и ждёт список.": "— everything is downloaded, or the work computer is online and waiting for a list.",
   "Важно знать": "Good to know",
   "Капчу программа не обходит.": "The program does not get around CAPTCHAs.",
-  "Если сайт спросит «я не робот», рабочий компьютер подождёт человека: проверку может пройти коллега. Если никого нет, статья повторится в конце очереди, а после второй капчи получит пометку «капча» — её можно скачать позже.": "If a site asks «I am not a robot», the work computer waits for a person: a colleague can pass the check. If nobody is there, the article is tried again at the end of the queue, and after a second CAPTCHA it gets the mark «CAPTCHA» — it can be downloaded later.",
   "Паузы между статьями и дневной лимит работают как обычно. Дошёл до лимита — рабочий компьютер сам продолжит на следующий день.": "Pauses between articles and the daily limit work as usual. Once the limit is reached, the work computer goes on by itself the next day.",
   "Облако переносит файлы не мгновенно: состояние обновляется с задержкой в минуту-две.": "The cloud does not move files instantly: the state is shown a minute or two late.",
   "PDF занимают место в облаке: 300 статей — примерно 0,5–1 ГБ.": "PDFs take space in the cloud: 300 articles are about 0.5–1 GB.",
@@ -1084,9 +1088,11 @@
   " · не скачались: $": " · not downloaded: $",
   "📋 Скопировано DOI: $": "📋 DOIs copied: $",
   "Не скопировалось — выделите список и нажмите Ctrl+C": "Not copied — select the list and press Ctrl+C",
-  "DOI. Его можно открыть, отобрать или отправить заново.": "DOI. You can open it, screen it or send it again."
+  "DOI. Его можно открыть, отобрать или отправить заново.": "DOI. You can open it, screen it or send it again.",
+  "Если ScienceDirect ждёт проверки, статьи Elsevier останутся в очереди. После обработки остальных статей нажмите «Продолжить Elsevier» на рабочем компьютере. Для других издателей программа повторяет попытку в конце очереди.": "When ScienceDirect requires verification, the Elsevier articles stay in the queue. After the other articles finish, click “Resume Elsevier” on the work computer. Articles from other publishers are retried at the end of the queue."
  },
  "messages": {
+  "Статьи Elsevier ждут проверки в ScienceDirect.": "The Elsevier articles are waiting for verification on ScienceDirect.",
   "экспорт": "export",
   "была капча — повторю в конце очереди": "there was a CAPTCHA — will retry at the end of the queue",
   "Пока ни одна статья не отмечена «✓ Подходит».": "No article is marked «✓ Fits» yet.",

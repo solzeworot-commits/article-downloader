@@ -85,7 +85,7 @@ PDF_TEXT_CACHE = ROOT / "logs" / "pdf_text"      # the pages of the PDFs, for «
 BIBLIO_DIR = ROOT / "Список литературы"
 
 UI_PORT = 17865
-APP_VERSION = "9.2.2"
+APP_VERSION = "9.2.4"
 APP_AUTHOR = "Bucaneiro"
 OFFICIAL_URL = "https://github.com/solzeworot-commits/article-downloader"
 DOWNLOAD_URL = OFFICIAL_URL + "/releases/tag/portable-latest"
@@ -251,6 +251,7 @@ def child_env(deadline_sec: float | None = None) -> dict:
         PYTHONIOENCODING="utf-8",
         PYTHONUTF8="1",
         ARTICLE_BROWSER=str(S.settings.get("browser") or "auto"),
+        ARTICLE_ELSEVIER_ON_HOLD="1" if S.elsevier_waiting() else "0",
         ARTICLE_PDF_DIR=str(pdf_dir()),
         ARTICLE_LOG_DIR=str(LOGS),
         ARTICLE_SUPPLEMENTARY="1" if S.settings.get("supplementary", True) else "0",
@@ -410,6 +411,20 @@ def file_to_text(name: str, data: bytes) -> str:
 # state
 # ---------------------------------------------------------------------------
 
+def is_elsevier_query(query: str) -> bool:
+    query = unquote(query.strip()).lower()
+    if re.match(r"^(?:https?://(?:dx\.)?doi\.org/)?10\.1016/", query):
+        return True
+    if not query.startswith(("http://", "https://")):
+        return False
+    try:
+        host = (urlparse(query).hostname or "").rstrip(".")
+    except ValueError:
+        return False
+    return any(host == domain or host.endswith("." + domain)
+               for domain in ("sciencedirect.com", "elsevier.com"))
+
+
 class State:
     def __init__(self):
         self.lock = threading.RLock()
@@ -494,6 +509,13 @@ class State:
         for item in self.items:
             if item.get("status") == "running":
                 item["status"] = "pending"
+        # Restore articles left at a terminal CAPTCHA by earlier versions.
+        for item in self.items:
+            if item["status"] == "captcha" and (is_elsevier_query(item["query"])
+                    or item.get("message", "").startswith(("Elsevier:", "Elsevier PDF:"))):
+                item.update(status="pending", elsevier_hold=True, message="")
+        if self.elsevier_waiting():
+            self.hold_elsevier()
         self.next_id = max([i["id"] for i in self.items] + [0]) + 1
         if data.get("day") == self.day:
             self.day_count = int(data.get("day_count", 0))
@@ -513,11 +535,20 @@ class State:
 
     # -- queue -------------------------------------------------------------
 
+    def elsevier_waiting(self):
+        return sum(1 for item in self.items if item.get("elsevier_hold"))
+
+    def hold_elsevier(self):
+        for item in self.items:
+            if item["status"] == "pending" and is_elsevier_query(item["query"]):
+                item["elsevier_hold"] = True
+
     def add_entries(self, entries: list[str]) -> tuple[int, int]:
         added = duplicates = 0
         with self.lock:
             known = {i["query"].lower() for i in self.items
                      if i["status"] not in ("failed", "no_access", "unsupported")}
+            hold_elsevier = bool(self.elsevier_waiting())
             for entry in entries:
                 if entry.lower() in known:
                     duplicates += 1
@@ -528,6 +559,8 @@ class State:
                     "file": "", "message": "", "attempts": 0,
                     "added": time.strftime("%Y-%m-%d %H:%M"),
                 })
+                if hold_elsevier and is_elsevier_query(entry):
+                    self.items[-1]["elsevier_hold"] = True
                 self.next_id += 1
                 added += 1
             if added:
@@ -537,7 +570,7 @@ class State:
     def next_pending(self):
         with self.lock:
             pending = [(i["attempts"], n, i) for n, i in enumerate(self.items)
-                       if i["status"] == "pending"]
+                       if i["status"] == "pending" and not i.get("elsevier_hold")]
             return min(pending, key=lambda t: t[:2])[2] if pending else None
 
     def item(self, item_id: int):
@@ -643,7 +676,8 @@ def start_warmup():
             S.warm = S._warm_blank()
             S.warm.update(done=True, error=S.browser["error"])
             return
-        enabled = [b for b in BASES if S.settings["bases"].get(b[0], True)]
+        enabled = [b for b in BASES if S.settings["bases"].get(b[0], True)
+                   and not (b[0] == "elsevier" and S.elsevier_waiting())]
         if not enabled:
             S.warm = S._warm_blank()
             S.warm.update(done=True, cleared=True, finished_at=time.time())
@@ -678,6 +712,10 @@ def _warmup_thread(bases: list[dict]):
                 with S.lock:
                     if status == "SUCCESS":
                         S.warm["cleared"] = True
+                    elif (status == "CAPTCHA_REQUIRED" and not S.warm["skipped"]
+                          and S.warm["bases"].get("elsevier", {}).get("state") == "captcha"):
+                        S.hold_elsevier()
+                        S.touch_items()
                     elif status == "FAILED":
                         S.warm["error"] = message
         proc.wait()
@@ -702,14 +740,20 @@ def skip_warmup():
 # queue runner
 # ---------------------------------------------------------------------------
 
-def start_queue():
+def start_queue(*, resume_elsevier=False):
     with S.lock:
+        if resume_elsevier:
+            if S.running or not S.elsevier_waiting():
+                return
+            for item in S.items:
+                item.pop("elsevier_hold", None)
+            S.touch_items()
         if S.next_pending() is None:
             return
         warm = S.warm
         stale = (not warm["done"] or warm["skipped"] or warm["error"]
                  or time.time() - warm["finished_at"] > WARM_FRESH_SEC)
-        if not warm["running"] and stale and not S.running:
+        if not resume_elsevier and not warm["running"] and stale and not S.running:
             start_warmup()
         if S.running:
             return
@@ -873,7 +917,12 @@ def _run_item(item: dict):
         elif not result["status"]:
             message = next((l for l in reversed(log) if l.strip()), tr("код {code}", code=code))
 
-        if status == "captcha" and item["attempts"] < 2:
+        if status == "captcha" and (message.startswith(("Elsevier:", "Elsevier PDF:"))
+                                    or is_elsevier_query(item["query"])):
+            status, message = "pending", ""
+            item["elsevier_hold"] = True
+            S.hold_elsevier()
+        elif status == "captcha" and item["attempts"] < 2:
             status = "pending"
             message = tr("была капча — повторю в конце очереди")
         message = readable_reason(status, message)
@@ -886,11 +935,6 @@ def _run_item(item: dict):
         item["finished"] = time.strftime("%Y-%m-%d %H:%M")
         S.touch_items()
 
-    if status == "pending" and result["status"] == "CAPTCHA_REQUIRED":
-        # The site keeps asking: open the databases again so the check is in
-        # front of the user, and hold the queue until it is passed (or the
-        # warm-up time runs out).
-        start_warmup()
     if status != "pending":
         _report(item)
 
@@ -2483,7 +2527,7 @@ def cloud_work_status(shared: Path, taken: dict) -> dict:
         warm_captcha = S.warm["running"] and any(b.get("state") == "captcha" for b in S.warm["bases"].values())
         data = {"app": "ArticleDownloader", "version": APP_VERSION, "computer": computer_name(),
                 "running": S.running, "phase": S.phase, "limit": S.phase == "limit",
-                "captcha": bool(S.captcha_now or warm_captcha)}
+                "captcha": bool(S.captcha_now or warm_captcha or S.elsevier_waiting())}
     lists = {}
     for name, rec in taken.items():
         path = INBOX / rec.get("local", "")
@@ -2668,6 +2712,7 @@ def tray_tip() -> str:
     """The icon's tooltip: what the program is doing."""
     with S.lock:
         phase, captcha = S.phase, S.captcha_now
+        held = S.elsevier_waiting()
         done = sum(1 for i in S.items if i["status"] == "success")
         left = sum(1 for i in S.items if i["status"] in ("pending", "running"))
     tip = f"{tr('Загрузчик статей')} {APP_VERSION}"
@@ -2677,6 +2722,8 @@ def tray_tip() -> str:
         return tip + "\n" + tr("Скачиваю: готово {done}, осталось {left}", done=done, left=left)
     if phase == "limit":
         return tip + "\n" + tr("Дневной лимит: продолжу завтра")
+    if held:
+        return tip + "\n" + tr("Статьи Elsevier ждут проверки в ScienceDirect.")
     if cloud_cfg()[0] == "work":
         return tip + "\n" + tr("☁ Рабочий компьютер: жду списки из облака")
     return tip
@@ -2926,6 +2973,7 @@ def public_state(known_version: int) -> dict:
             "current": S.current_id,
             "pause_left": max(0, int(S.pause_until - time.time())) if S.phase == "pause" else 0,
             "captcha_now": S.captcha_now,
+            "elsevier_waiting": S.elsevier_waiting(),
             "warm": {k: v for k, v in S.warm.items() if k != "bases"} | {"bases": bases},
             "browser": S.browser,
             "first_run": S.first_run,
@@ -2956,7 +3004,7 @@ def public_state(known_version: int) -> dict:
         if known_version != S.items_version:
             data["items"] = [
                 {k: i.get(k, "") for k in ("id", "query", "status", "file",
-                                            "message", "attempts", "supp")}
+                                            "message", "attempts", "supp", "elsevier_hold")}
                 for i in S.items
             ]
     data["cloud"] = cloud_state()      # outside the lock: a cloud folder can be slow to read
@@ -3009,11 +3057,17 @@ def handle_api(path: str, body: dict) -> dict:
         stop_queue()
         return {}
 
+    if path == "/api/resume_elsevier":
+        start_queue(resume_elsevier=True)
+        return {}
+
     if path == "/api/retry":
         with S.lock:
             for item in S.items:
                 if item["status"] in ("failed", "no_access", "captcha", "unsupported"):
                     item.update(status="pending", attempts=0, message="")
+            if S.elsevier_waiting():
+                S.hold_elsevier()
             S.touch_items()
         start_queue()
         return {}
