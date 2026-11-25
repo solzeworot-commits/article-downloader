@@ -56,6 +56,7 @@ import i18n
 import osutil
 import review as rv
 import support as sp
+import wiley_route
 from i18n import tr
 
 
@@ -85,7 +86,7 @@ PDF_TEXT_CACHE = ROOT / "logs" / "pdf_text"      # the pages of the PDFs, for «
 BIBLIO_DIR = ROOT / "Список литературы"
 
 UI_PORT = 17865
-APP_VERSION = "9.2.5"
+APP_VERSION = "9.2.6"
 APP_AUTHOR = "Bucaneiro"
 OFFICIAL_URL = "https://github.com/solzeworot-commits/article-downloader"
 DOWNLOAD_URL = OFFICIAL_URL + "/releases/tag/portable-latest"
@@ -149,7 +150,7 @@ BASES = [
      ("10.1038",)),
     ("wiley", "Wiley", "https://onlinelibrary.wiley.com/",
      "https://onlinelibrary.wiley.com/action/ssostart?redirectUri=%2F",
-     ("10.1002", "10.1111")),
+     wiley_route.DOI_PREFIXES),
     ("acs", "ACS Publications", "https://pubs.acs.org/",
      "https://pubs.acs.org/action/ssostart?redirectUri=%2F",
      ("10.1021",)),
@@ -3399,7 +3400,10 @@ def handle_api(path: str, body: dict) -> dict:
         if doi:
             url = "https://doi.org/" + quote(doi, safe="/:;()[]<>")
             if os.environ.get("ARTICLE_UI_NO_WINDOW") != "1":
-                webbrowser.open(url)
+                if S.settings.get("wiley_chrome") and wiley_route.is_wiley_doi(doi):
+                    open_in_dedicated_browser([url], wiley=True)
+                else:
+                    webbrowser.open(url)
             return {"url": url}
         return {"error": tr("Это не DOI.")}
 

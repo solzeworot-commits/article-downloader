@@ -70,6 +70,8 @@ import sys
 import time
 import urllib.request
 import urllib.error
+import wiley_route
+
 from contextlib import contextmanager
 from pathlib import Path
 from urllib.parse import urljoin, urlparse, unquote, quote_plus, quote, parse_qs
@@ -3460,15 +3462,19 @@ def _title_accept_pdf(path: Path | None, query: dict, identity: str) -> Path | N
 def _title_try_candidate(playwright, context, url: str, why: str, query: dict, identity: str) -> Path | None:
     doi_link = "doi.org/" in url.lower()
     doi = extract_doi(url)
-    source, resolved = identify_source(context, url, doi) if doi_link and doi else (
-        classify_direct(url, doi), url
-    )
+    source, resolved = classify_direct(url, doi), url
+    chrome_context = None
     if doi_link and doi:
+        resolve_in_chrome = wiley_route.is_wiley_doi(doi) and use_wiley_chrome("wiley")
+        with browser_route(resolve_in_chrome):
+            if resolve_in_chrome:
+                chrome_context = connect_dedicated_context(playwright)
+            source, resolved = identify_source(chrome_context or context, url, doi)
         log_line(f"Title search DOI {doi} -> source {source}")
     if doi and use_wiley_chrome(source):
         with browser_route(True):
-            context = connect_dedicated_context(playwright)
-            path = _download_routed(context, source, url, doi, resolved)
+            chrome_context = chrome_context or connect_dedicated_context(playwright)
+            path = _download_routed(chrome_context, source, url, doi, resolved)
         return _title_accept_pdf(path, query, identity)
     if doi_link and doi:
         return _title_accept_pdf(
@@ -4398,12 +4404,7 @@ def browser_cdp_url() -> str:
 
 
 def use_wiley_chrome(source: str | None) -> bool:
-    if source != "wiley" or os.environ.get("ARTICLE_WILEY_CHROME") != "1":
-        return False
-    try:
-        return dedicated_browser()[0] != "chrome"
-    except DownloadError:
-        return True
+    return source == "wiley" and os.environ.get("ARTICLE_WILEY_CHROME") == "1"
 
 
 @contextmanager
@@ -5366,9 +5367,11 @@ def _process_one_once(raw: str) -> Path:
 
     with sync_playwright() as p:
         context = None
+        resolve_in_chrome = wiley_route.is_wiley_doi(doi) and use_wiley_chrome("wiley")
         if source is None:
-            context = connect_dedicated_context(p)
-            source, resolved = identify_source(context, raw, doi)
+            with browser_route(resolve_in_chrome):
+                context = connect_dedicated_context(p)
+                source, resolved = identify_source(context, raw, doi)
 
         log_line(f"Source: {source}")
         if resolved:
@@ -5376,7 +5379,7 @@ def _process_one_once(raw: str) -> Path:
 
         separate_wiley = use_wiley_chrome(source)
         with browser_route(separate_wiley):
-            if context is None or separate_wiley:
+            if context is None or separate_wiley != resolve_in_chrome:
                 context = connect_dedicated_context(p)
 
             path = _download_routed(context, source, raw, doi, resolved)
