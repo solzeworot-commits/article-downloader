@@ -70,6 +70,7 @@ import sys
 import time
 import urllib.request
 import urllib.error
+from contextlib import contextmanager
 from pathlib import Path
 from urllib.parse import urljoin, urlparse, unquote, quote_plus, quote, parse_qs
 
@@ -87,8 +88,9 @@ LOG_DIR = Path(os.environ.get("ARTICLE_LOG_DIR") or ROOT / "logs")
 PDF_DIR.mkdir(parents=True, exist_ok=True)
 LOG_DIR.mkdir(parents=True, exist_ok=True)
 
-EDGE_CDP_URL = "http://127.0.0.1:9223"
-BROWSER_CDP_URL = "http://127.0.0.1:9223"
+MAIN_BROWSER_PORT = 9223
+WILEY_BROWSER_PORT = 9224
+BROWSER_PORT = MAIN_BROWSER_PORT
 
 EXIT_SUCCESS = 0
 EXIT_FAILURE = 1
@@ -98,6 +100,10 @@ EXIT_UNSUPPORTED = 12
 
 
 class DownloadError(RuntimeError):
+    pass
+
+
+class BrowserRouteUnavailable(DownloadError):
     pass
 
 
@@ -355,7 +361,7 @@ def close_page_safely(page):
             session.detach()
         except Exception:
             pass
-        urllib.request.urlopen(f"{BROWSER_CDP_URL}/json/close/{target_id}", timeout=5).read()
+        urllib.request.urlopen(f"{browser_cdp_url()}/json/close/{target_id}", timeout=5).read()
     except Exception:
         pass
     try:
@@ -2211,7 +2217,7 @@ def internal_pdf_worker_main(target_url: str, dest: Path) -> int:
     """One disposable CDP session. Parent terminates it on post-write marker."""
     try:
         with sync_playwright() as p:
-            browser = p.chromium.connect_over_cdp(BROWSER_CDP_URL, timeout=12000)
+            browser = p.chromium.connect_over_cdp(browser_cdp_url(), timeout=12000)
             if not browser.contexts:
                 raise DownloadError("Yandex context missing in direct PDF worker")
             context = browser.contexts[0]
@@ -3451,11 +3457,20 @@ def _title_accept_pdf(path: Path | None, query: dict, identity: str) -> Path | N
         return path
 
 
-def _title_try_candidate(context, url: str, why: str, query: dict, identity: str) -> Path | None:
-    doi = extract_doi(url) if "doi.org/" in url.lower() else None
-    if doi:
-        source, resolved = identify_source(context, url, doi)
+def _title_try_candidate(playwright, context, url: str, why: str, query: dict, identity: str) -> Path | None:
+    doi_link = "doi.org/" in url.lower()
+    doi = extract_doi(url)
+    source, resolved = identify_source(context, url, doi) if doi_link and doi else (
+        classify_direct(url, doi), url
+    )
+    if doi_link and doi:
         log_line(f"Title search DOI {doi} -> source {source}")
+    if doi and use_wiley_chrome(source):
+        with browser_route(True):
+            context = connect_dedicated_context(playwright)
+            path = _download_routed(context, source, url, doi, resolved)
+        return _title_accept_pdf(path, query, identity)
+    if doi_link and doi:
         return _title_accept_pdf(
             _download_routed(context, source, url, doi, resolved), query, identity
         )
@@ -3482,7 +3497,7 @@ def _title_try_candidate(context, url: str, why: str, query: dict, identity: str
     return _title_accept_pdf(download_generic(context, url, None, url), query, identity)
 
 
-def download_by_title(context, query: dict) -> Path:
+def download_by_title(playwright, context, query: dict) -> Path:
     title = query["title"]
     identity = f"{query['tag']}_{title[:70]}" if query["tag"] else title[:80]
     log_line(
@@ -3509,7 +3524,7 @@ def download_by_title(context, query: dict) -> Path:
             # site may cost one candidate two minutes, not the whole job.
             os.environ["ARTICLE_JOB_DEADLINE"] = f"{min(float(job_deadline), time.time() + 90):.0f}"
             try:
-                found = _title_try_candidate(context, url, why, query, identity)
+                found = _title_try_candidate(playwright, context, url, why, query, identity)
                 if found:
                     return found
             except NoAccess as exc:
@@ -4378,12 +4393,38 @@ def cdp_alive(base_url: str, timeout: float = 2.0) -> bool:
         return False
 
 
-def edge_cdp_alive(timeout: float = 2.0) -> bool:
-    return cdp_alive(EDGE_CDP_URL, timeout)
+def browser_cdp_url() -> str:
+    return f"http://127.0.0.1:{BROWSER_PORT}"
+
+
+def use_wiley_chrome(source: str | None) -> bool:
+    if source != "wiley" or os.environ.get("ARTICLE_WILEY_CHROME") != "1":
+        return False
+    try:
+        return dedicated_browser()[0] != "chrome"
+    except DownloadError:
+        return True
+
+
+@contextmanager
+def browser_route(separate_wiley: bool):
+    """Scope the endpoint to the publisher inside this single-job process."""
+    global BROWSER_PORT
+    previous = BROWSER_PORT
+    if separate_wiley:
+        BROWSER_PORT = WILEY_BROWSER_PORT
+    try:
+        yield
+    except Exception as exc:
+        if separate_wiley and _target_closed_error(exc):
+            exc.wiley_browser_closed = True
+        raise
+    finally:
+        BROWSER_PORT = previous
 
 
 def browser_cdp_alive(timeout: float = 2.0) -> bool:
-    return cdp_alive(BROWSER_CDP_URL, timeout)
+    return cdp_alive(browser_cdp_url(), timeout)
 
 
 # v5.21: Playwright connect_over_cdp attaches to EVERY open tab before it
@@ -4512,6 +4553,8 @@ def find_yandex_exe() -> str | None:
 def dedicated_browser() -> tuple[str, str]:
     """(kind, executable) of the dedicated browser for ARTICLE_BROWSER."""
     choice = (os.environ.get("ARTICLE_BROWSER") or "auto").strip().strip('"')
+    if BROWSER_PORT == WILEY_BROWSER_PORT:
+        choice = "chrome"
 
     if choice.lower() not in ("auto",) + BROWSER_KINDS:
         exe = Path(choice)
@@ -4530,14 +4573,18 @@ def dedicated_browser() -> tuple[str, str]:
 
 
 def browser_profile_dir(kind: str | None = None) -> Path:
+    import osutil
+
     override = os.environ.get("ARTICLE_PROFILE_DIR")
+    if BROWSER_PORT == WILEY_BROWSER_PORT:
+        return Path(override) / "WileyChromeProfile" if override else (
+            osutil.user_data_dir() or ROOT / "profile") / "WileyChromeProfile"
     if override:
         return Path(override)
 
     if kind is None:
         kind = dedicated_browser()[0]
 
-    import osutil
     base = osutil.user_data_dir() or ROOT / "profile"
     return base / BROWSER_PROFILE_NAMES.get(kind, "BrowserProfile")
 
@@ -4576,11 +4623,16 @@ def ensure_edge_running(timeout_sec: int = 40):
 
 def ensure_browser_running(timeout_sec: int = 40):
     """
-    All routes use the dedicated persistent browser profile on port 9223.
-    If it is not running, restart the same profile so its cookies/session
-    survive normal browser restarts.
+    Start the persistent profile for the current route when needed.
     """
     if browser_cdp_alive():
+        if BROWSER_PORT == WILEY_BROWSER_PORT:
+            import psutil
+
+            profile = browser_profile_dir()
+            if not any(_is_dedicated_browser_cmdline(proc.info["cmdline"] or [], profile)
+                       for proc in psutil.process_iter(["cmdline"])):
+                raise BrowserRouteUnavailable(f"Wiley Chrome: port {BROWSER_PORT} is occupied")
         return
 
     kind, exe = dedicated_browser()
@@ -4590,12 +4642,12 @@ def ensure_browser_running(timeout_sec: int = 40):
     profile.mkdir(parents=True, exist_ok=True)
 
     log_line(
-        f"Dedicated browser ({title}) is not reachable on port 9223; starting it."
+        f"Dedicated browser ({title}) is not reachable on port {BROWSER_PORT}; starting it."
     )
 
     args = [
         exe,
-        "--remote-debugging-port=9223",
+        f"--remote-debugging-port={BROWSER_PORT}",
         f"--user-data-dir={profile}",
         "--no-first-run",
         "--no-default-browser-check",
@@ -4634,22 +4686,23 @@ def ensure_browser_running(timeout_sec: int = 40):
 
     while time.time() < deadline:
         if browser_cdp_alive():
-            log_line(f"Dedicated browser ({title}) is ready on port 9223.")
+            log_line(f"Dedicated browser ({title}) is ready on port {BROWSER_PORT}.")
             time.sleep(2)
             return
         time.sleep(1)
 
     raise DownloadError(
-        f"Dedicated browser ({title}) was started but CDP port 9223 "
+        f"Dedicated browser ({title}) was started but CDP port {BROWSER_PORT} "
         "did not become ready"
     )
 
 
 def _is_dedicated_browser_cmdline(cmdline: list[str], profile: Path) -> bool:
-    joined = " ".join(cmdline).lower()
-    return (
-        "--remote-debugging-port=9223" in joined
-        or str(profile).lower() in joined
+    profile_arg = f"--user-data-dir={profile}".lower()
+    if BROWSER_PORT == WILEY_BROWSER_PORT:
+        return any(arg.lower() == profile_arg for arg in cmdline)
+    return f"--remote-debugging-port={BROWSER_PORT}" in cmdline or any(
+        arg.lower() == profile_arg for arg in cmdline
     )
 
 
@@ -4669,14 +4722,13 @@ def stop_dedicated_browser():
         psutil = None
 
     if psutil is None:
-        if os.name != "nt":
+        if os.name != "nt" or BROWSER_PORT == WILEY_BROWSER_PORT:
             return
         ps = r"""
 $items = Get-CimInstance Win32_Process |
     Where-Object {
         @('browser.exe','msedge.exe','chrome.exe') -contains $_.Name -and (
-            $_.CommandLine -like '*--remote-debugging-port=9223*' -or
-            $_.CommandLine -like '*ArticleDownloader*Profile*')
+            $_.CommandLine -like '*--remote-debugging-port=__AD_PORT__*')
     }
 foreach($p in $items) {
     try {
@@ -4684,7 +4736,7 @@ foreach($p in $items) {
         Write-Output ("Stopped dedicated browser PID " + $p.ProcessId)
     } catch {}
 }
-"""
+""".replace("__AD_PORT__", str(BROWSER_PORT))
         try:
             result = subprocess.run(
                 ["powershell", "-NoProfile", "-ExecutionPolicy", "Bypass", "-Command", ps],
@@ -4738,7 +4790,7 @@ def restart_browser_running(timeout_sec: int = 45):
     if browser_cdp_alive():
         raise DownloadError(
             "Dedicated browser could not be stopped; "
-            "port 9223 is still occupied"
+            f"port {BROWSER_PORT} is still occupied"
         )
 
     # Otherwise the browser reopens the same stale tabs and the next
@@ -4799,6 +4851,8 @@ def connect_cdp_browser(playwright, cdp_url: str, ensure_func, label: str):
 
             return browser
 
+        except BrowserRouteUnavailable:
+            raise
         except Exception as exc:
             last_error = exc
             log_line(
@@ -4815,10 +4869,8 @@ def connect_cdp_browser(playwright, cdp_url: str, ensure_func, label: str):
                 close_cdp_tabs(cdp_url, label)
                 continue
 
-            # In the current single-browser configuration EDGE_CDP_URL and
-            # BROWSER_CDP_URL both point to 9223. A simple ensure_* call is not
-            # sufficient because browser_cdp_alive() may still return True for
-            # a wedged websocket. Force-restart ONLY the dedicated profile.
+            # A wedged websocket can leave the HTTP endpoint alive. Restart
+            # the browser for the current route before the final attempt.
             try:
                 log_line(
                     f"{label}: forcing dedicated browser restart before retry."
@@ -4897,23 +4949,40 @@ def run_warmup(bases_file: Path) -> int:
     deadline = time.monotonic() + job_bounded_wait(1800, margin_sec=5)
 
     with sync_playwright() as p:
-        browser = connect_cdp_browser(
-            p, BROWSER_CDP_URL, ensure_browser_running, "Dedicated browser"
-        )
-        context = browser.contexts[0]
+        contexts = {}
         tabs = []
-
+        unopened = []
         for base in bases:
+            key = base["key"]
+            if time.monotonic() >= deadline:
+                unopened.append(key)
+                continue
+            separate_wiley = use_wiley_chrome(key)
+            if separate_wiley not in contexts:
+                with browser_route(separate_wiley):
+                    try:
+                        contexts[separate_wiley] = connect_dedicated_context(p)
+                    except Exception as exc:
+                        if not separate_wiley:
+                            raise
+                        contexts[separate_wiley] = None
+                        log_line(f"Warm-up {key}: {type(exc).__name__}: {exc}")
+            context = contexts[separate_wiley]
+            if context is None:
+                safe_console_print(f"WARMUP|{key}|error|")
+                continue
             remaining = deadline - time.monotonic()
             if remaining <= 0:
-                break
+                unopened.append(key)
+                continue
+
             page = context.new_page()
-            safe_console_print(f"WARMUP|{base['key']}|loading|")
+            safe_console_print(f"WARMUP|{key}|loading|")
             try:
                 page.goto(base["url"], wait_until="commit", timeout=max(1, min(30000, int(remaining * 1000))))
             except Exception as exc:
-                log_line(f"Warm-up {base['key']}: {type(exc).__name__}: {exc}")
-            tabs.append({"key": base["key"], "page": page,
+                log_line(f"Warm-up {key}: {type(exc).__name__}: {exc}")
+            tabs.append({"key": key, "page": page, "separate_wiley": separate_wiley,
                          "state": "loading", "opened": time.time()})
 
         log_line(f"Warm-up: {len(tabs)} database tab(s) opened")
@@ -4959,12 +5028,15 @@ def run_warmup(bases_file: Path) -> int:
 
         # The cookies stay in the profile; the open tabs would only slow down
         # every later CDP attach. Keep one tab so the window stays open.
-        try:
-            context.new_page()
-        except Exception:
-            pass
+        for context in contexts.values():
+            if context is not None:
+                try:
+                    context.new_page()
+                except Exception:
+                    pass
         for tab in tabs:
-            close_page_safely(tab["page"])
+            with browser_route(tab["separate_wiley"]):
+                close_page_safely(tab["page"])
 
     if cleared:
         log_line("Warm-up: all databases are ready")
@@ -4973,7 +5045,7 @@ def run_warmup(bases_file: Path) -> int:
 
     left = [t["key"] for t in tabs if t["state"] in ("loading", "captcha")]
     log_line(f"Warm-up: time is up, still waiting: {', '.join(left)}")
-    left.extend(base["key"] for base in bases[len(tabs):])
+    left.extend(unopened)
     emit("CAPTCHA_REQUIRED", ", ".join(left))
     return EXIT_CAPTCHA
 
@@ -4981,7 +5053,7 @@ def run_warmup(bases_file: Path) -> int:
 def open_in_dedicated_browser(urls: list[str]) -> int:
     """Open URLs as new tabs of the dedicated browser and focus the last one."""
     ensure_browser_running()
-    base = BROWSER_CDP_URL.rstrip("/")
+    base = browser_cdp_url().rstrip("/")
 
     for url in urls:
         target_id = None
@@ -5234,7 +5306,7 @@ def _download_routed(context, source: str, raw: str, doi: str | None, resolved: 
         return download_springer(context, raw, doi)
 
     if source == "wiley":
-        log_line("Browser route: Wiley -> dedicated browser (port 9223)")
+        log_line(f"Browser route: Wiley -> dedicated browser (port {BROWSER_PORT})")
         return download_wiley(context, raw, doi, resolved)
 
     if source == "cnki":
@@ -5242,6 +5314,12 @@ def _download_routed(context, source: str, raw: str, doi: str | None, resolved: 
         return download_cnki(context, doi, resolved or raw)
 
     raise UnsupportedSource(f"Unsupported source: {source}")
+
+
+def connect_dedicated_context(playwright):
+    label = "Wiley Chrome" if BROWSER_PORT == WILEY_BROWSER_PORT else "Dedicated browser"
+    browser = connect_cdp_browser(playwright, browser_cdp_url(), ensure_browser_running, label)
+    return browser.contexts[0]
 
 
 def _process_one_once(raw: str) -> Path:
@@ -5258,9 +5336,9 @@ def _process_one_once(raw: str) -> Path:
         os.environ.setdefault("ARTICLE_JOB_DEADLINE", f"{time.time() + 600:.0f}")
         with sync_playwright() as p:
             browser = connect_cdp_browser(
-                p, BROWSER_CDP_URL, ensure_browser_running, "Dedicated browser"
+                p, browser_cdp_url(), ensure_browser_running, "Dedicated browser"
             )
-            return download_by_title(browser.contexts[0], title_query)
+            return download_by_title(p, browser.contexts[0], title_query)
 
     # "cnki: <title> || <DOI>" searches CNKI by title, e.g. for Chinese papers
     # whose DOI is registered with Wanfang and unknown to CNKI.
@@ -5271,7 +5349,7 @@ def _process_one_once(raw: str) -> Path:
         log_line(f"Input: {raw}")
         with sync_playwright() as p:
             browser = connect_cdp_browser(
-                p, BROWSER_CDP_URL, ensure_browser_running, "Dedicated browser"
+                p, browser_cdp_url(), ensure_browser_running, "Dedicated browser"
             )
             log_line("Browser route: CNKI by title -> dedicated browser (port 9223)")
             return download_cnki(browser.contexts[0], cnki_doi, None, cnki_title)
@@ -5287,51 +5365,29 @@ def _process_one_once(raw: str) -> Path:
     resolved = raw if raw.startswith("http") else None
 
     with sync_playwright() as p:
-        edge_browser = None
-        edge_context = None
-
-        # Unknown DOI/source: use the dedicated browser for neutral resolution / CNKI probe.
+        context = None
         if source is None:
-            edge_browser = connect_cdp_browser(
-                p,
-                EDGE_CDP_URL,
-                ensure_edge_running,
-                "Dedicated browser",
-            )
-            edge_context = edge_browser.contexts[0]
-
-            source, resolved = identify_source(
-                edge_context,
-                raw,
-                doi,
-            )
+            context = connect_dedicated_context(p)
+            source, resolved = identify_source(context, raw, doi)
 
         log_line(f"Source: {source}")
         if resolved:
             log_line(f"Resolved: {resolved}")
 
-        # All routes share the dedicated browser on port 9223; a
-        # second attach only doubles the work for every open tab.
-        if edge_context is None:
-            edge_browser = connect_cdp_browser(
-                p,
-                EDGE_CDP_URL,
-                ensure_edge_running,
-                "Dedicated browser",
-            )
-            edge_context = edge_browser.contexts[0]
+        separate_wiley = use_wiley_chrome(source)
+        with browser_route(separate_wiley):
+            if context is None or separate_wiley:
+                context = connect_dedicated_context(p)
 
-        path = _download_routed(edge_context, source, raw, doi, resolved)
-        # v8.9: the supplementary files of the article (not for eLIBRARY / CNKI); since
-        # v9.2.2 from the links read on the article page while it was open — after the PDF.
-        if source not in ("elibrary", "cnki"):
-            try:
-                count, folder = download_supplements(edge_context, path, doi)
-                if count:
-                    safe_console_print(f"SUPPLEMENTS|{count}|{folder}")
-            except Exception as exc:
-                log_line(f"Supplementary step failed (the article is saved): {type(exc).__name__}: {exc}")
-        return path
+            path = _download_routed(context, source, raw, doi, resolved)
+            if source not in ("elibrary", "cnki"):
+                try:
+                    count, folder = download_supplements(context, path, doi)
+                    if count:
+                        safe_console_print(f"SUPPLEMENTS|{count}|{folder}")
+                except Exception as exc:
+                    log_line(f"Supplementary step failed (the article is saved): {type(exc).__name__}: {exc}")
+            return path
 
 
 def process_one(raw: str) -> Path:
@@ -5353,7 +5409,8 @@ def process_one(raw: str) -> Path:
                     f"Target/browser closed; self-heal retry {attempt + 1}/3: {msg}"
                 )
                 try:
-                    restart_browser_running()
+                    with browser_route(getattr(exc, "wiley_browser_closed", False)):
+                        restart_browser_running()
                 except Exception as restart_exc:
                     log_line(
                         f"Browser restart message: {type(restart_exc).__name__}: {restart_exc}"
@@ -5403,6 +5460,7 @@ def main():
         nargs="+",
         help="open URLs in the dedicated browser",
     )
+    parser.add_argument("--wiley", action="store_true", help="use the Wiley browser for --open")
     parser.add_argument(
         "--restart-browser",
         action="store_true",
@@ -5414,7 +5472,8 @@ def main():
         if args.warmup:
             return run_warmup(Path(args.warmup))
         if args.open:
-            return open_in_dedicated_browser(args.open)
+            with browser_route(args.wiley and use_wiley_chrome("wiley")):
+                return open_in_dedicated_browser(args.open)
         if args.restart_browser:
             stop_dedicated_browser()
             time.sleep(2)

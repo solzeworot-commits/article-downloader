@@ -85,7 +85,7 @@ PDF_TEXT_CACHE = ROOT / "logs" / "pdf_text"      # the pages of the PDFs, for «
 BIBLIO_DIR = ROOT / "Список литературы"
 
 UI_PORT = 17865
-APP_VERSION = "9.2.4"
+APP_VERSION = "9.2.5"
 APP_AUTHOR = "Bucaneiro"
 OFFICIAL_URL = "https://github.com/solzeworot-commits/article-downloader"
 DOWNLOAD_URL = OFFICIAL_URL + "/releases/tag/portable-latest"
@@ -169,6 +169,7 @@ BASE_BY_KEY = {b[0]: b for b in BASES}
 
 DEFAULT_SETTINGS = {
     "browser": "auto",
+    "wiley_chrome": False,
     "pause_sec": 10,
     "daily_limit": 300,
     "job_timeout_min": 10,
@@ -251,6 +252,7 @@ def child_env(deadline_sec: float | None = None) -> dict:
         PYTHONIOENCODING="utf-8",
         PYTHONUTF8="1",
         ARTICLE_BROWSER=str(S.settings.get("browser") or "auto"),
+        ARTICLE_WILEY_CHROME="1" if S.settings.get("wiley_chrome") else "0",
         ARTICLE_ELSEVIER_ON_HOLD="1" if S.elsevier_waiting() else "0",
         ARTICLE_PDF_DIR=str(pdf_dir()),
         ARTICLE_LOG_DIR=str(LOGS),
@@ -2934,9 +2936,10 @@ def open_ui_window(url: str):
     webbrowser.open(url)
 
 
-def open_in_dedicated_browser(urls: list[str]):
+def open_in_dedicated_browser(urls: list[str], *, wiley=False):
     def run():
-        proc = spawn_downloader(["--open", *urls])
+        args = ["--wiley"] if wiley else []
+        proc = spawn_downloader([*args, "--open", *urls])
         for line in proc.stdout:
             if line.startswith("RESULT|FAILED|"):
                 with S.lock:
@@ -3023,7 +3026,7 @@ def update_settings(new: dict):
                     S.settings[key] = max(0, int(value))
                 except (TypeError, ValueError):
                     pass
-            elif key in ("title_for_plain_lines", "desktop_shortcut", "minimize_to_tray", "supplementary"):
+            elif key in ("title_for_plain_lines", "desktop_shortcut", "minimize_to_tray", "supplementary", "wiley_chrome"):
                 S.settings[key] = bool(value)
             elif key in ("browser", "pdf_dir"):
                 S.settings[key] = str(value or "").strip()
@@ -3127,7 +3130,7 @@ def handle_api(path: str, body: dict) -> dict:
     if path == "/api/login":
         base = BASE_BY_KEY.get(body.get("key"))
         if base:
-            open_in_dedicated_browser([base[3] or base[2]])
+            open_in_dedicated_browser([base[3] or base[2]], wiley=base[0] == "wiley")
         return {}
 
     if path == "/api/settings":

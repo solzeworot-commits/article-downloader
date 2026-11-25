@@ -1293,6 +1293,10 @@ extraction"></textarea>
       <div class="hint">С Яндекс.Браузером проверка Elsevier держится дольше всего.</div>
     </div>
     <div class="form-row">
+      <label><input type="checkbox" id="s-wiley-chrome"> Открывать Wiley в Google Chrome</label>
+      <div class="hint">После включения войдите через вуз в окне Chrome загрузчика.</div>
+    </div>
+    <div class="form-row">
       <label for="s-pause">Пауза между статьями, сек</label>
       <input type="number" id="s-pause" min="0" max="600">
       <div class="hint">Издательства блокируют весь вуз за слишком частые скачивания.</div>
@@ -1684,6 +1688,7 @@ $("btn-settings").onclick = () => {
   if (!state) return;
   const s = state.settings;
   $("s-browser").value = s.browser;
+  $("s-wiley-chrome").checked = !!s.wiley_chrome;
   $("s-pause").value = s.pause_sec;
   $("s-limit").value = s.daily_limit;
   $("s-job").value = s.job_timeout_min;
@@ -1702,6 +1707,7 @@ $("btn-save").onclick = async () => {
   document.querySelectorAll("[data-base]").forEach((el) => { bases[el.dataset.base] = el.checked; });
   await api("/api/settings", {
     browser: $("s-browser").value,
+    wiley_chrome: $("s-wiley-chrome").checked,
     pause_sec: $("s-pause").value,
     daily_limit: $("s-limit").value,
     job_timeout_min: $("s-job").value,
