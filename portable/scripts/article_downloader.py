@@ -600,6 +600,8 @@ def classify_direct(value: str, doi: str | None) -> str | None:
         if d.startswith("10.13386/") or d.startswith("10.16043/"):
             return "cnki"
 
+    if wiley_route.article_doi(value):
+        return "wiley"
     if "tandfonline.com" in low:
         return "taylor"
     if "sciencedirect.com" in low or "elsevier.com" in low:
@@ -608,8 +610,6 @@ def classify_direct(value: str, doi: str | None) -> str | None:
         return "springer"
     if "nature.com" in low or "biomedcentral.com" in low:
         return "nature"
-    if "onlinelibrary.wiley.com" in low:
-        return "wiley"
     if "academic.oup.com" in low or "oup.silverchair-cdn.com" in low:
         return "oxford"
     if "mdpi.com" in low:
@@ -1065,7 +1065,7 @@ def download_wiley(context, raw: str, doi: str | None, resolved_url: str | None)
     resolved = resolved_url or resolve_doi(context, doi)
     parsed = urlparse(resolved)
 
-    if "onlinelibrary.wiley.com" not in parsed.netloc.lower():
+    if not wiley_route.article_doi(resolved):
         raise DownloadError(f"Wiley domain not resolved: {resolved}")
 
     host = f"{parsed.scheme or 'https'}://{parsed.netloc}"
@@ -5379,6 +5379,7 @@ def _process_one_once(raw: str) -> Path:
                 source, resolved = identify_source(context, raw, doi)
 
         log_line(f"Source: {source}")
+        safe_console_print(f"PUBLISHER|{source}")
         if resolved:
             log_line(f"Resolved: {resolved}")
 
@@ -5468,7 +5469,7 @@ def main():
         nargs="+",
         help="open URLs in the dedicated browser",
     )
-    parser.add_argument("--wiley", action="store_true", help="use the Wiley browser for --open")
+    parser.add_argument("--wiley", action="store_true", help="use the dedicated Wiley Chrome profile for an article or --open")
     parser.add_argument(
         "--restart-browser",
         action="store_true",
@@ -5491,7 +5492,8 @@ def main():
         if not args.query:
             parser.error("query is required")
 
-        path = process_one(args.query)
+        with browser_route(args.wiley):
+            path = process_one(args.query)
         log_line(f"SUCCESS: {path}")
         emit("SUCCESS", str(path))
         return EXIT_SUCCESS

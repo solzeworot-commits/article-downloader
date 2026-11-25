@@ -1,5 +1,7 @@
 """Verify the browser used for Wiley login and downloads."""
+import io
 import os
+import time
 from pathlib import Path
 import sys
 import tempfile
@@ -76,6 +78,70 @@ class WileyBrowserTest(unittest.TestCase):
             ad.process_one("10.1111/moved")
         self.assertEqual(ports, [ad.WILEY_BROWSER_PORT, ad.MAIN_BROWSER_PORT])
         self.assertEqual(download.call_args.args[:2], (ad.MAIN_BROWSER_PORT, "oxford"))
+
+    def test_manual_wiley_button_uses_chrome_even_when_setting_is_off(self):
+        ad = self.ad
+        url = "https://agupubs.onlinelibrary.wiley.com/doi/10.1029/example"
+        self.assertEqual(ad.classify_direct(url, "10.1029/example"), "wiley")
+        for invalid in (url.replace(".com/", ".com.example/"),
+                        "https://example.com/?next=" + url):
+            self.assertNotEqual(ad.classify_direct(invalid, "10.1029/example"), "wiley")
+        def download(context, source, raw, doi, resolved):
+            self.assertEqual((source, resolved), ("wiley", url))
+            self.assertEqual(ad.BROWSER_PORT, ad.WILEY_BROWSER_PORT)
+            self.assertEqual(ad.dedicated_browser()[0], "chrome")
+            return Path("download.pdf")
+        with (patch.dict(os.environ, ARTICLE_BROWSER="yandex", ARTICLE_WILEY_CHROME="0"),
+              patch.object(sys, "argv", ["ad", "--wiley", url]),
+              patch.object(ad, "sync_playwright"), patch.object(ad, "connect_dedicated_context"),
+              patch.object(ad, "find_browser_exe", return_value="browser"),
+              patch.object(ad, "_download_routed", side_effect=download),
+              patch.object(ad, "download_supplements", return_value=(0, ""))):
+            self.assertEqual(ad.main(), ad.EXIT_SUCCESS)
+        self.assertEqual(ad.BROWSER_PORT, ad.MAIN_BROWSER_PORT)
+
+    def test_queue_button_keeps_subdomain_and_other_publishers(self):
+        import app
+        doi = "10.1029/example"
+        url = "https://agupubs.onlinelibrary.wiley.com/doi/" + doi
+        text = url.replace("/doi/", "/doi/full/") + "?from=list#section" + "\n" + doi + "\n10.1016/other"
+        with (tempfile.TemporaryDirectory() as tmp,
+              patch.object(app, "QUEUE_PATH", Path(tmp) / "queue.json"),
+              patch.object(app, "S", app.State()), patch.object(app, "_report"),
+              patch.object(app, "start_warmup") as warmup,
+              patch.object(app, "spawn_downloader", side_effect=lambda *a, **kw:
+                           Mock(stdout=io.StringIO("RESULT|SUCCESS|example.pdf\n"))) as worker):
+            app.S.settings.update(pause_sec=0, daily_limit=0)
+            app.S.add_entries(["10.1111/retry", "10.1002/done", "10.1007/later"])
+            app.S.items[0]["status"] = "no_access"
+            app.S.items[1]["status"] = "success"
+            self.assertTrue(app.handle_api("/api/parse", {"text": text})["wiley"])
+            app.handle_api("/api/start_wiley", {"text": text})
+            self.wait_for_queue(app)
+            self.assertEqual([c.args[0] for c in worker.call_args_list],
+                             [["--wiley", "10.1111/retry"], ["--wiley", url]])
+            self.assertEqual([i["status"] for i in app.S.items],
+                             ["success", "success", "pending", "success", "pending"])
+            self.assertEqual(app.S.items[3]["query"], doi)
+            app.handle_api("/api/start_wiley", {"text": text})
+            self.assertEqual(worker.call_count, 2)
+            warmup.assert_not_called()
+
+            app.S.add_entries(["10.1111/unrelated"])
+            file = Path(tmp) / "inbox.txt"
+            file.write_text("10.1111/in-list\n10.1007/later", encoding="utf-8")
+            with patch.object(app, "INBOX", Path(tmp)):
+                app.handle_api("/api/queue_file", {"name": file.name, "wiley_only": True})
+                self.wait_for_queue(app)
+            self.assertEqual(worker.call_count, 3)
+            self.assertEqual(worker.call_args.args[0], ["--wiley", "10.1111/in-list"])
+            self.assertEqual(app.S.next_pending()["query"], "10.1007/later")
+
+    def wait_for_queue(self, app):
+        deadline = time.monotonic() + 5
+        while app.S.running and time.monotonic() < deadline:
+            time.sleep(0.01)
+        self.assertFalse(app.S.running)
 
     def test_login_uses_separate_profile_only_for_wiley(self):
         ad = self.ad
