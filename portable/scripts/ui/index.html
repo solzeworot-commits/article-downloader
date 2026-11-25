@@ -1358,6 +1358,7 @@ const STATUS = {
 const BASE_STATE = {
   "": ["", "·"],
   loading: ["открывается", "⏳"],
+  checking: ["сайт выполняет проверку", "⏳"],
   captcha: ["нужна капча", "⚠"],
   ok: ["готово", "✅"],
   error: ["не открылась", "✖"],
@@ -1450,7 +1451,7 @@ function render() {
   if (w.running) ws = captchaBases.length ? "ждут капчу: " + captchaBases.length : "открываются…";
   else if (w.done && w.cleared) ws = "проверки пройдены";
   else if (w.done && w.skipped) ws = "ожидание пропущено";
-  else if (w.done && !w.error) ws = "время ожидания капчи вышло";
+  else if (w.done && !w.error) ws = "время ожидания баз вышло";
   $("warm-summary").textContent = ws;
   $("btn-warm").disabled = !!br.error;
 
@@ -1461,6 +1462,8 @@ function render() {
       "(ставится без прав администратора) и запустите программу снова. Подойдёт и Microsoft Edge или Google Chrome.");
   } else if (s.captcha_now) {
     setBanner("amber", "⚠", "<b>Сайт просит пройти проверку (капчу).</b> Пройдите проверку в браузере загрузчика. На неё есть до 90 секунд. Если время выйдет, очередь продолжится.");
+  } else if (s.checking_now) {
+    setBanner("blue", "⏳", "Сайт выполняет проверку. Загрузчик ждёт ответа.");
   } else if (w.running && captchaBases.length) {
     setBanner("amber", "⚠", `<b>Пройдите проверку в окне браузера:</b> ${captchaBases.map(esc).join(", ")}. ` +
       (s.running ? "Как только пройдёте, скачивание начнётся само, и можно уходить." : "Потом вставьте DOI и нажмите «Скачать статьи»."), skipBtn);
@@ -1474,7 +1477,7 @@ function render() {
   } else if (s.phase === "limit") {
     setBanner("amber", "⏸", esc(s.notice));
   } else if (s.elsevier_waiting && !s.running) {
-    setBanner("amber", "⏸", "Статьи Elsevier ждут проверки в ScienceDirect. Нажмите «Продолжить Elsevier» и пройдите проверку в браузере загрузчика, если сайт её покажет.");
+    setBanner("amber", "⏸", "Статьи Elsevier отложены. Нажмите «Продолжить Elsevier», чтобы вернуться к скачиванию.");
   } else if (s.notice) {
     setBanner("red", "⚠", esc(s.notice));
   } else if (c.total && !c.pending && !c.running) {
@@ -1485,7 +1488,7 @@ function render() {
     setBanner("grey", "⏸", `В очереди ${c.pending} ${plural(c.pending, "статья", "статьи", "статей")}. Нажмите «Скачать статьи», чтобы продолжить.`);
   } else {
     setBanner("grey", "👉", w.done ? "Базы открыты. Выберите список или вставьте DOI." :
-      "Выберите список ниже — после этого программа откроет базы в браузере, и останется пройти капчу.");
+      "Выберите список, чтобы открыть базы и начать скачивание.");
   }
   const skip = $("btn-skip");
   if (skip) skip.onclick = () => api("/api/skip_warmup");
@@ -1526,7 +1529,7 @@ function renderStart() {
     btn.disabled = false; sub.textContent = "продолжить: в очереди " + c.pending;
   } else if (state.running) {
     btn.disabled = true;
-    sub.textContent = state.phase === "warmup_wait" ? "ждёт, пока пройдёте капчу в браузере" : "идёт скачивание";
+    sub.textContent = state.phase === "warmup_wait" ? "открывает базы в браузере" : "идёт скачивание";
   } else {
     btn.disabled = true; sub.textContent = "вставьте DOI выше";
   }
@@ -1546,7 +1549,7 @@ function renderItems() {
     const [label, icon] = STATUS[it.status] || [it.status, ""];
     let msg = "";
     if (it.status === "success") msg = it.file.split(/[\\/]/).pop();
-    else if (it.elsevier_hold) msg = "Ждёт проверки в ScienceDirect";
+    else if (it.elsevier_hold) msg = "Отложена до возобновления Elsevier";
     else if (it.message) msg = it.message;
     const acts = [];
     if (it.status === "success") acts.push(`<button data-open="${it.id}">Открыть</button>`);
@@ -1796,7 +1799,7 @@ function renderExtra() {
   } else if (s.running) {
     note(home, "green", "⬇", `<b>Идёт скачивание:</b> готово ${c.total - c.pending - c.running} из ${c.total}.`, '<button data-go="download">Открыть</button>');
   } else if (s.elsevier_waiting) {
-    note(home, "amber", "⏸", "Статьи Elsevier ждут проверки в ScienceDirect.", '<button data-go="download">Открыть</button>');
+    note(home, "amber", "⏸", "Статьи Elsevier отложены.", '<button data-go="download">Открыть</button>');
   } else if (c.pending) {
     note(home, "amber", "⏸", `Есть незаконченный список: <b>${c.pending}</b> ${plural(c.pending, "статья ждёт", "статьи ждут", "статей ждут")} скачивания.`,
       '<button class="linkbtn" id="home-resume">▶ Продолжить</button>');
@@ -2510,7 +2513,7 @@ $("supp-tick").onchange = async () => {
 };
 // ---- the cloud bridge (v8.8): the home computer sends lists, the work computer downloads ----
 const CL_COLOR = { never: "red", stale: "red", nofolder: "red", stopped: "red", wait: "red",
-  run: "yellow", limit: "yellow", captcha: "orange", done: "green", idle: "green" };
+  run: "yellow", limit: "yellow", held: "yellow", captcha: "orange", done: "green", idle: "green" };
 let clInfo = null;
 function cloudTexts(c) {
   if (!c.role) return ["не настроено — качать на рабочем компьютере, сидя дома", "ВЫКЛ"];
@@ -2523,6 +2526,7 @@ function cloudTexts(c) {
     case "wait": return [work ? "беру список из облака…" : "список в облаке — ждёт рабочий компьютер", "ЖДЁТ"];
     case "run": return [(work ? "качаю списки из облака: " : "рабочий компьютер качает: ") + `${c.done} из ${c.total}` + clProbText(c), n];
     case "limit": return [(work ? "дневной лимит — продолжу завтра сам" : "дневной лимит на рабочем компьютере — продолжит завтра") + clProbText(c), n];
+    case "held": return ["Статьи Elsevier отложены.", "ПАУЗА"];
     case "captcha": return [work ? "капча — пройдите проверку в окне браузера загрузчика" : "капча на рабочем компьютере — нужен человек рядом с ним", "КАПЧА"];
     case "done": return [`готово: скачано ${c.done} из ${c.total}` + clProbText(c) + (work ? "" : " — PDF в облаке"), "ГОТОВО ✓"];
     default: return [work ? "это рабочий компьютер: жду списки из облака" : "рабочий компьютер на связи — отправьте ему список", work ? "ЖДУ" : "НА СВЯЗИ"];

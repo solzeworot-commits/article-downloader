@@ -1,12 +1,10 @@
 {
  "page": {
+  "Сайт выполняет проверку. Загрузчик ждёт ответа.": "The site is running a check. Waiting for its response.",
   "Открывать Wiley в Google Chrome": "Open Wiley in Google Chrome",
   "После включения войдите через вуз в окне Chrome загрузчика.": "After enabling this option, sign in through your institution in the downloader’s Chrome window.",
   "Продолжить Elsevier": "Resume Elsevier",
   "Нажмите «Продолжить Elsevier»": "Click “Resume Elsevier”",
-  "Статьи Elsevier ждут проверки в ScienceDirect.": "The Elsevier articles are waiting for verification on ScienceDirect.",
-  "Нажмите «Продолжить Elsevier» и пройдите проверку в браузере загрузчика, если сайт её покажет.": "Click “Resume Elsevier” and complete the check in the downloader’s browser if prompted.",
-  "Ждёт проверки в ScienceDirect": "Waiting for verification on ScienceDirect",
   "!-- © 2026 Bucaneiro. Загрузчик статей — бесплатная программа; условия в файле ЛИЦЕНЗИЯ.txt. --": "!-- © 2026 Bucaneiro. Article Downloader is a free program; terms in ЛИЦЕНЗИЯ.txt. --",
   "Загрузчик статей": "Article Downloader",
   "Загрузчик статей‌​‌": "Article Downloader‌​‌",
@@ -261,7 +259,6 @@
   "открываются…": "opening…",
   "проверки пройдены": "checks passed",
   "ожидание пропущено": "wait skipped",
-  "время ожидания капчи вышло": "CAPTCHA wait timed out",
   "Начать, не дожидаясь": "Start without waiting",
   "Не найден браузер.": "Browser not found.",
   "Установите Яндекс.Браузер с сайта": "Install Yandex Browser from",
@@ -286,7 +283,6 @@
   "В очереди $": "Queued $",
   ". Нажмите «Скачать статьи», чтобы продолжить.": ". Click «Download articles» to continue.",
   "Базы открыты. Выберите список или вставьте DOI.": "The databases are open. Choose a list or paste DOIs.",
-  "Выберите список ниже — после этого программа откроет базы в браузере, и останется пройти капчу.": "Choose a list below — then the program opens the databases in the browser and you only pass the CAPTCHA.",
   "обработано · сегодня статей: $": "processed · articles today: $",
   "из": "of",
   "✅ скачано:": "✅ downloaded:",
@@ -298,7 +294,6 @@
   "добавить в очередь:": "add to the queue:",
   "начать:": "start:",
   "продолжить: в очереди": "continue: queued",
-  "ждёт, пока пройдёте капчу в браузере": "waits until you pass the CAPTCHA in the browser",
   "идёт скачивание": "downloading",
   "Программа не отвечает.": "The program is not responding.",
   "Возможно, она закрыта. Запустите её снова значком «Скачать статьи».": "It may be closed. Start it again with the «Download articles» icon.",
@@ -1091,10 +1086,17 @@
   "📋 Скопировано DOI: $": "📋 DOIs copied: $",
   "Не скопировалось — выделите список и нажмите Ctrl+C": "Not copied — select the list and press Ctrl+C",
   "DOI. Его можно открыть, отобрать или отправить заново.": "DOI. You can open it, screen it or send it again.",
-  "Если ScienceDirect ждёт проверки, статьи Elsevier останутся в очереди. После обработки остальных статей нажмите «Продолжить Elsevier» на рабочем компьютере. Для других издателей программа повторяет попытку в конце очереди.": "When ScienceDirect requires verification, the Elsevier articles stay in the queue. After the other articles finish, click “Resume Elsevier” on the work computer. Articles from other publishers are retried at the end of the queue."
+  "Если ScienceDirect ждёт проверки, статьи Elsevier останутся в очереди. После обработки остальных статей нажмите «Продолжить Elsevier» на рабочем компьютере. Для других издателей программа повторяет попытку в конце очереди.": "When ScienceDirect requires verification, the Elsevier articles stay in the queue. After the other articles finish, click “Resume Elsevier” on the work computer. Articles from other publishers are retried at the end of the queue.",
+  "Выберите список, чтобы открыть базы и начать скачивание.": "Choose a list to open the databases and start downloading.",
+  "открывает базы в браузере": "opening databases in the browser",
+  "время ожидания баз вышло": "database checks timed out",
+  "Статьи Elsevier отложены.": "Elsevier articles are on hold.",
+  "Нажмите «Продолжить Elsevier», чтобы вернуться к скачиванию.": "Click “Resume Elsevier” to continue downloading.",
+  "Отложена до возобновления Elsevier": "On hold until Elsevier downloads resume",
+  "сайт выполняет проверку": "site check in progress",
+  "ПАУЗА": "PAUSED"
  },
  "messages": {
-  "Статьи Elsevier ждут проверки в ScienceDirect.": "The Elsevier articles are waiting for verification on ScienceDirect.",
   "экспорт": "export",
   "была капча — повторю в конце очереди": "there was a CAPTCHA — will retry at the end of the queue",
   "Пока ни одна статья не отмечена «✓ Подходит».": "No article is marked «✓ Fits» yet.",
@@ -1281,6 +1283,7 @@
   "Для карты нужно хотя бы две статьи: отметьте их «✓ Подходит» или выберите выше «все статьи списка».": "The map needs at least two papers: mark them «✓ Relevant» or choose «all articles of the list» above.",
   "Карта не построилась: {error}": "The map was not drawn: {error}",
   "У этого списка нет нескачанных статей.": "This list has no articles that failed to download.",
-  "Wiley: служба входа wiley.scienceconnect.io недоступна из этой сети — статью нужно найти другим путём": "Wiley: its sign-in service wiley.scienceconnect.io cannot be reached from this network — find the article another way"
+  "Wiley: служба входа wiley.scienceconnect.io недоступна из этой сети — статью нужно найти другим путём": "Wiley: its sign-in service wiley.scienceconnect.io cannot be reached from this network — find the article another way",
+  "Статьи Elsevier отложены.": "Elsevier articles are on hold."
  }
 }

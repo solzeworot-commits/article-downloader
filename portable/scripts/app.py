@@ -86,7 +86,7 @@ PDF_TEXT_CACHE = ROOT / "logs" / "pdf_text"      # the pages of the PDFs, for «
 BIBLIO_DIR = ROOT / "Список литературы"
 
 UI_PORT = 17865
-APP_VERSION = "9.2.6"
+APP_VERSION = "9.2.7"
 APP_AUTHOR = "Bucaneiro"
 OFFICIAL_URL = "https://github.com/solzeworot-commits/article-downloader"
 DOWNLOAD_URL = OFFICIAL_URL + "/releases/tag/portable-latest"
@@ -445,6 +445,7 @@ class State:
         self.current_id = None
         self.pause_until = 0.0
         self.captcha_now = False
+        self.checking_now = False
         self.proc = None
 
         self.warm = self._warm_blank()
@@ -707,16 +708,22 @@ def _warmup_thread(bases: list[dict]):
                 _, key, state, detail = (line.split("|", 3) + ["", ""])[:4]
                 with S.lock:
                     base = S.warm["bases"].setdefault(key, {})
+                    if (base.get("state") == "captcha") != (state == "captcha"):
+                        S.cloud_wake.set()
                     base["state"] = state
                     if detail or state != "ok":
                         base["detail"] = detail
+            elif line == "WARMUP_END":
+                with S.lock:
+                    S.warm["observations_done"] = True
+                    S.cloud_wake.set()
             elif line.startswith("RESULT|"):
                 status, _, message = line[7:].partition("|")
                 with S.lock:
                     if status == "SUCCESS":
                         S.warm["cleared"] = True
                     elif (status == "CAPTCHA_REQUIRED" and not S.warm["skipped"]
-                          and S.warm["bases"].get("elsevier", {}).get("state") == "captcha"):
+                          and S.warm["bases"].get("elsevier", {}).get("state") in ("captcha", "checking")):
                         S.hold_elsevier()
                         S.touch_items()
                     elif status == "FAILED":
@@ -730,12 +737,14 @@ def _warmup_thread(bases: list[dict]):
         with S.lock:
             S.warm.update(running=False, done=True, finished_at=time.time())
             S.warm_proc = None
+            S.cloud_wake.set()
 
 
 def skip_warmup():
     with S.lock:
         proc = S.warm_proc
         S.warm["skipped"] = True
+        S.cloud_wake.set()
     kill_job_tree(proc)
 
 
@@ -769,6 +778,9 @@ def start_queue(*, resume_elsevier=False):
 def stop_queue():
     with S.lock:
         S.stop_requested = True
+        S.captcha_now = False
+        S.checking_now = False
+        S.cloud_wake.set()
         proc = S.proc
     kill_job_tree(proc)
 
@@ -822,6 +834,7 @@ def _runner():
                 S.phase = "idle"
             S.current_id = None
             S.captcha_now = False
+            S.checking_now = False
             S.proc = None
             S.save_queue()
 
@@ -860,6 +873,7 @@ def _run_item(item: dict):
         S.current_id = item["id"]
         S.phase = "downloading"
         S.captcha_now = False
+        S.checking_now = False
         S.job_logs[item["id"]] = log
         S.day_count += 1
         S.touch_items()
@@ -873,11 +887,12 @@ def _run_item(item: dict):
         for raw in proc.stdout:
             line = raw.rstrip("\n")
             log.append(line)
-            low = line.lower()
-            if "human verification detected" in low or "жду ручную проверку" in low:
-                S.captcha_now = True
-            elif "manual verification completed" in low or "проверка пройдена" in low:
-                S.captcha_now = False
+            if line in ("VERIFICATION|manual", "VERIFICATION|checking", "VERIFICATION|clear"):
+                with S.lock:
+                    if S.proc is proc and not S.stop_requested:
+                        S.captcha_now = line == "VERIFICATION|manual"
+                        S.checking_now = line == "VERIFICATION|checking"
+                        S.cloud_wake.set()
             if line.startswith("RESULT|"):
                 status, _, message = line[7:].partition("|")
                 result.update(status=status, message=message)
@@ -908,6 +923,7 @@ def _run_item(item: dict):
     with S.lock:
         S.proc = None
         S.captcha_now = False
+        S.checking_now = False
         status = STATUS_BY_RESULT.get(result["status"], "failed")
         message = result["message"]
 
@@ -2522,15 +2538,20 @@ def _cloud_taken() -> dict:
     return S.cloud_taken
 
 
+def observing_warmup():
+    return S.warm["running"] and not S.warm["skipped"] and not S.warm.get("observations_done")
+
+
 def cloud_work_status(shared: Path, taken: dict) -> dict:
     """What the work computer writes to состояние.json: its queue and each list taken."""
     with S.lock:
         best = cloud.best_status(S.items)
         items = [{"query": i.get("query"), "status": i.get("status"), "message": i.get("message")} for i in S.items]
-        warm_captcha = S.warm["running"] and any(b.get("state") == "captcha" for b in S.warm["bases"].values())
+        warm_captcha = observing_warmup() and any(b.get("state") == "captcha" for b in S.warm["bases"].values())
         data = {"app": "ArticleDownloader", "version": APP_VERSION, "computer": computer_name(),
                 "running": S.running, "phase": S.phase, "limit": S.phase == "limit",
-                "captcha": bool(S.captcha_now or warm_captcha or S.elsevier_waiting())}
+                "elsevier_waiting": bool(S.elsevier_waiting()),
+                "captcha": bool(S.captcha_now or warm_captcha)}
     lists = {}
     for name, rec in taken.items():
         path = INBOX / rec.get("local", "")
@@ -2726,7 +2747,7 @@ def tray_tip() -> str:
     if phase == "limit":
         return tip + "\n" + tr("Дневной лимит: продолжу завтра")
     if held:
-        return tip + "\n" + tr("Статьи Elsevier ждут проверки в ScienceDirect.")
+        return tip + "\n" + tr("Статьи Elsevier отложены.")
     if cloud_cfg()[0] == "work":
         return tip + "\n" + tr("☁ Рабочий компьютер: жду списки из облака")
     return tip
@@ -2966,6 +2987,8 @@ def public_state(known_version: int) -> dict:
         bases = []
         for key, name, home, login, _ in BASES:
             info = S.warm["bases"].get(key, {})
+            if not observing_warmup() and info.get("state") in ("captcha", "checking", "loading"):
+                info = {}
             bases.append({
                 "key": key, "name": name, "login": bool(login),
                 "enabled": bool(S.settings["bases"].get(key, True)),
@@ -2977,6 +3000,7 @@ def public_state(known_version: int) -> dict:
             "current": S.current_id,
             "pause_left": max(0, int(S.pause_until - time.time())) if S.phase == "pause" else 0,
             "captcha_now": S.captcha_now,
+            "checking_now": S.checking_now,
             "elsevier_waiting": S.elsevier_waiting(),
             "warm": {k: v for k, v in S.warm.items() if k != "bases"} | {"bases": bases},
             "browser": S.browser,

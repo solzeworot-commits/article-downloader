@@ -94,6 +94,33 @@ class CaptchaQueueTest(unittest.TestCase):
             ad.wait_for_manual_verification(Mock(), "test")
         self.assertEqual(probe.call_count, len(states))
 
+    def test_prompt_clears_during_redirect_and_after_timeout(self):
+        ad = self.ad
+        states = ["checking", "checking", "captcha", "loading", "ok", "ok"]
+        with (patch.object(ad, "_verification_state", side_effect=[(s, "") for s in states]),
+              patch.object(ad.time, "sleep"), patch.object(ad, "safe_console_print") as emit):
+            ad.wait_for_manual_verification(Mock(), "test")
+        self.assertEqual([c.args[0] for c in emit.call_args_list],
+                         ["VERIFICATION|checking", "VERIFICATION|manual", "VERIFICATION|clear"])
+        with (patch.object(ad, "_verification_state", return_value=("captcha", "")),
+              patch.object(ad.time, "monotonic", side_effect=[0, 0, 0, 2]),
+              patch.object(ad.time, "sleep"), patch.object(ad, "safe_console_print") as emit,
+              self.assertRaises(ad.CaptchaRequired)):
+            ad.wait_for_manual_verification(Mock(), "test", timeout_sec=1)
+        self.assertEqual([c.args[0] for c in emit.call_args_list],
+                         ["VERIFICATION|manual", "VERIFICATION|clear"])
+
+    def test_held_queue_and_closed_warmup_do_not_signal_live_captcha(self):
+        app = self.app
+        app.S.items = [{"id": 1, "query": "10.1016/test", "status": "pending", "elsevier_hold": True}]
+        app.S.warm["bases"] = {"elsevier": {"state": "captcha"}}
+        for running, skipped, finished, expected in [(True, False, False, True),
+                (True, True, False, False), (True, False, True, False), (False, False, False, False)]:
+            app.S.warm.update(running=running, skipped=skipped, observations_done=finished)
+            status = app.cloud_work_status(Path("."), {})
+            self.assertEqual(status["captcha"], expected)
+            self.assertTrue(status["elsevier_waiting"])
+
     def test_tab_closed_while_waiting(self):
         ad = self.ad
         with (patch.object(ad, "_verification_state", side_effect=[("captcha", ""), ("closed", "")]),

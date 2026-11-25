@@ -229,7 +229,7 @@ def extract_doi(text: str) -> str | None:
 
 
 def looks_like_captcha(page) -> bool:
-    return _verification_state(page)[0] == "captcha"
+    return _verification_state(page)[0] in ("checking", "captcha")
 
 
 def job_bounded_wait(timeout_sec: int, margin_sec: int = 25) -> int:
@@ -267,55 +267,36 @@ def wait_for_manual_verification(page, source: str, timeout_sec: int = 90, *, do
             f"{source}: human verification required; no job time left to wait"
         )
 
-    try:
-        page.bring_to_front()
-    except Exception:
-        pass
-
-    log_line(
-        f"{source}: human verification detected. "
-        f"Waiting up to {timeout_sec} seconds for manual completion."
-    )
-    print("", flush=True)
-    print("=" * 70, flush=True)
-    print(f"{source}: НУЖНО ВРУЧНУЮ ПРОЙТИ ПРОВЕРКУ В ОКНЕ БРАУЗЕРА ЗАГРУЗЧИКА", flush=True)
-    print(
-        f"Скрипт НЕ ОСТАНОВЛЕН. Он ждёт до {timeout_sec} секунд "
-        "и продолжит автоматически после прохождения проверки.",
-        flush=True,
-    )
-    print("=" * 70, flush=True)
-
     deadline = started + timeout_sec
-    last_print = 0
     clear_rounds = 0
-
-    while time.monotonic() < deadline:
-        if download_ready and download_ready():
-            log_line(f"{source}: manual verification completed; download received.")
-            return time.monotonic() - started
-        state, _ = _verification_state(page)
-        if state == "closed":
-            raise CaptchaRequired(f"{source}: verification tab was closed")
-        # A challenge can briefly show an empty document while redirecting.
-        clear_rounds = clear_rounds + 1 if state == "ok" else 0
-        if clear_rounds >= 2:
-            log_line(f"{source}: manual verification completed; continuing.")
-            return time.monotonic() - started
-
-        remaining = max(0, int(deadline - time.monotonic()))
-
-        # Avoid filling logs every few seconds.
-        if time.time() - last_print >= 15:
-            print(
-                f"{source}: жду ручную проверку... "
-                f"осталось примерно {remaining // 60} мин {remaining % 60} сек",
-                flush=True,
-            )
-            last_print = time.time()
-
-        # A user may close the tab between probes. Check its state next round.
-        time.sleep(min(2, max(0, deadline - time.monotonic())))
+    reported = "clear"
+    try:
+        while time.monotonic() < deadline:
+            if download_ready and download_ready():
+                return time.monotonic() - started
+            state, _ = _verification_state(page)
+            signal = {"captcha": "manual", "checking": "checking"}.get(state, "clear")
+            if signal != reported:
+                reported = signal
+                safe_console_print(f"VERIFICATION|{signal}")
+                if signal == "manual":
+                    try:
+                        page.bring_to_front()
+                    except Exception:
+                        pass
+            if state == "closed":
+                raise CaptchaRequired(f"{source}: verification tab was closed")
+            if state == "error":
+                raise DownloadError(f"{source}: browser error during verification")
+            # Redirects can briefly leave the page empty. Clear the prompt
+            # immediately, but wait for two ready readings before downloading.
+            clear_rounds = clear_rounds + 1 if state == "ok" else 0
+            if clear_rounds >= 2:
+                return time.monotonic() - started
+            time.sleep(min(2, max(0, deadline - time.monotonic())))
+    finally:
+        if reported != "clear":
+            safe_console_print("VERIFICATION|clear")
 
     raise CaptchaRequired(
         f"{source}: manual verification was not completed within "
@@ -4900,6 +4881,7 @@ def connect_cdp_browser(playwright, cdp_url: str, ensure_func, label: str):
 VERIFICATION_PROMPTS = (
     "verify you are human", "verify that you are human", "verifying you are human",
     "checking your browser", "security verification", "are you a robot",
+    "i am not a robot", "i'm not a robot", "я не робот",
     "подтвердите, что вы не робот", "подтвердите, что вы человек",
 )
 VERIFICATION_TITLES = ("just a moment", "один момент", "checking your browser")
@@ -4907,6 +4889,24 @@ WARMUP_ACCESS_RE = re.compile(
     r"(?:access provided by|доступ предоставлен)\s*:?\s*([^\n]{3,80})", re.I
 )
 WARMUP_LOAD_LIMIT_SEC = 90
+
+
+def _has_manual_control(page) -> bool:
+    # Inspect labelled controls in the document and visible verification frames.
+    # The frame itself can stay on screen while its checkbox becomes a spinner.
+    pattern = re.compile(r"human|robot|verify|verification|человек|робот|провер|подтверд|验证", re.I)
+    for frame in page.frames:
+        if frame != page.main_frame:
+            if not re.search(r"recaptcha|hcaptcha|challenges\.cloudflare\.com", frame.url, re.I):
+                continue
+            if not frame.frame_element().is_visible():
+                continue
+        controls = frame.get_by_role("checkbox", checked=False, name=pattern).or_(
+            frame.get_by_role("button", name=pattern))
+        for control in controls.all():
+            if control.is_visible() and control.is_enabled(timeout=400):
+                return True
+    return False
 
 
 def _verification_state(page, *, warmup=False) -> tuple[str, str]:
@@ -4929,7 +4929,11 @@ def _verification_state(page, *, warmup=False) -> tuple[str, str]:
     if (heading in VERIFICATION_TITLES
             or any(w in heading or w in intro for w in VERIFICATION_PROMPTS)
             or (warmup and any(w in intro for w in ("安全验证", "拖动下方拼图")))):
-        return "captcha", ""
+        try:
+            manual = _has_manual_control(page)
+        except Exception:
+            manual = False  # A frame may disappear during the snapshot.
+        return ("captcha" if manual else "checking"), ""
     if ready == "loading" or not (title or body.strip()):
         return "loading", ""
     if warmup and re.search(r"\bERR_[A-Z_]{4,}\b", body):
@@ -5006,7 +5010,7 @@ def run_warmup(bases_file: Path) -> int:
                         log_line(f"Warm-up {tab['key']}: {state} {detail}".rstrip())
                     safe_console_print(f"WARMUP|{tab['key']}|{state}|{detail}")
                     tab["state"] = state
-                if state in ("loading", "captcha"):
+                if state in ("loading", "checking", "captcha"):
                     blocking += 1
                 if state == "captcha" and first_captcha is None:
                     first_captcha = tab["page"]
@@ -5026,6 +5030,7 @@ def run_warmup(bases_file: Path) -> int:
             time.sleep(2)
 
         cleared = clear_rounds >= 2
+        safe_console_print("WARMUP_END")
 
         # The cookies stay in the profile; the open tabs would only slow down
         # every later CDP attach. Keep one tab so the window stays open.
@@ -5044,7 +5049,7 @@ def run_warmup(bases_file: Path) -> int:
         emit("SUCCESS", "warm-up complete")
         return EXIT_SUCCESS
 
-    left = [t["key"] for t in tabs if t["state"] in ("loading", "captcha")]
+    left = [t["key"] for t in tabs if t["state"] in ("loading", "checking", "captcha")]
     log_line(f"Warm-up: time is up, still waiting: {', '.join(left)}")
     left.extend(unopened)
     emit("CAPTCHA_REQUIRED", ", ".join(left))

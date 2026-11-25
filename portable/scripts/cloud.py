@@ -265,7 +265,8 @@ def home_view(shared: Path, files: list[Path], status: dict | None, now: float |
         view.update(done=sum(x["done"] for x in running), total=sum(x["total"] for x in running))
         view["state"] = ("captcha" if status.get("captcha") else
                          "limit" if status.get("limit") else
-                         "run" if status.get("running") else "stopped")
+                         "run" if status.get("running") else
+                         "held" if status.get("elsevier_waiting") else "stopped")
     elif any(x["state"] == "wait" for x in lists):
         view["state"] = "wait"
     elif lists:
