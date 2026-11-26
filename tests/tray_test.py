@@ -127,6 +127,7 @@ else:
     check("second start brings it back", app.handle_api("/api/hello", {})["shown"], True)
     check("back again", wait(lambda: u.IsWindowVisible(h) and not u.IsIconic(h)), True)
 
+    check("second start uses visible window", app.handle_api("/api/hello", {})["shown"], True)
     u.PostMessageW(h, 0x0010, 0, 0)                           # the window closed
     check("closed", wait(lambda: not u.IsWindow(h)), True)
     tray.activate()

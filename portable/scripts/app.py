@@ -30,6 +30,7 @@ import json
 import os
 import re
 import secrets
+import socket
 import subprocess
 import sys
 import threading
@@ -86,7 +87,7 @@ PDF_TEXT_CACHE = ROOT / "logs" / "pdf_text"      # the pages of the PDFs, for «
 BIBLIO_DIR = ROOT / "Список литературы"
 
 UI_PORT = 17865
-APP_VERSION = "9.2.11"
+APP_VERSION = "9.2.12"
 APP_AUTHOR = "Bucaneiro"
 OFFICIAL_URL = "https://github.com/solzeworot-commits/article-downloader"
 DOWNLOAD_URL = OFFICIAL_URL + "/releases/tag/portable-latest"
@@ -512,6 +513,7 @@ class State:
         self.browser = {}
         self.update: dict | None = None    # support.check_update()
         self.update_job = {"state": "", "done": 0, "total": 0, "error": ""}
+        self.ui_starting_until = 0.0
         self.first_run = False
         self.notice = ""
         self.last_poll = time.time()
@@ -2879,7 +2881,6 @@ def shutdown():
     S.save_queue()
     if S.server:
         threading.Thread(target=S.server.shutdown, daemon=True).start()
-    tray.stop()
 
 
 # ---------------------------------------------------------------------------
@@ -3019,7 +3020,13 @@ def window_geometry() -> tuple[int, int, int, int] | None:
 
 def open_ui_window(url: str):
     if os.environ.get("ARTICLE_UI_NO_WINDOW") == "1":
-        return
+        return False
+    if os.name == "nt":
+        with S.lock:
+            # Several launches can arrive before Chromium has titled its window.
+            if time.monotonic() < S.ui_starting_until:
+                return True
+            S.ui_starting_until = time.monotonic() + 8
     try:
         import article_downloader as ad
         geometry = window_geometry()
@@ -3030,10 +3037,10 @@ def open_ui_window(url: str):
             if exe:
                 subprocess.Popen([exe, f"--app={url}", *size],
                                  stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
-                return
+                return True
     except Exception as exc:
         app_log(f"App window not opened: {exc}")
-    webbrowser.open(url)
+    return webbrowser.open(url)
 
 
 def open_in_dedicated_browser(urls: list[str], *, wiley=False):
@@ -3259,7 +3266,10 @@ def handle_api(path: str, body: dict) -> dict:
         added = import_files(body.get("files") or [])
         if added:
             start_queue()
-        return {"added": added, "shown": tray.show_window(parked_only=True)}
+        shown = tray.show_window()
+        if os.name == "nt" and not shown:
+            shown = open_ui_window(f"http://127.0.0.1:{UI_PORT}/?t={S.token}")
+        return {"added": added, "shown": shown}
 
     if path == "/api/quit":
         shutdown()
@@ -3737,6 +3747,17 @@ def handle_api(path: str, body: dict) -> dict:
     raise KeyError(path)
 
 
+class AppServer(ThreadingHTTPServer):
+    # Windows allows two HTTPServer listeners on the same port with SO_REUSEADDR.
+    allow_reuse_address = os.name != "nt"
+    allow_reuse_port = False
+
+    def server_bind(self):
+        if os.name == "nt":
+            self.socket.setsockopt(socket.SOL_SOCKET, socket.SO_EXCLUSIVEADDRUSE, 1)
+        super().server_bind()
+
+
 class Handler(BaseHTTPRequestHandler):
     server_version = "ArticleDownloader"
 
@@ -3790,6 +3811,7 @@ class Handler(BaseHTTPRequestHandler):
             return self._send(403, b"forbidden", "text/plain")
 
         if url.path == "/api/state":
+            S.ui_starting_until = 0.0
             S.last_poll = time.time()
             try:
                 version = int((query.get("v") or ["0"])[0])
@@ -3902,7 +3924,7 @@ def take_over_from_running_copy(files: list[str]):
         for _ in range(60):
             time.sleep(0.5)
             try:
-                return ThreadingHTTPServer(("127.0.0.1", UI_PORT), Handler)
+                return AppServer(("127.0.0.1", UI_PORT), Handler)
             except OSError:
                 continue
     message_box(tr("Уже работает другая копия программы (старая версия или из другой папки). "
@@ -3928,7 +3950,7 @@ def hand_over_to_running_copy(files: list[str]) -> bool:
             import ctypes
             ctypes.windll.user32.AllowSetForegroundWindow(-1)
         answer = json.loads(urllib.request.urlopen(req, timeout=30).read() or b"{}")
-        if not answer.get("shown"):              # v8.8.1: its window was not waiting in the tray
+        if not answer.get("shown"):              # Older servers only restored parked windows.
             open_ui_window(f"{base}/?t={token}")
         return True
     except Exception as exc:
@@ -3952,7 +3974,7 @@ def main():
         x for x in (os.environ.get("NO_PROXY"), "127.0.0.1", "localhost") if x)
 
     try:
-        server = ThreadingHTTPServer(("127.0.0.1", UI_PORT), Handler)
+        server = AppServer(("127.0.0.1", UI_PORT), Handler)
     except OSError:
         server = take_over_from_running_copy(files)
         if server is None:
@@ -3969,6 +3991,10 @@ def main():
         S.last_list = Path(files[0]).name
 
     url = f"http://127.0.0.1:{UI_PORT}/?t={S.token}"
+    # Previous releases could leave their separate Chromium window on screen.
+    # This process owns the listening port before it retires stale windows.
+    if os.environ.get("ARTICLE_UI_NO_WINDOW") != "1":
+        tray.close_program_windows(UI_PORT, run_powershell)
     open_ui_window(url)
     start_tray(url)
 
@@ -3986,8 +4012,13 @@ def main():
     try:
         server.serve_forever(poll_interval=0.5)
     finally:
-        S.save_queue()
-        tray.stop()
+        try:
+            S.save_queue()
+            if os.environ.get("ARTICLE_UI_NO_WINDOW") != "1":
+                tray.close_program_windows(UI_PORT, run_powershell)
+            tray.stop()
+        finally:
+            server.server_close()
         app_log("Stopped")
 
 

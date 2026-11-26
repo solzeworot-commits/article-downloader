@@ -17,6 +17,7 @@ does nothing and the window goes to the Dock as usual.
 from __future__ import annotations
 
 import os
+import subprocess
 import sys
 import threading
 import time
@@ -133,7 +134,42 @@ def _windows(visible: bool | None) -> list:
     return found
 
 
-def show_window(parked_only: bool = False) -> bool:
+def close_program_windows(port: int, run_powershell):
+    """Close only app-mode windows whose address bar identifies the local UI."""
+    if not IS_WIN:
+        return
+    candidates = _windows(visible=None)
+    if not candidates:
+        return
+    # A browser process can own both the app and unrelated windows. Verify the
+    # browser's address bar, including for windows left by pre-9.2.12 versions.
+    script = r"""
+Add-Type -AssemblyName UIAutomationClient
+$condition = [Windows.Automation.PropertyCondition]::new(
+    [Windows.Automation.AutomationElement]::ClassNameProperty, 'OmniboxViewViews')
+foreach ($handle in @(HANDLES)) {
+    try {
+        $window = [Windows.Automation.AutomationElement]::FromHandle([IntPtr]$handle)
+        $bar = $window.FindFirst([Windows.Automation.TreeScope]::Descendants, $condition)
+        if ($bar) {
+            $url = $bar.GetCurrentPropertyValue([Windows.Automation.ValuePattern]::ValueProperty)
+            if ($url -match '^(?:http://)?127\.0\.0\.1:PORT/\?t=[a-zA-Z0-9_-]+(?:#.*)?$') {
+                Write-Output $handle
+            }
+        }
+    } catch {}
+}
+""".replace("HANDLES", ",".join(str(h) for h in candidates)).replace("PORT", str(int(port)))
+    try:
+        confirmed = {int(line) for line in run_powershell(script, timeout=5).splitlines() if line.isdecimal()}
+    except (OSError, TimeoutError, subprocess.TimeoutExpired):
+        return
+    for hwnd in _windows(visible=None):
+        if hwnd in confirmed:
+            user32.PostMessageW(hwnd, WM_CLOSE, 0, 0)
+
+
+def show_window() -> bool:
     """Bring the program window back (from the tray, minimized or behind others). False: none to show."""
     if not IS_WIN or not _t["hwnd"]:
         return False
@@ -141,7 +177,7 @@ def show_window(parked_only: bool = False) -> bool:
         w = _t["hidden"]
         if w and not user32.IsWindow(w):
             w = None
-        if not w and not parked_only:
+        if not w:
             w = next(iter(_windows(visible=True)), None)
         if not w:
             return False
@@ -333,10 +369,6 @@ def _run(icon_path, ready: threading.Event):
         _t["taskbar_created"] = user32.RegisterWindowMessageW("TaskbarCreated")
         _t["tip"] = _safe(_t["cb"].get("tip")) or TITLES[0]
         _add_icon()
-        # Windows left hidden in the tray by an earlier run (an update restarted the program): close them.
-        for w in _windows(visible=False):
-            if user32.IsIconic(w):
-                user32.PostMessageW(w, WM_CLOSE, 0, 0)
         user32.SetTimer(hwnd, TIMER_TICK, TICK_MS, None)
         user32.SetTimer(hwnd, TIMER_PROMOTE, 3000, None)
     finally:
