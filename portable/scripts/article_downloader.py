@@ -76,7 +76,7 @@ from contextlib import contextmanager
 from pathlib import Path
 from urllib.parse import urljoin, urlparse, unquote, quote_plus, quote, parse_qs
 
-from playwright.sync_api import sync_playwright, TimeoutError as PWTimeout
+from playwright.sync_api import sync_playwright, Error as PWError, TimeoutError as PWTimeout
 
 
 SCRIPT_DIR = Path(__file__).resolve().parent
@@ -931,71 +931,96 @@ def wiley_viewer_evidence(page) -> dict:
     return evidence
 
 
-def wait_wiley_viewer(page, timeout_sec: int = 240):
-    deadline = time.time() + job_bounded_wait(timeout_sec, margin_sec=60)
-    stable = 0
-    n = 0
-
-    while time.time() < deadline:
-        n += 1
-
-        deadline += wait_for_manual_verification(page, "Wiley")
-
-        ev = wiley_viewer_evidence(page)
-
-        # v5.3: the Download button is NOT required for viewer readiness.
-        # Some Wiley articles fully render Page 1 but do not expose the
-        # turquoise button. In v5.2 this caused a pointless ~3 minute wait
-        # before the already-available direct pdfdirect fallback was tried.
-        ready = ev["page_indicator"] or ev["rendered"]
-        stable = stable + 1 if ready else 0
-
-        log_line(
-            f"Wiley wait {n}: button={ev['button']} "
-            f"page1={ev['page_indicator']} rendered={ev['rendered']} "
-            f"stable={stable}/3"
-        )
-
-        if stable >= 3:
-            log_line(
-                "Wiley viewer rendered; proceeding to direct pdfdirect route "
-                f"(Download button {'present' if ev['button'] else 'not required'})."
-            )
-            page.wait_for_timeout(1200)
-            return
-
-        page.wait_for_timeout(2000)
-
-    raise DownloadError("WILEY_VIEWER_TIMEOUT")
+WILEY_IDLE_SEC = 60
 
 
-def find_wiley_pdfdirect(page, timeout_sec: int = 45):
-    deadline = time.time() + timeout_sec
+class WileyActivity:
+    """Track documents and viewer data on the tabs opened for this article."""
 
-    while time.time() < deadline:
-        for fr in page.frames:
-            for selector in (
-                'a[href*="/doi/pdfdirect/"][href*="download=true"]',
-                'a[href*="/doi/pdfdirect/"]',
-            ):
-                try:
-                    loc = fr.locator(selector)
+    def __init__(self):
+        self.last_progress = time.monotonic()
+        self.sessions = []
+        self.pending_headers = set()
 
-                    for i in range(min(loc.count(), 30)):
-                        el = loc.nth(i)
-                        try:
-                            if el.is_visible():
-                                href = el.get_attribute("href") or ""
-                                if "/doi/pdfdirect/" in href:
-                                    return fr, el, href
-                        except Exception:
-                            pass
-                except Exception:
-                    pass
+    def attach(self, page):
+        session = page.context.new_cdp_session(page)
+        self.sessions.append(session)
+        frame = session.send("Page.getFrameTree")["frameTree"]["frame"]
+        main_frame = frame["id"]
+        # A popup is reported after its first document has already committed.
+        tracked = {frame["loaderId"]}
 
-        page.wait_for_timeout(500)
+        def started(event):
+            # An article navigation may spend minutes waiting for the first byte.
+            key = (session, event["requestId"])
+            if event.get("type") == "Document" and event.get("frameId") == main_frame:
+                self.pending_headers.add(key)
+                self.last_progress = time.monotonic()
 
-    return None, None, None
+        def response(event):
+            self.pending_headers.discard((session, event["requestId"]))
+            info = event["response"]
+            kind = event["type"]
+            path = urlparse(info["url"]).path.lower()
+            if (kind == "Document" or "pdf" in info["mimeType"].lower()
+                    or (kind in ("XHR", "Fetch", "Script") and
+                        ("/doi/" in path or "/epdf" in path or "/viewer" in path))):
+                tracked.add(event["requestId"])
+                self.last_progress = time.monotonic()
+
+        def data(event):
+            if event["requestId"] in tracked and event.get("dataLength", 0) > 0:
+                self.last_progress = time.monotonic()
+
+        def finished(event):
+            tracked.discard(event["requestId"])
+            self.pending_headers.discard((session, event["requestId"]))
+
+        session.on("Network.requestWillBeSent", started)
+        session.on("Network.responseReceived", response)
+        session.on("Network.dataReceived", data)
+        session.on("Network.loadingFinished", finished)
+        session.on("Network.loadingFailed", finished)
+        session.send("Network.enable")
+
+    def close(self):
+        for session in self.sessions:
+            try:
+                session.detach()
+            except Exception:
+                pass  # The tab may already have closed.
+
+    def wait(self, active_page, probe, check, label, *, download_ready=None):
+        """Return on a useful browser event or control, or after genuine inactivity."""
+        self.last_progress = time.monotonic()
+        hard_end = time.monotonic() + job_bounded_wait(24 * 3600, margin_sec=5)
+        while time.monotonic() < hard_end:
+            check()
+            if download_ready and download_ready():
+                return True
+            page = active_page()
+            if page.is_closed():
+                raise DownloadError(f"Wiley: tab closed while waiting for {label}")
+            if wait_for_manual_verification(page, "Wiley", download_ready=download_ready):
+                self.last_progress = time.monotonic()
+                continue
+            try:
+                value = probe()
+            except PWError:
+                # A viewer redirect can detach a frame between finding a control
+                # and reading it. Check the new document on the next poll.
+                if page.is_closed():
+                    raise
+                value = None
+            if value:
+                return value
+            if download_ready and download_ready():
+                return True
+            if not self.pending_headers and time.monotonic() - self.last_progress >= WILEY_IDLE_SEC:
+                log_line(f"Wiley: no loading progress while waiting for {label}; trying the next route")
+                return None
+            page.wait_for_timeout(300)
+        raise DownloadError(f"Wiley: article time limit reached while waiting for {label}")
 
 
 # v9.2.2: Wiley's login service. Where the network cuts it (22.11.2026, from Russia: by the name,
@@ -1075,7 +1100,36 @@ def download_wiley(context, raw: str, doi: str | None, resolved_url: str | None)
     pdfdirect_url = f"{host}/doi/pdfdirect/{doi}?download=true"
 
     page = context.new_page()
-    watch = LoginServiceWatch(context)      # v9.2.2: fail fast when the login service is cut off
+    pages = []
+    downloads = []
+    activity = WileyActivity()
+    watch = LoginServiceWatch(context)
+
+    def attach(tab):
+        pages.append(tab)
+        tab.on("download", lambda d: downloads.append(d))
+        tab.on("popup", attach)
+        activity.attach(tab)
+
+    def active_page():
+        return next((tab for tab in reversed(pages) if not tab.is_closed()), page)
+
+    def save_download():
+        if not downloads:
+            return None
+        dest = next_destination("Wiley", doi)
+        # save_as waits for the browser to finish receiving the attachment.
+        partial = dest.with_suffix(".pdf.part")
+        try:
+            downloads.pop(0).save_as(partial)
+            if valid_pdf(partial):
+                partial.replace(dest)
+                return dest
+        except Exception as exc:
+            log_line(f"Wiley: browser download did not finish: {exc}")
+        finally:
+            partial.unlink(missing_ok=True)
+        return None
 
     def wiley_access_denied() -> bool:
         """
@@ -1084,7 +1138,7 @@ def download_wiley(context, raw: str, doi: str | None, resolved_url: str | None)
         institutional session simply has no entitlement to the article.
         """
         try:
-            body = (page.locator("body").inner_text(timeout=3000) or "").lower()
+            body = (active_page().locator("body").inner_text(timeout=3000) or "").lower()
         except Exception:
             return False
 
@@ -1093,8 +1147,6 @@ def download_wiley(context, raw: str, doi: str | None, resolved_url: str | None)
             "access denied",
             "purchase access",
             "purchase this article",
-            "get access",
-            "institutional access",
             "sign in to access",
             "subscribe to access",
             "this content is not available",
@@ -1103,173 +1155,110 @@ def download_wiley(context, raw: str, doi: str | None, resolved_url: str | None)
         )
         return any(p in body for p in phrases)
 
+    attempted_urls = set()
+
     def try_capture(url: str, label: str, timeout_s: int = 45) -> Path | None:
+        if url in attempted_urls:
+            return None
+        attempted_urls.add(url)
         dest = next_destination("Wiley", doi)
         log_line(f"{label}: {url}")
 
-        if capture_pdf_with_fetch(
-            context,
-            url,
-            dest,
-            timeout_s,
-            source_label="Wiley PDF",
-        ):
-            return dest
-
+        partial = dest.with_suffix(".pdf.part")
         try:
-            dest.unlink()
-        except Exception:
-            pass
+            if capture_pdf_with_fetch(context, url, partial, timeout_s, source_label="Wiley PDF",
+                                      wiley_watch=watch):
+                partial.replace(dest)
+                return dest
+        finally:
+            partial.unlink(missing_ok=True)
         watch.check()
         return None
 
+    def article_control():
+        links = page.locator('a[href*="/doi/epdf/" i]:visible, a[href*="/doi/pdf/" i]:visible')
+        for link in links.all():
+            href = unquote(link.get_attribute("href", timeout=1000) or "")
+            if doi.lower() in href.lower():
+                return link
+        return None
+
+    def viewer_control():
+        for frame in active_page().frames:
+            matches = frame.locator(
+                '#new-download-btn:visible, button:has-text("Download"):visible, '
+                'a:has-text("Download PDF"):visible, a[href*="/doi/pdfdirect/"]:visible'
+            )
+            if matches.count():
+                return frame, matches.first
+        return None
+
+    def viewer_ready():
+        tab = active_page()
+        control = viewer_control()
+        if control is not None:
+            return control
+        if tab is page and tab.url == before_click:
+            return None
+        evidence = wiley_viewer_evidence(tab)
+        return evidence["page_indicator"] or evidence["rendered"]
+
     try:
+        attach(page)
         log_line(f"Wiley article open: {article_url}")
-        safe_goto(page, article_url, 60000)
-        page.wait_for_timeout(2500)
-        watch.check()
-
-        # Manual verification only; no bypass.
-        wait_for_manual_verification(page, "Wiley")
-        note_supplements(page)      # v9.2.2: before the PDF click moves this page to the viewer
-
-        # ------------------------------------------------------------------
-        # PRIMARY v5.8 ROUTE: click the exact visible PDF/ePDF toolbar anchor.
-        # ------------------------------------------------------------------
-        pdf_control = None
-        pdf_href = None
-
-        for selector in (
-            'a[href*="/doi/epdf/"]',
-            'a[href*="/doi/pdf/"]',
-            'a:has-text("PDF")',
-        ):
-            try:
-                loc = page.locator(selector)
-                for i in range(min(loc.count(), 80)):
-                    el = loc.nth(i)
-                    try:
-                        if not el.is_visible():
-                            continue
-                        href = el.get_attribute("href") or ""
-                        href_low = href.lower()
-                        if doi.lower() not in href_low:
-                            continue
-                        if "/doi/epdf/" not in href_low and "/doi/pdf/" not in href_low:
-                            continue
-                        pdf_control = el
-                        pdf_href = urljoin(page.url, href)
-                        break
-                    except Exception:
-                        pass
-                if pdf_control is not None:
-                    break
-            except Exception:
-                pass
-
+        safe_goto(page, article_url, max(1, job_bounded_wait(600, margin_sec=5)) * 1000, attempts=1)
+        pdf_control = activity.wait(active_page, article_control, watch.check, "article PDF link")
+        note_supplements(page)
         if pdf_control is not None:
-            log_line(f"Wiley visible PDF/ePDF control found: {pdf_href}")
-
-            # Click the exact toolbar control. It usually opens the ePDF viewer.
+            before_click = page.url
+            log_line("Wiley: article PDF link ready")
             try:
-                pdf_control.click(force=True, timeout=15000)
-                page.wait_for_timeout(3500)
-                log_line(f"Wiley after PDF control click: {page.url}")
+                pdf_control.click(timeout=15000, no_wait_after=True)
             except Exception as exc:
-                log_line(f"Wiley PDF control click error: {exc}")
-            watch.check()
-
-            wait_for_manual_verification(page, "Wiley")
-
+                log_line(f"Wiley PDF control click: {exc}")
+            activity.wait(active_page, viewer_ready, watch.check, "PDF viewer or download",
+                          download_ready=lambda: bool(downloads))
+            result = save_download()
+            if result:
+                return result
             if wiley_access_denied():
-                raise NoAccess(
-                    "Wiley: institutional session has no access to this article"
-                )
+                raise NoAccess("Wiley: institutional session has no access to this article")
 
-            # The click refreshes Wiley session/cookies. Now direct PDF routes
-            # are much more reliable.
-            for url, label in (
-                (pdfdirect_url, "Wiley pdfdirect after visible PDF click"),
-                (pdf_url, "Wiley /doi/pdf after visible PDF click"),
-            ):
-                result = try_capture(url, label, 45)
-                if result is not None:
+            control = viewer_control()
+            if control is not None:
+                frame, button = control
+                href = button.get_attribute("href") or ""
+                if href and not href.lower().startswith(("javascript:", "blob:", "#")):
+                    result = try_capture(urljoin(frame.url, href), "Wiley viewer download link")
+                    if result:
+                        return result
+                else:
+                    button.click(timeout=15000, no_wait_after=True)
+
+                    def generated_link():
+                        for frame in active_page().frames:
+                            links = frame.locator('a[href*="/doi/pdfdirect/"]')
+                            if links.count():
+                                return urljoin(frame.url, links.first.get_attribute("href") or "")
+                        return None
+
+                    target = activity.wait(active_page, generated_link, watch.check, "viewer download",
+                                           download_ready=lambda: bool(downloads))
+                    result = save_download()
+                    if result:
+                        return result
+                    if isinstance(target, str):
+                        result = try_capture(target, "Wiley generated PDF link")
+                        if result:
+                            return result
+
+            for url in (pdfdirect_url, pdf_url):
+                result = try_capture(url, "Wiley PDF after article click")
+                if result:
                     return result
 
-            # If the ePDF viewer itself exposes a Download button, use it.
-            viewer_button = None
-            for selector in (
-                "#new-download-btn",
-                'button:has-text("Download")',
-                'a:has-text("Download PDF")',
-                'a[href*="/doi/pdfdirect/"]',
-            ):
-                try:
-                    loc = page.locator(selector)
-                    for i in range(min(loc.count(), 50)):
-                        el = loc.nth(i)
-                        try:
-                            if el.is_visible():
-                                viewer_button = el
-                                break
-                        except Exception:
-                            pass
-                    if viewer_button is not None:
-                        break
-                except Exception:
-                    pass
-
-            if viewer_button is not None:
-                try:
-                    href = viewer_button.get_attribute("href") or ""
-                except Exception:
-                    href = ""
-
-                if href:
-                    target = urljoin(page.url, href)
-                    log_line(f"Wiley viewer Download href: {target}")
-                    result = try_capture(
-                        target,
-                        "Wiley viewer Download href capture",
-                        75,
-                    )
-                    if result is not None:
-                        return result
-
-                # Some Wiley viewers generate the pdfdirect link only after
-                # the Download control is clicked.
-                try:
-                    viewer_button.click(force=True, timeout=15000)
-                    page.wait_for_timeout(2500)
-                except Exception as exc:
-                    log_line(f"Wiley viewer Download click error: {exc}")
-
-                try:
-                    fr, pdf_link, href = find_wiley_pdfdirect(page, 30)
-                except Exception:
-                    fr, pdf_link, href = None, None, None
-
-                if href:
-                    target = urljoin(page.url, href)
-                    log_line(f"Wiley generated pdfdirect link: {target}")
-                    result = try_capture(
-                        target,
-                        "Wiley generated pdfdirect capture",
-                        75,
-                    )
-                    if result is not None:
-                        return result
-
-        else:
-            log_line(
-                "Wiley visible PDF/ePDF control was not found on article page; "
-                "using direct fallback."
-            )
-
         if wiley_access_denied():
-            raise NoAccess(
-                "Wiley: institutional session has no access to this article"
-            )
+            raise NoAccess("Wiley: institutional session has no access to this article")
 
         # ------------------------------------------------------------------
         # FALLBACK: try known Wiley routes even if toolbar click was absent.
@@ -1288,12 +1277,12 @@ def download_wiley(context, raw: str, doi: str | None, resolved_url: str | None)
         )
 
     finally:
+        activity.close()
         watch.close()
-        note_supplements(page)      # once more, if the page is still the article
-        try:
-            close_page_safely(page)
-        except Exception:
-            pass
+        note_supplements(page)
+        for tab in reversed(pages):
+            close_page_safely(tab)
+
 
 
 # ---------------------------------------------------------------------------
@@ -1370,10 +1359,14 @@ def find_elsevier_pdf_href(page, timeout_sec: int = 45) -> str:
     raise DownloadError("ELSEVIER_PDF_CONTROL_NOT_FOUND")
 
 
-def capture_pdf_with_fetch(context, target_url: str, dest: Path, timeout_sec: int = 120, source_label: str = "Elsevier") -> bool:
+def capture_pdf_with_fetch(context, target_url: str, dest: Path, timeout_sec: int = 120,
+                           source_label: str = "Elsevier", *, wiley_watch=None) -> bool:
     page = context.new_page()
     cdp = context.new_cdp_session(page)
 
+    activity = WileyActivity() if wiley_watch is not None else None
+    if activity:
+        activity.attach(page)
     saved = {"ok": False}
     normal_downloads = []
 
@@ -1453,19 +1446,25 @@ def capture_pdf_with_fetch(context, target_url: str, dest: Path, timeout_sec: in
     log_line(f"{source_label} capture URL: {target_url}")
 
     try:
-        safe_goto(page, target_url, min(20000, max(7000, timeout_sec * 1000)), attempts=1)
+        if activity:
+            # Start navigation without holding the event loop waiting for headers.
+            page.evaluate("(url) => { location.assign(url) }", target_url)
+        else:
+            safe_goto(page, target_url, min(20000, max(7000, timeout_sec * 1000)), attempts=1)
     except Exception as exc:
-        # A direct PDF navigation may report "Download is starting".
         log_line(f"{source_label} navigation message: {exc}")
 
     try:
-        deadline = time.monotonic() + timeout_sec
-        while time.monotonic() < deadline and not saved["ok"] and not normal_downloads:
-            # Preserve time for the PDF response after the user returns.
-            deadline += wait_for_manual_verification(
-                page, source_label, download_ready=lambda: saved["ok"] or normal_downloads
-            )
-            page.wait_for_timeout(500)
+        if activity:
+            activity.wait(lambda: page, lambda: None, wiley_watch.check, "PDF response",
+                          download_ready=lambda: saved["ok"] or normal_downloads)
+        else:
+            deadline = time.monotonic() + timeout_sec
+            while time.monotonic() < deadline and not saved["ok"] and not normal_downloads:
+                deadline += wait_for_manual_verification(
+                    page, source_label, download_ready=lambda: saved["ok"] or normal_downloads
+                )
+                page.wait_for_timeout(500)
 
         if not saved["ok"] and normal_downloads:
             try:
@@ -1474,6 +1473,8 @@ def capture_pdf_with_fetch(context, target_url: str, dest: Path, timeout_sec: in
             except Exception:
                 pass
     finally:
+        if activity:
+            activity.close()
         try:
             cdp.send("Fetch.disable")
         except Exception:
