@@ -1101,6 +1101,28 @@ class LoginServiceWatch:
             pass
 
 
+# Wiley also has a format switcher labelled "PDF" in its top toolbar.
+# An unscoped menu entry must include the published file size.
+WILEY_PDF_SIZE = re.compile(
+    r"^PDF\s*[·•∙.:(|–—-]?\s*\d+(?:[.,]\d+)?\s*(?:[KMG]?i?B|[КМГ]?Б)\s*\)?$", re.I
+)
+
+
+def wiley_pdf_option(frame, trigger):
+    if frame.is_detached():
+        return None
+    ids = trigger.get_attribute("aria-controls", timeout=1000) if trigger.count() else ""
+    for menu_id in (ids or "").split():
+        menu = frame.locator(f"[id={json.dumps(menu_id)}]:visible")
+        for option in menu.get_by_text(re.compile(r"^PDF$", re.I)).all():
+            if option.is_visible():
+                return option
+    for option in frame.get_by_text(WILEY_PDF_SIZE).all():
+        if option.is_visible():
+            return option
+    return None
+
+
 def download_wiley(context, raw: str, doi: str | None, resolved_url: str | None) -> Path:
     """
     Wiley v5.8: click the REAL visible PDF/ePDF control first.
@@ -1274,16 +1296,41 @@ def download_wiley(context, raw: str, doi: str | None, resolved_url: str | None)
                     if result:
                         return result
                 else:
-                    button.click(timeout=15000, no_wait_after=True)
+                    # Do not toggle an already open menu closed. A viewer overlay
+                    # can cover an enabled trigger while the menu itself is usable.
+                    def open_download():
+                        if (button.get_attribute("aria-expanded", timeout=1000) == "true"
+                                or wiley_pdf_option(frame, button) is not None):
+                            return True
+                        button.click(timeout=900, no_wait_after=True)
+                        return True
+
+                    opened = activity.wait(active_page, open_download, watch.check, "clickable Download menu",
+                                           download_ready=lambda: bool(downloads))
+                    if not opened:
+                        raise DownloadError("WILEY_DOWNLOAD_MENU_BLOCKED")
+
+                    selected_pdf = False
 
                     def generated_link():
-                        for frame in active_page().frames:
-                            links = frame.locator('a[href*="/doi/pdfdirect/"]')
+                        nonlocal selected_pdf
+                        if not selected_pdf:
+                            option = wiley_pdf_option(frame, button)
+                            if option is not None:
+                                option.click(timeout=900, no_wait_after=True)
+                                selected_pdf = True
+                                log_line("Wiley: selected PDF in Download menu")
+                        tab = active_page()
+                        path = urlparse(tab.url).path.lower()
+                        if ("/doi/pdf/" in path or "/doi/pdfdirect/" in path) and doi.lower() in unquote(path):
+                            return tab.url
+                        for current_frame in tab.frames:
+                            links = current_frame.locator('a[href*="/doi/pdfdirect/"]:visible')
                             if links.count():
-                                return urljoin(frame.url, links.first.get_attribute("href") or "")
+                                return urljoin(current_frame.url, links.first.get_attribute("href") or "")
                         return None
 
-                    target = activity.wait(active_page, generated_link, watch.check, "viewer download",
+                    target = activity.wait(active_page, generated_link, watch.check, "viewer PDF download",
                                            download_ready=lambda: bool(downloads))
                     result = save_download()
                     if result:

@@ -1286,6 +1286,7 @@
   "Для карты нужно хотя бы две статьи: отметьте их «✓ Подходит» или выберите выше «все статьи списка».": "The map needs at least two papers: mark them «✓ Relevant» or choose «all articles of the list» above.",
   "Карта не построилась: {error}": "The map was not drawn: {error}",
   "У этого списка нет нескачанных статей.": "This list has no articles that failed to download.",
+  "Wiley: меню скачивания перекрыто. В открытой вкладке выберите Download → PDF.": "Wiley: the download menu is covered. In the open tab choose Download → PDF.",
   "Wiley: служба входа wiley.scienceconnect.io недоступна из этой сети — статью нужно найти другим путём": "Wiley: its sign-in service wiley.scienceconnect.io cannot be reached from this network — find the article another way",
   "Статьи Elsevier отложены.": "Elsevier articles are on hold."
  }

@@ -35,6 +35,23 @@ class Site(BaseHTTPRequestHandler):
         elif self.path == "/api/content":
             time.sleep(3)  # No first byte before the old idle cutoff.
             data = b" " * 12000
+        elif "/doi/abs/10.1002/" in self.path:
+            viewer_path = self.path.replace("/abs/", "/epdf/")
+            data = f'<a href="{viewer_path}">Open PDF</a>'.encode()
+        elif "/doi/epdf/10.1002/" in self.path:
+            opened = self.path.endswith("/already-open")
+            delay = 16500 if self.path.endswith("/bbb.70185") else 120000
+            data = f"""<button onclick="location.href='/wrong-format'">PDF</button>
+                <button id="new-download-btn" title="Download" aria-haspopup="true"
+                  aria-expanded="{str(opened).lower()}"
+                  onclick="this.setAttribute('aria-expanded','true'); formats.hidden=false;
+                           fetch('/opened')">Download</button>
+                <div class="overlay-screen" style="position:fixed;inset:0;z-index:1"></div>
+                <div id="formats" {'' if opened else 'hidden'} style="position:relative;z-index:2">
+                  <button onclick="location.href='/wrong-format'">EPUB · 3.2 MB</button>
+                  <button onclick="location.href='/file'"><span>PDF</span> · 2.9 MB</button>
+                </div><script>setTimeout(()=>document.querySelector('.overlay-screen').remove(),{delay})</script>
+                """.encode("utf-8")
         elif "/doi/abs/" in self.path:
             data = (b"<html><body><h1>Test article</h1>" + b" " * 12000 +
                     b'<a target="_blank" href="/doi/epdf/10.1029/test">PDF</a></body></html>')
@@ -49,7 +66,7 @@ class Site(BaseHTTPRequestHandler):
             self.send_error(404)
             return
         self.send_response(200)
-        self.send_header("Content-Type", "application/pdf" if attachment else "text/html")
+        self.send_header("Content-Type", "application/pdf" if attachment else "text/html; charset=utf-8")
         self.send_header("Content-Length", str(len(data)))
         if attachment:
             self.send_header("Content-Disposition", 'attachment; filename="article.pdf"')
@@ -127,6 +144,30 @@ with tempfile.TemporaryDirectory() as tmp:
                                              lambda: None, "viewer API response")
                 finally:
                     activity.close()
+
+                # The original click timed out after 15 s. Also exercise a menu
+                # left open with its backdrop still covering the toggle.
+                for suffix, clicks in (("bbb.70185", 1), ("already-open", 0)):
+                    article = "10.1002/" + suffix
+                    start = len(visits)
+                    with (patch.object(ad, "WILEY_IDLE_SEC", 35),
+                          patch.dict(os.environ, ARTICLE_JOB_DEADLINE=str(time.time() + 50))):
+                        path = ad.download_wiley(context, article, article, address + "/doi/" + article)
+                    requests = visits[start:]
+                    assert path.read_bytes() == pdf and requests.count("/file") == 1, requests
+                    assert requests.count("/opened") == clicks and "/wrong-format" not in requests, requests
+                    assert not any("/pdfdirect/" in u for u in requests), requests
+
+                with patch.dict(os.environ, ARTICLE_JOB_DEADLINE=str(time.time() + 15)):
+                    try:
+                        article = "10.1002/blocked"
+                        ad.download_wiley(context, article, article, address + "/doi/" + article)
+                    except ad.DownloadError as exc:
+                        assert "WILEY_DOWNLOAD_MENU_BLOCKED" in str(exc), exc
+                    else:
+                        raise AssertionError("Covered control was unexpectedly clicked")
+                    blocked_tab = next(t for t in context.pages if t.url.endswith("/blocked"))
+                    blocked_tab.close()
 
                 # Leave the user's article open on a timeout, even on the next attach.
                 with patch.object(ad.WileyActivity, "wait", side_effect=ad.DownloadError("test deadline")):

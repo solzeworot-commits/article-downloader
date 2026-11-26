@@ -86,7 +86,7 @@ PDF_TEXT_CACHE = ROOT / "logs" / "pdf_text"      # the pages of the PDFs, for «
 BIBLIO_DIR = ROOT / "Список литературы"
 
 UI_PORT = 17865
-APP_VERSION = "9.2.10"
+APP_VERSION = "9.2.11"
 APP_AUTHOR = "Bucaneiro"
 OFFICIAL_URL = "https://github.com/solzeworot-commits/article-downloader"
 DOWNLOAD_URL = OFFICIAL_URL + "/releases/tag/portable-latest"
@@ -916,6 +916,8 @@ STATUS_BY_RESULT = {
 
 def readable_reason(status: str, message: str) -> str:
     """v9.2.2: a reason the downloader reports as a code, in words the user can act on."""
+    if status == "failed" and "WILEY_DOWNLOAD_MENU_BLOCKED" in message:
+        return tr("Wiley: меню скачивания перекрыто. В открытой вкладке выберите Download → PDF.")
     if status == "no_access" and message.startswith("WILEY_LOGIN_BLOCKED"):
         return tr("Wiley: служба входа wiley.scienceconnect.io недоступна из этой сети — статью нужно найти другим путём")
     return message
