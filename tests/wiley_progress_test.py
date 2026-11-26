@@ -20,7 +20,9 @@ writer = PdfWriter()
 writer.add_blank_page(width=300, height=300)
 writer.add_metadata({"/Subject": "test article " * 30000})
 writer.write(payload)
-pdf = payload.getvalue()
+# Insert three UTF-8 BOM bytes without shifting the PDF's cross-reference offsets.
+pdf = payload.getvalue().replace(b"test", b"\xef\xbb\xbfx")
+assert b"\xef\xbb\xbf" in pdf
 
 
 class Site(BaseHTTPRequestHandler):
@@ -35,11 +37,13 @@ class Site(BaseHTTPRequestHandler):
         elif self.path == "/api/content":
             time.sleep(3)  # No first byte before the old idle cutoff.
             data = b" " * 12000
+        elif self.path == "/doi/abs/10.1002/bbb.1654":
+            data = b"<body>Article without a PDF toolbar link</body>"
         elif "/doi/abs/10.1002/" in self.path:
             viewer_path = self.path.replace("/abs/", "/epdf/")
             data = f'<a href="{viewer_path}">Open PDF</a>'.encode()
         elif "/doi/epdf/10.1002/" in self.path:
-            opened = self.path.endswith("/already-open")
+            opened = self.path.endswith(("/already-open", "/bbb.1654", "/bbb.2110?view=1"))
             delay = 16500 if self.path.endswith("/bbb.70185") else 120000
             data = f"""<button onclick="location.href='/wrong-format'">PDF</button>
                 <button id="new-download-btn" title="Download" aria-haspopup="true"
@@ -157,6 +161,17 @@ with tempfile.TemporaryDirectory() as tmp:
                     assert path.read_bytes() == pdf and requests.count("/file") == 1, requests
                     assert requests.count("/opened") == clicks and "/wrong-format" not in requests, requests
                     assert not any("/pdfdirect/" in u for u in requests), requests
+
+                for article, endpoint in (("10.1002/bbb.2110", "/doi/epdf/10.1002/bbb.2110?view=1"),
+                                          ("10.1002/bbb.1654", "/doi/10.1002/bbb.1654")):
+                    start = len(visits)
+                    with patch.dict(os.environ, ARTICLE_JOB_DEADLINE=str(time.time() + 40)):
+                        path = ad.download_wiley(context, article, article, address + endpoint)
+                    requests = visits[start:]
+                    viewer = endpoint if "/epdf/" in endpoint else "/doi/epdf/" + article
+                    assert requests.count(viewer) == 1 and requests.count("/file") == 1, requests
+                    assert ("/doi/abs/" + article in requests) == ("/epdf/" not in endpoint), requests
+                    assert path.read_bytes() == pdf
 
                 with patch.dict(os.environ, ARTICLE_JOB_DEADLINE=str(time.time() + 15)):
                     try:

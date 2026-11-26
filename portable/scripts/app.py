@@ -87,7 +87,7 @@ PDF_TEXT_CACHE = ROOT / "logs" / "pdf_text"      # the pages of the PDFs, for «
 BIBLIO_DIR = ROOT / "Список литературы"
 
 UI_PORT = 17865
-APP_VERSION = "9.2.12"
+APP_VERSION = "9.2.13"
 APP_AUTHOR = "Bucaneiro"
 OFFICIAL_URL = "https://github.com/solzeworot-commits/article-downloader"
 DOWNLOAD_URL = OFFICIAL_URL + "/releases/tag/portable-latest"

@@ -1268,10 +1268,14 @@ def download_wiley(context, raw: str, doi: str | None, resolved_url: str | None)
     completed = False
     try:
         attach(page)
-        log_line(f"Wiley article open: {article_url}")
-        safe_goto(page, article_url, max(1, job_bounded_wait(600, margin_sec=5)) * 1000, attempts=1)
-        pdf_control = activity.wait(active_page, article_control, watch.check, "article PDF link")
-        note_supplements(page)
+        before_click = None
+        direct_viewer = parsed.path.lower().startswith("/doi/epdf/")
+        pdf_control = None
+        if not direct_viewer:
+            log_line(f"Wiley article open: {article_url}")
+            safe_goto(page, article_url, max(1, job_bounded_wait(600, margin_sec=5)) * 1000, attempts=1)
+            pdf_control = activity.wait(active_page, article_control, watch.check, "article PDF link")
+            note_supplements(page)
         if pdf_control is not None:
             before_click = page.url
             log_line("Wiley: article PDF link ready")
@@ -1279,71 +1283,73 @@ def download_wiley(context, raw: str, doi: str | None, resolved_url: str | None)
                 pdf_control.click(timeout=15000, no_wait_after=True)
             except Exception as exc:
                 log_line(f"Wiley PDF control click: {exc}")
-            activity.wait(active_page, viewer_ready, watch.check, "PDF viewer or download",
-                          download_ready=lambda: bool(downloads))
-            result = save_download()
-            if result:
-                return result
-            if wiley_access_denied():
+        else:
+            if not direct_viewer and wiley_access_denied():
                 raise NoAccess("Wiley: institutional session has no access to this article")
+            viewer_url = resolved if direct_viewer else epdf_url
+            log_line(f"Wiley ePDF viewer open: {viewer_url}")
+            # A viewer URL may also return a native browser download.
+            page.evaluate("(url) => { location.assign(url) }", viewer_url)
+        activity.wait(active_page, viewer_ready, watch.check, "PDF viewer or download",
+                      download_ready=lambda: bool(downloads))
+        result = save_download()
+        if result:
+            return result
+        if wiley_access_denied():
+            raise NoAccess("Wiley: institutional session has no access to this article")
 
-            control = viewer_control()
-            if control is not None:
-                frame, button = control
-                href = button.get_attribute("href") or ""
-                if href and not href.lower().startswith(("javascript:", "blob:", "#")):
-                    result = try_capture(urljoin(frame.url, href), "Wiley viewer download link")
-                    if result:
-                        return result
-                else:
-                    # Do not toggle an already open menu closed. A viewer overlay
-                    # can cover an enabled trigger while the menu itself is usable.
-                    def open_download():
-                        if (button.get_attribute("aria-expanded", timeout=1000) == "true"
-                                or wiley_pdf_option(frame, button) is not None):
-                            return True
-                        button.click(timeout=900, no_wait_after=True)
-                        return True
-
-                    opened = activity.wait(active_page, open_download, watch.check, "clickable Download menu",
-                                           download_ready=lambda: bool(downloads))
-                    if not opened:
-                        raise DownloadError("WILEY_DOWNLOAD_MENU_BLOCKED")
-
-                    selected_pdf = False
-
-                    def generated_link():
-                        nonlocal selected_pdf
-                        if not selected_pdf:
-                            option = wiley_pdf_option(frame, button)
-                            if option is not None:
-                                option.click(timeout=900, no_wait_after=True)
-                                selected_pdf = True
-                                log_line("Wiley: selected PDF in Download menu")
-                        tab = active_page()
-                        path = urlparse(tab.url).path.lower()
-                        if ("/doi/pdf/" in path or "/doi/pdfdirect/" in path) and doi.lower() in unquote(path):
-                            return tab.url
-                        for current_frame in tab.frames:
-                            links = current_frame.locator('a[href*="/doi/pdfdirect/"]:visible')
-                            if links.count():
-                                return urljoin(current_frame.url, links.first.get_attribute("href") or "")
-                        return None
-
-                    target = activity.wait(active_page, generated_link, watch.check, "viewer PDF download",
-                                           download_ready=lambda: bool(downloads))
-                    result = save_download()
-                    if result:
-                        return result
-                    if isinstance(target, str):
-                        result = try_capture(target, "Wiley generated PDF link")
-                        if result:
-                            return result
-
-            for url in (pdfdirect_url, pdf_url):
-                result = try_capture(url, "Wiley PDF after article click")
+        control = viewer_control()
+        if control is not None:
+            frame, button = control
+            href = button.get_attribute("href") or ""
+            if href and not href.lower().startswith(("javascript:", "blob:", "#")):
+                result = try_capture(urljoin(frame.url, href), "Wiley viewer download link")
                 if result:
                     return result
+            else:
+                # Do not toggle an already open menu closed. A viewer overlay
+                # can cover an enabled trigger while the menu itself is usable.
+                def open_download():
+                    if (button.get_attribute("aria-expanded", timeout=1000) == "true"
+                            or wiley_pdf_option(frame, button) is not None):
+                        return True
+                    button.click(timeout=900, no_wait_after=True)
+                    return True
+
+                opened = activity.wait(active_page, open_download, watch.check, "clickable Download menu",
+                                       download_ready=lambda: bool(downloads))
+                if not opened:
+                    raise DownloadError("WILEY_DOWNLOAD_MENU_BLOCKED")
+
+                selected_pdf = False
+
+                def generated_link():
+                    nonlocal selected_pdf
+                    if not selected_pdf:
+                        option = wiley_pdf_option(frame, button)
+                        if option is not None:
+                            option.click(timeout=900, no_wait_after=True)
+                            selected_pdf = True
+                            log_line("Wiley: selected PDF in Download menu")
+                    tab = active_page()
+                    path = urlparse(tab.url).path.lower()
+                    if ("/doi/pdf/" in path or "/doi/pdfdirect/" in path) and doi.lower() in unquote(path):
+                        return tab.url
+                    for current_frame in tab.frames:
+                        links = current_frame.locator('a[href*="/doi/pdfdirect/"]:visible')
+                        if links.count():
+                            return urljoin(current_frame.url, links.first.get_attribute("href") or "")
+                    return None
+
+                target = activity.wait(active_page, generated_link, watch.check, "viewer PDF download",
+                                       download_ready=lambda: bool(downloads))
+                result = save_download()
+                if result:
+                    return result
+                if isinstance(target, str):
+                    result = try_capture(target, "Wiley generated PDF link")
+                    if result:
+                        return result
 
         if wiley_access_denied():
             raise NoAccess("Wiley: institutional session has no access to this article")
@@ -1352,9 +1358,9 @@ def download_wiley(context, raw: str, doi: str | None, resolved_url: str | None)
         # FALLBACK: try known Wiley routes even if toolbar click was absent.
         # ------------------------------------------------------------------
         for url, label in (
-            (epdf_url, "Wiley direct /doi/epdf fallback"),
             (pdf_url, "Wiley direct /doi/pdf fallback"),
             (pdfdirect_url, "Wiley direct /doi/pdfdirect fallback"),
+            (resolved if direct_viewer else epdf_url, "Wiley ePDF inline file fallback"),
         ):
             result = try_capture(url, label, 45)
             if result is not None:
@@ -1450,6 +1456,11 @@ def find_elsevier_pdf_href(page, timeout_sec: int = 45) -> str:
     raise DownloadError("ELSEVIER_PDF_CONTROL_NOT_FOUND")
 
 
+def cdp_body_bytes(data: str, base64_encoded: bool) -> bytes:
+    """Chromium returns base64 for binary data and UTF-8 text for other chunks."""
+    return base64.b64decode(data) if base64_encoded else data.encode("utf-8")
+
+
 def capture_pdf_with_fetch(context, target_url: str, dest: Path, timeout_sec: int = 120,
                            source_label: str = "Elsevier", *, wiley_watch=None) -> bool:
     page = context.new_page()
@@ -1507,11 +1518,13 @@ def capture_pdf_with_fetch(context, target_url: str, dest: Path, timeout_sec: in
                         part = cdp.send("IO.read", {"handle": stream, "size": 64 * 1024})
                         raw = part["data"]
                         if raw:
-                            out.write(base64.b64decode(raw) if part.get("base64Encoded") else raw.encode("latin-1"))
+                            out.write(cdp_body_bytes(raw, part.get("base64Encoded", False)))
                             activity.received_bytes()
                         if part["eof"]:
                             break
                 saved["ok"] = valid_pdf(dest)
+                if saved["ok"]:
+                    log_line(f"{source_label} stream saved: {dest.stat().st_size} bytes")
             except Exception as exc:
                 log_line(f"{source_label} stream read failed: {exc}")
             finally:
@@ -1527,11 +1540,7 @@ def capture_pdf_with_fetch(context, target_url: str, dest: Path, timeout_sec: in
             try:
                 body = cdp.send("Fetch.getResponseBody", {"requestId": request_id})
                 raw = body.get("body", "")
-                data = (
-                    base64.b64decode(raw)
-                    if body.get("base64Encoded")
-                    else raw.encode("latin-1", errors="ignore")
-                )
+                data = cdp_body_bytes(raw, body.get("base64Encoded", False))
 
                 if data[:5] == b"%PDF-":
                     dest.write_bytes(data)
