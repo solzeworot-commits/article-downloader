@@ -1033,7 +1033,7 @@ def _run_item(item: dict, *, wiley_only=False, supplements_only=False):
             elif timed_out:
                 item["supp_message"] = tr("Истекло время поиска приложений")
             elif status != "success":
-                item["supp_message"] = (message or tr("Не удалось скачать приложения"))[:500]
+                item["supp_message"] = tr(message or "Не удалось скачать приложения")[:500]
             S.touch_items()
             return
 
