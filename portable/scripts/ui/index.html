@@ -620,7 +620,7 @@
   <label class="supp-bar" id="supp-bar" title="Supplementary — дополнительные материалы к статье: таблицы с данными, приложения, методики">
     <input type="checkbox" id="supp-tick" checked><span class="ico">📎</span>
     <span class="txt"><b>Скачивать и дополнительные материалы (Supplementary)</b>
-      <small>таблицы с данными, приложения и другие файлы к статье — в папку рядом с её PDF. Не нужны — снимите галочку.</small></span></label>
+      <small>Сохранять доступные приложения, даже если полный текст статьи платный.</small></span></label>
 
   <div class="card" id="first-run" hidden>
     <h2><span>👋 Первый запуск на этом компьютере</span><span class="grow"></span><button id="btn-first-ok">Понятно</button></h2>
@@ -1558,11 +1558,12 @@ function renderItems() {
     else if (it.message) msg = it.message;
     const acts = [];
     if (it.status === "success") acts.push(`<button data-open="${it.id}">Открыть</button>`);
-    if (it.status === "success" && it.supp) acts.push(`<button data-supp="${it.id}" title="Открыть папку с дополнительными материалами">📎 ${it.supp} доп.</button>`);
-    if (it.attempts) acts.push(`<button data-log="${it.id}">Журнал</button>`);
+    if (/^(?:10\.\d{4,9}\/|https?:\/\/)/i.test(it.query)) acts.push(`<button data-get-supp="${it.id}" ${state.running ? "disabled" : ""}>Скачать приложения</button>`);
+    if (it.supp) acts.push(`<button data-supp="${it.id}" title="Открыть папку с дополнительными материалами">📎 ${it.supp} доп.</button>`);
+    if (it.attempts || it.supp_message || it.supp) acts.push(`<button data-log="${it.id}">Журнал</button>`);
     if (it.status !== "running") acts.push(`<button data-remove="${it.id}" title="Убрать из списка">✕</button>`);
     return `<tr class="${it.status}"><td class="num">${n + 1}</td>` +
-      `<td class="query">${esc(it.query)}${msg ? `<div class="m">${esc(msg)}</div>` : ""}</td>` +
+      `<td class="query">${esc(it.query)}${msg ? `<div class="m">${esc(msg)}</div>` : ""}${it.supp_message ? `<div class="m">${esc(it.supp_message)}</div>` : ""}${state.running && state.current === it.id && it.status !== "running" ? `<div class="m">Ищу приложения…</div>` : ""}</td>` +
       `<td><span class="badge b-${it.status}">${icon} ${label}</span></td>` +
       `<td class="act">${acts.join(" ")}</td></tr>`;
   });
@@ -1683,6 +1684,10 @@ document.addEventListener("click", async (e) => {
   if (!t) return;
   if (t.dataset.login) api("/api/login", { key: t.dataset.login });
   if (t.dataset.open) api("/api/open", { what: "file", id: +t.dataset.open });
+  if (t.dataset.getSupp) {
+    const res = await api("/api/start_supplements", { id: +t.dataset.getSupp });
+    if (res.error) alert(res.error);
+  }
   if (t.dataset.supp) api("/api/open", { what: "supp", id: +t.dataset.supp });
   if (t.dataset.remove) api("/api/remove", { id: +t.dataset.remove });
   if (t.dataset.log) {

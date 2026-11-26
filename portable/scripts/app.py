@@ -87,7 +87,7 @@ PDF_TEXT_CACHE = ROOT / "logs" / "pdf_text"      # the pages of the PDFs, for «
 BIBLIO_DIR = ROOT / "Список литературы"
 
 UI_PORT = 17865
-APP_VERSION = "9.2.14"
+APP_VERSION = "9.2.15"
 APP_AUTHOR = "Bucaneiro"
 OFFICIAL_URL = "https://github.com/solzeworot-commits/article-downloader"
 DOWNLOAD_URL = OFFICIAL_URL + "/releases/tag/portable-latest"
@@ -866,8 +866,11 @@ def _limit_reached() -> bool:
         return limit > 0 and S.day_count >= limit
 
 
-def _runner(selected=None, publisher=None):
+def _runner(selected=None, publisher=None, supplement_item=None):
     try:
+        if supplement_item is not None:
+            _run_item(supplement_item, supplements_only=True)
+            return
         while True:
             with S.lock:
                 if S.stop_requested:
@@ -898,6 +901,9 @@ def _runner(selected=None, publisher=None):
             while time.time() < S.pause_until and not S.stop_requested:
                 time.sleep(0.3)
     except Exception as exc:
+        if supplement_item is not None:
+            with S.lock:
+                supplement_item["supp_message"] = str(exc)[:500]
         app_log(f"Runner error: {exc}\n{traceback.format_exc()}")
     finally:
         with S.lock:
@@ -907,10 +913,8 @@ def _runner(selected=None, publisher=None):
             S.captcha_now = False
             S.checking_now = False
             S.proc = None
-            try:
-                S.save_queue()
-            finally:
-                S.running = False
+            S.touch_items()
+            S.running = False
 
 
 REPORT_STATUS = {
@@ -939,23 +943,31 @@ def readable_reason(status: str, message: str) -> str:
     return message
 
 
-def _run_item(item: dict, *, wiley_only=False):
+def _run_item(item: dict, *, wiley_only=False, supplements_only=False):
     limit = max(2, int(S.settings.get("job_timeout_min") or 10)) * 60
     log = deque(maxlen=JOB_LOG_LINES)
     with S.lock:
-        item["status"] = "running"
-        item["attempts"] = item.get("attempts", 0) + 1
-        item["message"] = ""
+        if not supplements_only:
+            item["status"] = "running"
+            item["attempts"] = item.get("attempts", 0) + 1
+            item["message"] = ""
+            S.day_count += 1
+        item["supp_message"] = ""
         S.current_id = item["id"]
         S.phase = "downloading"
         S.captcha_now = False
         S.checking_now = False
         S.job_logs[item["id"]] = log
-        S.day_count += 1
         S.touch_items()
 
     result = {"status": "", "message": ""}
-    args = ["--wiley"] if wiley_only else []
+    args = ["--wiley"] if wiley_only or (supplements_only and wiley_item(item)) else []
+    if supplements_only:
+        args.append("--supplements-only")
+        if item.get("file"):
+            args.extend(["--supplement-reference", item["file"]])
+    if item.get("supp_dir"):
+        args.extend(["--supplement-folder", item["supp_dir"]])
     args.append(item.get("wiley_url") or item["query"])
     proc = spawn_downloader(args, deadline_sec=limit)
     with S.lock:
@@ -985,7 +997,10 @@ def _run_item(item: dict, *, wiley_only=False):
             elif line.startswith("SUPPLEMENTS|"):            # v8.9: «SUPPLEMENTS|<count>|<folder>»
                 count, _, folder = line[12:].partition("|")
                 if count.isdigit():
-                    result.update(supp=int(count), supp_dir=folder)
+                    with S.lock:
+                        if folder and int(count) > 0:
+                            item.update(supp=int(count), supp_dir=folder)
+                            S.touch_items()
 
     reader = threading.Thread(target=read_output, daemon=True)
     reader.start()
@@ -1012,6 +1027,16 @@ def _run_item(item: dict, *, wiley_only=False):
         status = STATUS_BY_RESULT.get(result["status"], "failed")
         message = result["message"]
 
+        if supplements_only:
+            if S.stop_requested:
+                item["supp_message"] = tr("Поиск приложений остановлен")
+            elif timed_out:
+                item["supp_message"] = tr("Истекло время поиска приложений")
+            elif status != "success":
+                item["supp_message"] = (message or tr("Не удалось скачать приложения"))[:500]
+            S.touch_items()
+            return
+
         if S.stop_requested and not result["status"]:
             status, message = "pending", tr("остановлено")
             item["attempts"] -= 1
@@ -1036,8 +1061,6 @@ def _run_item(item: dict, *, wiley_only=False):
         item["status"] = status
         item["message"] = message[:500]
         item["file"] = message if status == "success" else ""
-        item["supp"] = result.get("supp", 0) if status == "success" else 0
-        item["supp_dir"] = result.get("supp_dir", "") if status == "success" else ""
         item["finished"] = time.strftime("%Y-%m-%d %H:%M")
         S.touch_items()
 
@@ -3134,7 +3157,7 @@ def public_state(known_version: int) -> dict:
         if known_version != S.items_version:
             data["items"] = [
                 {k: i.get(k, "") for k in ("id", "query", "status", "file",
-                                            "message", "attempts", "supp", "elsevier_hold")}
+                                            "message", "attempts", "supp", "supp_message", "elsevier_hold")}
                 for i in S.items
             ]
     data["cloud"] = cloud_state()      # outside the lock: a cloud folder can be slow to read
@@ -3185,6 +3208,20 @@ def handle_api(path: str, body: dict) -> dict:
             start_queue(publisher=path.removeprefix("/api/start_"))
         return {"added": added, "duplicates": duplicates, "ignored": ignored}
 
+    if path == "/api/start_supplements":
+        with S.lock:
+            item = S.item(body.get("id"))
+            if S.running:
+                return {"error": tr("Дождитесь окончания очереди или остановите скачивание.")}
+            if item is None:
+                return {"error": tr("Статья не найдена в очереди")}
+            S.running = True
+            S.stop_requested = False
+            S.current_id = item["id"]
+            S.notice = ""
+            threading.Thread(target=_runner, kwargs={"supplement_item": item}, daemon=True).start()
+        return {}
+
     if path == "/api/start":
         entries, ignored = parse_entries(body.get("text") or "",
                                          bool(body.get("title_mode")), keep_wiley_links=True)
@@ -3217,7 +3254,7 @@ def handle_api(path: str, body: dict) -> dict:
         # "done": drop the downloaded ones; "all": everything not running.
         drop = ("success",) if body.get("what") == "done" else None
         with S.lock:
-            S.items = [i for i in S.items if i["status"] == "running"
+            S.items = [i for i in S.items if i["status"] == "running" or i["id"] == S.current_id
                        or (drop is not None and i["status"] not in drop)]
             S.touch_items()
         return {}
@@ -3225,7 +3262,7 @@ def handle_api(path: str, body: dict) -> dict:
     if path == "/api/remove":
         with S.lock:
             S.items = [i for i in S.items
-                       if i["id"] != body.get("id") or i["status"] == "running"]
+                       if i["id"] != body.get("id") or i["status"] == "running" or i["id"] == S.current_id]
             S.touch_items()
         return {}
 

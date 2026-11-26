@@ -5225,10 +5225,9 @@ def open_in_dedicated_browser(urls: list[str]) -> int:
 
 # ---------------------------------------------------------------------------
 # v8.9: supplementary materials (Supporting Information, ESM, mmc1.docx,
-# Data Sheet 1…). After the article PDF is saved, its landing page is opened
-# once more in a new tab and the files it links as supplementary are fetched
-# with the same signed-in session into "<article file>_supplementary". No other
-# pages are visited; a verification page is left alone (no CAPTCHA tricks);
+# Data Sheet 1…). Collect published attachment links from the article page,
+# independently of full-text access, and save them with the same session.
+# The standalone action opens the landing page without requesting the article PDF;
 # pictures, videos and big files are skipped; a short pause between files.
 # ARTICLE_SUPPLEMENTARY=0 turns it off (the «📎 Supplementary» tick).
 # ---------------------------------------------------------------------------
@@ -5338,64 +5337,104 @@ def download_supplements(context, article: Path, doi: str | None = None) -> tupl
         return 0, None
     links = list(_SUPP_LINKS)
     deadline = float(os.environ.get("ARTICLE_JOB_DEADLINE") or 0)
-    if links and deadline and deadline - time.time() < 60:
-        log_line("Supplementary skipped: the time for this article is almost up")
-        return 0, None
+
+    def remaining_ms(limit):
+        return max(1, min(limit, int((deadline - time.time()) * 1000))) if deadline else limit
+
     log_line(f"Supplementary links: {len(links)}" + (f" (only the first {SUPP_MAX_FILES})" if len(links) > SUPP_MAX_FILES else ""))
     article_hash = hashlib.sha1(article.read_bytes()).hexdigest() if article.is_file() else ""
-    folder = article.parent / f"{article.stem}_supplementary"
+    folder = Path(os.environ["ARTICLE_SUPP_FOLDER"]) if os.environ.get("ARTICLE_SUPP_FOLDER") else article.parent / f"{article.stem}_supplementary"
     base = sanitize_filename(doi)[:120] if doi else article.stem
-    saved_files: list[Path] = []
-    saved = 0
+    files = [p for p in folder.glob("*") if p.is_file() and p.suffix != ".part" and re.fullmatch(re.escape(base) + r"_supl\d*", p.stem)]
+    hashes = {hashlib.sha1(p.read_bytes()).digest() for p in files}
+    new_folder = not files
     for i, url in enumerate(links[:SUPP_MAX_FILES]):
-        if deadline and deadline - time.time() < 30:
+        if deadline and deadline <= time.time():
             log_line("Supplementary: the time for this article is up, the rest left")
             break
         if i:
             time.sleep(SUPP_PAUSE_SEC)
         try:
-            head = context.request.head(url, timeout=30000, fail_on_status_code=False)
+            head = context.request.head(url, timeout=remaining_ms(30000), fail_on_status_code=False)
             if head.status < 400:
                 h_type = (head.headers.get("content-type") or "").lower()
                 h_size = int(head.headers.get("content-length") or 0)
-                if "text/html" in h_type or h_size > SUPP_MAX_FILE:
+                if "html" in h_type or h_size > SUPP_MAX_FILE:
                     log_line(f"Supplementary skipped: {url} ({h_type or 'no type'}, {h_size} bytes)")
                     continue
         except Exception:
             pass                                  # some servers refuse HEAD: GET decides
         try:
-            resp = context.request.get(url, timeout=120000, fail_on_status_code=False)
+            resp = context.request.get(url, timeout=remaining_ms(120000), fail_on_status_code=False)
             ctype = (resp.headers.get("content-type") or "").lower()
-            if resp.status >= 400 or "text/html" in ctype or ctype.startswith(("image/", "video/", "audio/")):
+            if resp.status != 200 or "html" in ctype or ctype.startswith(("image/", "video/", "audio/")):
                 log_line(f"Supplementary skipped: {url} (status {resp.status}, {ctype or 'no type'})")
                 continue
             data = resp.body()
         except Exception as exc:
             log_line(f"Supplementary not downloaded: {url}: {type(exc).__name__}: {exc}")
             continue
-        if len(data) < 100 or len(data) > SUPP_MAX_FILE:
+        if not data or len(data) > SUPP_MAX_FILE:
             log_line(f"Supplementary skipped: {url} ({len(data)} bytes)")
             continue
-        if article_hash and hashlib.sha1(data).hexdigest() == article_hash:
+        if data[:512].removeprefix(b"\xef\xbb\xbf").lstrip().lower().startswith((b"<!doctype html", b"<html")):
+            continue
+        digest = hashlib.sha1(data).digest()
+        if digest in hashes:
+            continue
+        if article_hash and digest.hex() == article_hash:
             log_line(f"Supplementary skipped: {url} is the article itself")
             continue
         try:
             folder.mkdir(parents=True, exist_ok=True)
-            target = folder / f"{base}_supl{saved + 1}{_supplement_ext(url, resp.headers)}"
-            target.write_bytes(data)
+            ext = _supplement_ext(url, resp.headers)
+            n = len(files) + 1
+            target = folder / f"{base}_supl{n}{ext}"
+            while target.exists():
+                n += 1
+                target = folder / f"{base}_supl{n}{ext}"
+            partial = target.with_suffix(ext + ".part")
+            try:
+                partial.write_bytes(data)
+                partial.replace(target)
+            finally:
+                partial.unlink(missing_ok=True)
         except OSError as exc:
             log_line(f"Supplementary not saved: {url}: {exc}")
             continue
-        saved += 1
-        saved_files.append(target)
+        hashes.add(digest)
+        files.append(target)
+        safe_console_print(f"SUPPLEMENTS|{len(files)}|{folder}")
         log_line(f"Supplementary saved: {target.name} ({len(data)} bytes) from {url}")
-    if saved == 1:                                # a single file needs no number
-        single = saved_files[0]
+    if new_folder and len(files) == 1:                                # a single file needs no number
+        single = files[0]
         try:
             single.replace(single.with_name(f"{base}_supl{single.suffix}"))
         except OSError as exc:
             log_line(f"Supplementary not renamed: {single.name}: {exc}")
-    return saved, (folder if saved else None)
+    return len(files), (folder if files else None)
+
+
+def collect_article_supplements(context, source, resolved, doi):
+    url = resolved or (resolve_doi(context, doi) if doi else None)
+    if not url:
+        raise DownloadError("Не удалось определить страницу статьи")
+    if source == "wiley" and doi:
+        parts = urlparse(url)
+        url = f"{parts.scheme}://{parts.netloc}/doi/{quote(doi, safe='/()')}"
+    page = context.new_page()
+    try:
+        safe_goto(page, url, 25000, attempts=1)
+        wait_page_ready(page, source)
+        wait_for_manual_verification(page, source)
+        # Publishers can add supporting-information links after the initial HTML.
+        for _ in range(12):
+            note_supplements(page)
+            if _SUPP_LINKS:
+                break
+            page.wait_for_timeout(400)
+    finally:
+        close_page_safely(page)
 
 
 def _download_routed(context, source: str, raw: str, doi: str | None, resolved: str | None) -> Path:
@@ -5522,15 +5561,42 @@ def _process_one_once(raw: str) -> Path:
             if context is None or separate_wiley != resolve_in_chrome:
                 context = connect_dedicated_context(p)
 
-            path = _download_routed(context, source, raw, doi, resolved)
-            if source not in ("elibrary", "cnki"):
-                try:
-                    count, folder = download_supplements(context, path, doi)
-                    if count:
-                        safe_console_print(f"SUPPLEMENTS|{count}|{folder}")
-                except Exception as exc:
-                    log_line(f"Supplementary step failed (the article is saved): {type(exc).__name__}: {exc}")
-            return path
+            identity = doi or hashlib.sha256(raw.encode()).hexdigest()[:16]
+            reference = Path(os.environ.get("ARTICLE_SUPP_REFERENCE") or
+                             PDF_DIR / (sanitize_filename(f"{source}_{identity}") + ".pdf"))
+            if os.environ.get("ARTICLE_SUPP_ONLY") == "1":
+                collect_article_supplements(context, source, resolved, doi)
+                count, folder = download_supplements(context, reference, doi)
+                if not count:
+                    raise DownloadError("Доступные дополнительные материалы не найдены")
+                safe_console_print(f"SUPPLEMENTS|{count}|{folder}")
+                return folder
+
+            article = None
+            try:
+                article = _download_routed(context, source, raw, doi, resolved)
+                return article
+            except DownloadError as error:
+                # A paywall can be shown before the article's links were inspected.
+                viewer_input = source == "wiley" and "/doi/epdf/" in (resolved or "").lower()
+                if (supplements_enabled() and not _SUPP_LINKS and source not in ("elibrary", "cnki")
+                        and not isinstance(error, (CaptchaRequired, UnsupportedSource))
+                        and (viewer_input or (isinstance(error, NoAccess) and not _SUPP_PAGE_SEEN))
+                        and job_bounded_wait(15, margin_sec=0) >= 10):
+                    try:
+                        collect_article_supplements(context, source, resolved, doi)
+                    except Exception as exc:
+                        log_line(f"Supplementary links not available: {exc}")
+                raise
+            finally:
+                if source not in ("elibrary", "cnki") and (article is not None or _SUPP_LINKS):
+                    try:
+                        count, folder = download_supplements(context, article or reference, doi)
+                        if count:
+                            safe_console_print(f"SUPPLEMENTS|{count}|{folder}")
+                    except Exception as exc:
+                        log_line(f"Supplementary step failed: {type(exc).__name__}: {exc}")
+
 
 
 def process_one(raw: str) -> Path:
@@ -5603,6 +5669,9 @@ def main():
         nargs="+",
         help="open URLs in the dedicated browser",
     )
+    parser.add_argument("--supplements-only", action="store_true")
+    parser.add_argument("--supplement-folder")
+    parser.add_argument("--supplement-reference")
     parser.add_argument("--wiley", action="store_true", help="use the dedicated Wiley Chrome profile for an article or --open")
     parser.add_argument(
         "--restart-browser",
@@ -5626,6 +5695,14 @@ def main():
         if not args.query:
             parser.error("query is required")
 
+        if args.supplements_only:
+            if parse_title_query(args.query) or args.query.lower().startswith("cnki:"):
+                raise UnsupportedSource("Для дополнительных материалов нужен DOI или ссылка на статью")
+            os.environ.update(ARTICLE_SUPP_ONLY="1", ARTICLE_SUPPLEMENTARY="1")
+        if args.supplement_folder:
+            os.environ["ARTICLE_SUPP_FOLDER"] = args.supplement_folder
+        if args.supplement_reference:
+            os.environ["ARTICLE_SUPP_REFERENCE"] = args.supplement_reference
         with browser_route(args.wiley):
             path = process_one(args.query)
         log_line(f"SUCCESS: {path}")

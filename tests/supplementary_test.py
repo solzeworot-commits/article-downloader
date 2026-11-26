@@ -13,6 +13,8 @@ v9.2.2: the links are read from the article page while it is open
 page, named «<DOI>_supl1…N» («<DOI>_supl» for a single file).
 """
 import io
+from contextlib import nullcontext
+from unittest.mock import patch
 import os
 import sys
 import tempfile
@@ -91,7 +93,10 @@ class H(BaseHTTPRequestHandler):
         path = self.path.split("#")[0]
         if with_body:
             GETS.append(path)
-        pages = {"/article/1": PAGE, "/article/2": EMPTY, "/article/3": ONE, "/check": CHECK}
+        pages = {"/article/1": PAGE, "/article/2": EMPTY, "/article/3": ONE, "/check": CHECK,
+                 "/article/paid": b"<html><body>Purchase this article."
+                                  b"<a href='/files/raw-data.csv'>Supplementary data</a>"
+                                  b"<a href='/suppl/1/locked_si_006.pdf'>Supporting information</a></body></html>"}
         if path in pages:
             ctype, body, extra = "text/html; charset=utf-8", pages[path], {}
         elif path == HUGE:
@@ -235,6 +240,23 @@ with sync_playwright() as p:
     open_and_note("/article/1")
     check("tick off", ad.download_supplements(context, other, "10.9999/x2"), (0, None))
     os.environ.pop("ARTICLE_SUPPLEMENTARY")
+    url = BASE + "/article/paid"
+    with (patch.object(ad, "sync_playwright", return_value=nullcontext(p)),
+          patch.object(ad, "connect_dedicated_context", return_value=context),
+          patch.object(ad, "identify_source", return_value=("generic", url))):
+        try:
+            ad._process_one_once("10.9999/paid")
+        except ad.NoAccess:
+            pass
+        else:
+            raise AssertionError("The closed article was marked as downloaded")
+        folder = pdf_dir / "generic_10.9999_paid_supplementary"
+        check("paywalled PDF, public supplement", [f.name for f in folder.iterdir()], ["10.9999_paid_supl.csv"])
+        check("public data bytes", next(folder.iterdir()).read_bytes(), FILES["/files/raw-data.csv"][1])
+        with (patch.dict(os.environ, ARTICLE_SUPP_ONLY="1"),
+              patch.object(ad, "_download_routed", side_effect=AssertionError("requested main article"))):
+            check("manual retry", ad._process_one_once("10.9999/paid"), folder)
+            check("no duplicate", len(list(folder.iterdir())), 1)
     browser.close()
 
 srv.shutdown()

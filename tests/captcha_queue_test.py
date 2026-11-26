@@ -27,6 +27,27 @@ class CaptchaQueueTest(unittest.TestCase):
         self.stack.enter_context(patch.object(app, "QUEUE_PATH", Path(temp.name) / "queue.json"))
         self.stack.enter_context(patch.object(app, "S", app.State()))
 
+    def test_attachments_survive_closed_article_and_manual_retry(self):
+        app = self.app
+        app.S.add_entries(["10.1016/paid"])
+        row = app.S.items[0]
+        with (patch.object(app, "spawn_downloader", return_value=Mock(stdout=io.StringIO(
+                  "SUPPLEMENTS|1|data_folder\nRESULT|NO_ACCESS|Subscription required\n"))) as spawn,
+              patch.object(app, "_report")):
+            app._run_item(row)
+            self.assertEqual((row["status"], row["file"], row["supp"]), ("no_access", "", 1))
+            spawn.return_value = Mock(stdout=io.StringIO("SUPPLEMENTS|2|data_folder\nRESULT|SUCCESS|data_folder\n"))
+            app.handle_api("/api/start_supplements", {"id": row["id"]})
+            deadline = time.monotonic() + 5
+            while app.S.running and time.monotonic() < deadline:
+                time.sleep(0.01)
+            self.assertFalse(app.S.running)
+            self.assertIn("--supplements-only", spawn.call_args.args[0])
+            self.assertEqual((row["status"], row["message"], row["attempts"], row["file"]),
+                             ("no_access", "Subscription required", 1, ""))
+            self.assertEqual((row["supp"], row["supp_dir"]), (2, "data_folder"))
+            self.assertEqual(app.S.day_count, 1)
+
     def test_wiley_transfer_extends_queue_deadline(self):
         app = self.app
         app.S.settings.update(job_timeout_min=2)
