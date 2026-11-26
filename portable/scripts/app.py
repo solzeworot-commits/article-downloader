@@ -87,7 +87,7 @@ PDF_TEXT_CACHE = ROOT / "logs" / "pdf_text"      # the pages of the PDFs, for «
 BIBLIO_DIR = ROOT / "Список литературы"
 
 UI_PORT = 17865
-APP_VERSION = "9.2.13"
+APP_VERSION = "9.2.14"
 APP_AUTHOR = "Bucaneiro"
 OFFICIAL_URL = "https://github.com/solzeworot-commits/article-downloader"
 DOWNLOAD_URL = OFFICIAL_URL + "/releases/tag/portable-latest"
@@ -352,8 +352,11 @@ def parse_entries(text: str, title_mode: bool, *, keep_wiley_links=False) -> tup
         if not doi:
             return url
         doi = _clean_doi(doi)
-        host = urlparse(url).hostname
-        wiley_links[doi.lower()] = f"https://{host}/doi/{quote(doi, safe='/()')}"
+        parsed = urlparse(url)
+        viewer = parsed.path.lower().startswith("/doi/epdf/")
+        if viewer or doi.lower() not in wiley_links:
+            route = "epdf/" if viewer else ""
+            wiley_links[doi.lower()] = f"https://{parsed.hostname}/doi/{route}{quote(doi, safe='/()')}"
         return doi
 
     def add(value: str):
@@ -443,6 +446,12 @@ def is_elsevier_query(query: str) -> bool:
         return False
     return any(host == domain or host.endswith("." + domain)
                for domain in ("sciencedirect.com", "elsevier.com"))
+
+
+def elsevier_item(item: dict) -> bool:
+    if item.get("publisher"):
+        return item["publisher"] == "elsevier"
+    return bool(item.get("elsevier_hold") or is_elsevier_query(item["query"]))
 
 
 def wiley_item(item: dict) -> bool:
@@ -608,13 +617,14 @@ class State:
                 self.touch_items()
         return added, duplicates
 
-    def wiley_candidates(self):
+    def publisher_candidates(self, publisher):
+        matches = elsevier_item if publisher == "elsevier" else wiley_item
         # Older queues can contain a failed row and a later retry for one DOI.
         done = {i["query"].lower() for i in self.items if i["status"] == "success"}
         chosen = {}
         for item in self.items:
             key = item["query"].lower()
-            if key not in done and not item.get("elsevier_hold") and wiley_item(item):
+            if key not in done and matches(item) and (publisher == "elsevier" or not item.get("elsevier_hold")):
                 if key not in chosen or item["status"] == "pending":
                     chosen[key] = item
         return list(chosen.values())
@@ -801,17 +811,19 @@ def skip_warmup():
 # queue runner
 # ---------------------------------------------------------------------------
 
-def start_queue(*, resume_elsevier=False, wiley_only=False, list_keys=None):
+def start_queue(*, resume_elsevier=False, publisher=None, list_keys=None):
     selected = None
     with S.lock:
         if S.running:
             return
-        if wiley_only:
-            candidates = S.wiley_candidates()
+        if publisher:
+            candidates = S.publisher_candidates(publisher)
             if list_keys is not None:
                 candidates = [i for i in candidates if i["query"].lower() in list_keys]
             selected = {i["id"] for i in candidates}
             for item in candidates:
+                if publisher == "elsevier":
+                    item.pop("elsevier_hold", None)
                 if item["status"] != "pending":
                     item.update(status="pending", attempts=0, message="")
             if candidates:
@@ -827,12 +839,12 @@ def start_queue(*, resume_elsevier=False, wiley_only=False, list_keys=None):
         warm = S.warm
         stale = (not warm["done"] or warm["skipped"] or warm["error"]
                  or time.time() - warm["finished_at"] > WARM_FRESH_SEC)
-        if not wiley_only and not resume_elsevier and not warm["running"] and stale:
+        if not publisher and not resume_elsevier and not warm["running"] and stale:
             start_warmup()
         S.running = True
         S.stop_requested = False
         S.notice = ""
-    threading.Thread(target=_runner, args=(selected,), daemon=True).start()
+    threading.Thread(target=_runner, args=(selected, publisher), daemon=True).start()
 
 
 def stop_queue():
@@ -854,7 +866,7 @@ def _limit_reached() -> bool:
         return limit > 0 and S.day_count >= limit
 
 
-def _runner(selected=None):
+def _runner(selected=None, publisher=None):
     try:
         while True:
             with S.lock:
@@ -876,7 +888,7 @@ def _runner(selected=None):
                                   "завтра или после увеличения лимита в настройках.", n=S.day_count)
                 break
 
-            _run_item(item, wiley_only=selected is not None)
+            _run_item(item, wiley_only=publisher == "wiley")
 
             with S.lock:
                 if S.stop_requested or S.next_pending(selected) is None:
@@ -889,14 +901,16 @@ def _runner(selected=None):
         app_log(f"Runner error: {exc}\n{traceback.format_exc()}")
     finally:
         with S.lock:
-            S.running = False
             if S.phase != "limit":
                 S.phase = "idle"
             S.current_id = None
             S.captcha_now = False
             S.checking_now = False
             S.proc = None
-            S.save_queue()
+            try:
+                S.save_queue()
+            finally:
+                S.running = False
 
 
 REPORT_STATUS = {
@@ -1101,25 +1115,26 @@ def inbox_lists() -> list[dict]:
             "count": len(entries),
             "done": sum(k in done for k in keys),
             "queued": sum(k in queued for k in keys),
+            "elsevier": any(k not in done and elsevier_item({"query": e}) for k, e in zip(keys, entries)),
             "wiley": any(k not in done and wiley_item({"query": e}) for k, e in zip(keys, entries)),
         })
     return out
 
 
-def queue_list_file(path: Path, *, wiley_only=False) -> dict:
+def queue_list_file(path: Path, *, publisher=None) -> dict:
     """Queue every entry of a list file and start (databases → CAPTCHA → queue)."""
     text = file_to_text(path.name, path.read_bytes())
     entries, ignored = parse_entries(text, bool(S.settings.get("title_for_plain_lines")), keep_wiley_links=True)
     with S.lock:
-        if wiley_only and S.running:
+        if publisher and S.running:
             return {"error": tr("Дождитесь окончания очереди или остановите скачивание.")}
-        added, duplicates = S.add_entries(entries, reuse_failed=wiley_only)
+        added, duplicates = S.add_entries(entries, reuse_failed=bool(publisher))
         S.last_list = path.name
-        if wiley_only:
+        if publisher:
             keys = {(wiley_route.article_doi(e) or e).lower() for e in entries}
-            start_queue(wiley_only=True, list_keys=keys)
+            start_queue(publisher=publisher, list_keys=keys)
     app_log(f"List {path.name}: {added} queued, {duplicates} already there")
-    if not wiley_only and (added or S.next_pending() is not None):
+    if not publisher and (added or S.next_pending() is not None):
         start_queue()
     return {"name": path.name, "added": added, "duplicates": duplicates,
             "ignored": ignored, "total": len(entries)}
@@ -3087,7 +3102,8 @@ def public_state(known_version: int) -> dict:
             "captcha_now": S.captcha_now,
             "checking_now": S.checking_now,
             "elsevier_waiting": S.elsevier_waiting(),
-            "wiley_available": not S.running and bool(S.wiley_candidates()),
+            "wiley_available": not S.running and bool(S.publisher_candidates("wiley")),
+            "elsevier_available": not S.running and bool(S.publisher_candidates("elsevier")),
             "warm": {k: v for k, v in S.warm.items() if k != "bases"} | {"bases": bases},
             "browser": S.browser,
             "first_run": S.first_run,
@@ -3157,15 +3173,16 @@ def handle_api(path: str, body: dict) -> dict:
                                 base64.b64decode(body["file_b64"]))
         entries, ignored = parse_entries(text, title_mode, keep_wiley_links=True)
         return {"entries": entries, "ignored": ignored,
+                "elsevier": any(elsevier_item({"query": e}) for e in entries),
                 "wiley": any(wiley_item({"query": e}) for e in entries)}
 
-    if path == "/api/start_wiley":
+    if path in ("/api/start_wiley", "/api/start_elsevier"):
         entries, ignored = parse_entries(body.get("text") or "", bool(body.get("title_mode")), keep_wiley_links=True)
         with S.lock:
             if S.running:
                 return {"busy": True}
             added, duplicates = S.add_entries(entries, reuse_failed=True)
-            start_queue(wiley_only=True)
+            start_queue(publisher=path.removeprefix("/api/start_"))
         return {"added": added, "duplicates": duplicates, "ignored": ignored}
 
     if path == "/api/start":
@@ -3287,7 +3304,8 @@ def handle_api(path: str, body: dict) -> dict:
         target = INBOX / name
         if not name or not target.is_file():
             return {"error": tr("Файл не найден в папке inbox.")}
-        return queue_list_file(target, wiley_only=bool(body.get("wiley_only")))
+        publisher = "wiley" if body.get("wiley_only") else body.get("publisher")
+        return queue_list_file(target, publisher=publisher if publisher in ("wiley", "elsevier") else None)
 
     # -- literature review ----------------------------------------------------
     if path == "/api/review_open":

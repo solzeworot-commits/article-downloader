@@ -137,6 +137,44 @@ class WileyBrowserTest(unittest.TestCase):
             self.assertEqual(worker.call_args.args[0], ["--wiley", "10.1111/in-list"])
             self.assertEqual(app.S.next_pending()["query"], "10.1007/later")
 
+    def test_pasted_epdf_keeps_viewer_route(self):
+        import app
+        url = "https://scijournals.onlinelibrary.wiley.com/doi/epdf/10.1002/bbb.2110"
+        text = url + "?from=list#section\n" + url.replace("/epdf/", "/abs/")
+        self.assertEqual(app.handle_api("/api/parse", {"text": text})["entries"], [url])
+
+    def test_elsevier_button_selects_new_held_and_failed_articles(self):
+        import app
+        with (tempfile.TemporaryDirectory() as tmp,
+              patch.object(app, "QUEUE_PATH", Path(tmp) / "queue.json"),
+              patch.object(app, "INBOX", Path(tmp)),
+              patch.object(app, "S", app.State()), patch.object(app, "_report"),
+              patch.object(app, "start_warmup") as warmup,
+              patch.object(app, "spawn_downloader", side_effect=lambda *a, **kw:
+                           Mock(stdout=io.StringIO("RESULT|SUCCESS|example.pdf\n"))) as worker):
+            app.S.settings.update(pause_sec=0, daily_limit=0)
+            app.S.add_entries(["10.1016/held", "10.9999/recognized", "10.1016/done", "10.1111/other"])
+            app.S.items[0]["elsevier_hold"] = True
+            app.S.items[1].update(publisher="elsevier", status="failed")
+            app.S.items[2]["status"] = "success"
+            text = "10.1016/new\n10.1111/other"
+            self.assertTrue(app.handle_api("/api/parse", {"text": text})["elsevier"])
+            self.assertTrue(app.public_state(0)["elsevier_available"])
+            app.handle_api("/api/start_elsevier", {"text": text})
+            self.wait_for_queue(app)
+            self.assertEqual([call.args[0] for call in worker.call_args_list],
+                             [["10.1016/held"], ["10.9999/recognized"], ["10.1016/new"]])
+            self.assertFalse(app.public_state(0)["elsevier_available"])
+            app.S.add_entries(["10.1016/outside"])
+            file = Path(tmp) / "list.txt"
+            file.write_text("10.1016/inside\n10.1111/other", encoding="utf8")
+            self.assertTrue(app.inbox_lists()[0]["elsevier"])
+            app.handle_api("/api/queue_file", {"name": file.name, "publisher": "elsevier"})
+            self.wait_for_queue(app)
+            self.assertEqual(worker.call_count, 4)
+            self.assertEqual(worker.call_args.args[0], ["10.1016/inside"])
+            warmup.assert_not_called()
+
     def wait_for_queue(self, app):
         deadline = time.monotonic() + 5
         while app.S.running and time.monotonic() < deadline:

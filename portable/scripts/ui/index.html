@@ -657,6 +657,7 @@ https://link.springer.com/article/10.1007/s12393-026-09447-8
 
     <div class="start-row">
       <button id="start" disabled>▶ СКАЧАТЬ СТАТЬИ<span class="sub" id="start-sub">вставьте DOI выше</span></button>
+      <button id="btn-start-elsevier" disabled>Скачать Elsevier</button>
       <button id="btn-wiley" disabled>Скачать Wiley в Chrome</button>
       <button id="stop" hidden>■ Остановить</button>
     </div>
@@ -1520,6 +1521,7 @@ function renderStart() {
   const c = counts(), n = parsed.entries.length;
   const btn = $("start"), sub = $("start-sub");
   $("stop").hidden = !state.running;
+  $("btn-start-elsevier").disabled = state.running || !(parsed.elsevier || state.elsevier_available);
   $("btn-wiley").disabled = state.running || !(parsed.wiley || state.wiley_available);
   if (state.browser && state.browser.error) {
     btn.disabled = true; sub.textContent = "сначала нужен браузер";
@@ -1636,10 +1638,10 @@ document.addEventListener("drop", async (e) => {
 });
 
 // ---- buttons ---------------------------------------------------------------
-async function startDownloads(wileyOnly) {
-  $("start").disabled = $("btn-wiley").disabled = true;
+async function startDownloads(endpoint) {
+  $("start").disabled = $("btn-wiley").disabled = $("btn-start-elsevier").disabled = true;
   try {
-    const res = await api(wileyOnly ? "/api/start_wiley" : "/api/start", { text: $("input").value, title_mode: $("title-mode").checked });
+    const res = await api(endpoint, { text: $("input").value, title_mode: $("title-mode").checked });
     if (res.busy) return;
     $("input").value = "";
     parsed = { entries: [], ignored: 0 };
@@ -1649,8 +1651,9 @@ async function startDownloads(wileyOnly) {
     alert("Не получилось: " + e.message);
   }
 }
-$("start").onclick = () => startDownloads(false);
-$("btn-wiley").onclick = () => startDownloads(true);
+$("start").onclick = () => startDownloads("/api/start");
+$("btn-start-elsevier").onclick = () => startDownloads("/api/start_elsevier");
+$("btn-wiley").onclick = () => startDownloads("/api/start_wiley");
 $("stop").onclick = () => api("/api/stop");
 $("btn-warm").onclick = () => api("/api/warmup");
 $("btn-first-ok").onclick = () => { $("first-run").hidden = true; };
@@ -1856,6 +1859,7 @@ function renderLists(files) {
     const home = state && state.cloud && state.cloud.role === "home";
     return `<tr><td class="query"><b>${esc(f.name)}</b></td><td>${esc(f.modified)}</td><td>${f.count} DOI</td>` +
       `<td>${status || "ещё не скачивался"}</td><td class="act"><button class="linkbtn" data-list="${esc(f.name)}" ${f.count ? "" : "disabled"}>⬇ Скачать</button> ` +
+      (f.elsevier ? `<button data-list-elsevier="${esc(f.name)}" ${state && state.running ? "disabled" : ""}>Скачать Elsevier</button> ` : "") +
       (f.wiley ? `<button data-list-wiley="${esc(f.name)}" ${state && state.running ? "disabled" : ""}>Скачать Wiley в Chrome</button> ` : "") +
       (home ? `<button class="linkbtn cloudbtn" data-cloudsend="${esc(f.name)}" ${f.count ? "" : "disabled"} title="Отправить список на рабочий компьютер через облако">☁ На рабочий</button> ` : "") +
       `<button data-review="${esc(f.name)}" title="Отобрать статьи по аннотациям">📝</button> ` +
@@ -1869,8 +1873,8 @@ function listResultText(res) {
   if (res.duplicates) t += `, уже были скачаны или в очереди: ${res.duplicates}`;
   return t + ".";
 }
-async function queueList(name, wileyOnly = false) {
-  const res = await api("/api/queue_file", { name, wiley_only: wileyOnly });
+async function queueList(name, publisher = null) {
+  const res = await api("/api/queue_file", { name, publisher });
   show("download");
   $("choose-note").innerHTML = res.error ? `<span style="color: var(--red)">${esc(res.error)}</span>` : listResultText(res);
   loadLists();
@@ -2318,7 +2322,8 @@ document.addEventListener("click", async (e) => {
   if (!t) return;
   if (t.dataset.go) show(t.dataset.go);
   if (t.dataset.list) queueList(t.dataset.list);
-  if (t.dataset.listWiley) queueList(t.dataset.listWiley, true);
+  if (t.dataset.listWiley) queueList(t.dataset.listWiley, "wiley");
+  if (t.dataset.listElsevier) queueList(t.dataset.listElsevier, "elsevier");
   if (t.dataset.export) importExport({ name: t.dataset.export });
   if (t.dataset.link) api("/api/open_link", { key: t.dataset.link });
   if (t.dataset.copy) flash(t, await copyText($(t.dataset.copy).textContent));
