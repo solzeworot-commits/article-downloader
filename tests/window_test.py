@@ -87,6 +87,26 @@ if os.name == "nt":
                                  stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
                 processes.append(process)
 
+            def close_and_check(handle):
+                tray.close_program_windows(port, app.run_powershell)
+                try:
+                    wait_for(lambda: not tray.user32.IsWindow(handle))
+                except AssertionError:
+                    # These are isolated test pages. Inspect their accessibility providers
+                    # when Chromium on a Windows runner reports a different window tree.
+                    diagnostic = r"""
+Add-Type -AssemblyName UIAutomationClient
+$w = [Windows.Automation.AutomationElement]::FromHandle([IntPtr]HANDLE)
+$w.FindAll([Windows.Automation.TreeScope]::Descendants,
+           [Windows.Automation.Condition]::TrueCondition) | Select-Object -First 100 | ForEach-Object {
+    $c = $_.Current
+    $value = $_.GetCurrentPropertyValue([Windows.Automation.ValuePattern]::ValueProperty)
+    Write-Output ("{0} {1} {2} {3}" -f $c.ClassName,$c.ControlType.ProgrammaticName,$c.Name,$value)
+}
+"""
+                    print(app.run_powershell(diagnostic.replace("HANDLE", str(handle)), timeout=15))
+                    raise
+
             try:
                 launch("/?t=old-token#download")
                 wait_for(lambda: len(tray._windows(None)) == 1)
@@ -94,16 +114,14 @@ if os.name == "nt":
                 launch("/article")
                 wait_for(lambda: len(tray._windows(None)) == 2)
                 other = next(h for h in tray._windows(None) if h != old)
-                tray.close_program_windows(port, app.run_powershell)
-                wait_for(lambda: not tray.user32.IsWindow(old))
+                close_and_check(old)
                 assert tray.user32.IsWindow(other), "unrelated page with the same title was closed"
                 launch("/?t=new-token")
                 wait_for(lambda: len(tray._windows(None)) == 2)
                 new = next(h for h in tray._windows(None) if h != other)
                 tray.user32.ShowWindowAsync(new, tray.SW_HIDE)
                 wait_for(lambda: not tray.user32.IsWindowVisible(new))
-                tray.close_program_windows(port, app.run_powershell)
-                wait_for(lambda: not tray.user32.IsWindow(new))
+                close_and_check(new)
                 assert tray.user32.IsWindow(other)
             finally:
                 for h in tray._windows(None):

@@ -145,23 +145,46 @@ def close_program_windows(port: int, run_powershell):
     # browser's address bar, including for windows left by pre-9.2.12 versions.
     script = r"""
 Add-Type -AssemblyName UIAutomationClient
-$condition = [Windows.Automation.PropertyCondition]::new(
-    [Windows.Automation.AutomationElement]::ClassNameProperty, 'OmniboxViewViews')
-foreach ($handle in @(HANDLES)) {
-    try {
-        $window = [Windows.Automation.AutomationElement]::FromHandle([IntPtr]$handle)
-        $bar = $window.FindFirst([Windows.Automation.TreeScope]::Descendants, $condition)
-        if ($bar) {
-            $url = $bar.GetCurrentPropertyValue([Windows.Automation.ValuePattern]::ValueProperty)
-            if ($url -match '^(?:http://)?127\.0\.0\.1:PORT/\?t=[a-zA-Z0-9_-]+(?:#.*)?$') {
-                Write-Output $handle
+$element = [Windows.Automation.AutomationElement]
+$barCondition = [Windows.Automation.PropertyCondition]::new($element::ClassNameProperty, 'OmniboxViewViews')
+$docCondition = [Windows.Automation.PropertyCondition]::new($element::ControlTypeProperty,
+    [Windows.Automation.ControlType]::Document)
+$rootScope = [Windows.Automation.TreeScope]::Descendants
+$deadline = [DateTime]::UtcNow.AddSeconds(3)
+$pending = @(HANDLES)
+do {
+    $retry = @()
+    foreach ($handle in $pending) {
+        try {
+            $window = $element::FromHandle([IntPtr]$handle)
+            $bar = $window.FindFirst($rootScope, $barCondition)
+            $doc = $window.FindFirst($rootScope, $docCondition)
+            $knownUrl = $false
+            foreach ($node in @($bar, $doc)) {
+                if (-not $node) { continue }
+                $values = @($node.GetCurrentPropertyValue([Windows.Automation.ValuePattern]::ValueProperty))
+                # Chromium's legacy accessibility provider exposes the document URL here.
+                $legacyValue = [Windows.Automation.AutomationProperty]::LookupById(30093)
+                if ($legacyValue) { $values += $node.GetCurrentPropertyValue($legacyValue) }
+                foreach ($url in $values) {
+                    if ($url -isnot [string] -or -not $url) { continue }
+                    $knownUrl = $true
+                    if ($url -match '^(?:http://)?127\.0\.0\.1:PORT/\?t=[a-zA-Z0-9_-]+(?:#.*)?$') {
+                        Write-Output $handle
+                        break
+                    }
+                }
             }
-        }
-    } catch {}
-}
+            if ($knownUrl) { continue }
+        } catch {}
+        $retry += $handle
+    }
+    $pending = $retry
+    if ($pending.Count) { Start-Sleep -Milliseconds 200 }
+} while ($pending.Count -and [DateTime]::UtcNow -lt $deadline)
 """.replace("HANDLES", ",".join(str(h) for h in candidates)).replace("PORT", str(int(port)))
     try:
-        confirmed = {int(line) for line in run_powershell(script, timeout=5).splitlines() if line.isdecimal()}
+        confirmed = {int(line) for line in run_powershell(script, timeout=12).splitlines() if line.isdecimal()}
     except (OSError, TimeoutError, subprocess.TimeoutExpired):
         return
     for hwnd in _windows(visible=None):
