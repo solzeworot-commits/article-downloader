@@ -18,7 +18,7 @@ DOI = "10.1029/test"
 payload = io.BytesIO()
 writer = PdfWriter()
 writer.add_blank_page(width=300, height=300)
-writer.add_metadata({"/Subject": "test article " * 3000})
+writer.add_metadata({"/Subject": "test article " * 30000})
 writer.write(payload)
 pdf = payload.getvalue()
 
@@ -30,7 +30,12 @@ class Site(BaseHTTPRequestHandler):
     def do_GET(self):
         visits.append(self.path)
         attachment = False
-        if "/doi/abs/" in self.path:
+        if self.path == "/asynchronous":
+            data = b"<body><script>fetch('/api/content').then(r=>r.text()).then(t=>document.body.id='ready')</script>"
+        elif self.path == "/api/content":
+            time.sleep(3)  # No first byte before the old idle cutoff.
+            data = b" " * 12000
+        elif "/doi/abs/" in self.path:
             data = (b"<html><body><h1>Test article</h1>" + b" " * 12000 +
                     b'<a target="_blank" href="/doi/epdf/10.1029/test">PDF</a></body></html>')
         elif "/doi/epdf/" in self.path:
@@ -82,7 +87,10 @@ with tempfile.TemporaryDirectory() as tmp:
                   patch.object(ad, "WILEY_IDLE_SEC", 2),
                   patch.object(ad, "BROWSER_PORT", cdp_port),
                   patch.dict(os.environ, ARTICLE_JOB_DEADLINE=str(time.time() + 80))):
-                path = ad.download_wiley(context, DOI, DOI, address + "/doi/" + DOI)
+                with patch.dict(os.environ, ARTICLE_JOB_TIMEOUT_SEC="8", ARTICLE_JOB_DEADLINE=str(time.time() + 8)):
+                    path = ad.download_wiley(context, DOI, DOI, address + "/doi/" + DOI)
+                    # A budget shorter than the whole job also covers native save_as.
+                    assert float(os.environ["ARTICLE_JOB_DEADLINE"]) > time.time()
                 assert path.read_bytes() == pdf
                 assert not existing.is_closed() and len(context.pages) == 1
                 assert "/file" in visits and not any("/pdfdirect/" in u for u in visits), visits
@@ -90,8 +98,11 @@ with tempfile.TemporaryDirectory() as tmp:
                 direct = Path(tmp) / "direct.pdf"
                 watch = ad.LoginServiceWatch(context)
                 try:
-                    assert ad.capture_pdf_with_fetch(context, address + "/direct", direct, 1,
-                                                     "Wiley PDF", wiley_watch=watch)
+                    with patch.dict(os.environ, ARTICLE_JOB_TIMEOUT_SEC="3",
+                                    ARTICLE_JOB_DEADLINE=str(time.time() + 3)):
+                        assert ad.capture_pdf_with_fetch(context, address + "/direct", direct, 1,
+                                                         "Wiley PDF", wiley_watch=watch)
+                        assert float(os.environ["ARTICLE_JOB_DEADLINE"]) > time.time()
                 finally:
                     watch.close()
                 assert direct.read_bytes() == pdf and visits.count("/direct") == 1
@@ -106,6 +117,31 @@ with tempfile.TemporaryDirectory() as tmp:
                     assert 2 <= time.monotonic() - started < 10
                 finally:
                     activity.close()
+                activity = ad.WileyActivity()
+                activity.attach(existing)
+                try:
+                    with patch.dict(os.environ, ARTICLE_JOB_TIMEOUT_SEC="8",
+                                    ARTICLE_JOB_DEADLINE=str(time.time() + 8)):
+                        existing.goto(address + "/asynchronous")
+                        assert activity.wait(lambda: existing, lambda: existing.locator("body#ready").count(),
+                                             lambda: None, "viewer API response")
+                finally:
+                    activity.close()
+
+                # Leave the user's article open on a timeout, even on the next attach.
+                with patch.object(ad.WileyActivity, "wait", side_effect=ad.DownloadError("test deadline")):
+                    try:
+                        ad.download_wiley(context, DOI, DOI, address + "/doi/" + DOI)
+                    except ad.DownloadError:
+                        pass
+                    else:
+                        raise AssertionError("Expired article unexpectedly succeeded")
+                kept = [tab for tab in context.pages if "/doi/abs/" in tab.url]
+                assert len(kept) == 1, [tab.url for tab in context.pages]
+                with (patch.object(ad, "WILEY_BROWSER_PORT", cdp_port),
+                      patch.object(ad, "CDP_MAX_IDLE_TABS", 1)):
+                    ad.connect_cdp_browser(p, f"http://127.0.0.1:{cdp_port}", lambda: None, "Wiley Chrome")
+                assert not kept[0].is_closed() and not existing.is_closed()
             browser.close()
     finally:
         server.shutdown()

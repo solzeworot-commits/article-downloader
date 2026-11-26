@@ -939,8 +939,18 @@ class WileyActivity:
 
     def __init__(self):
         self.last_progress = time.monotonic()
+        self.last_report = float("-inf")
         self.sessions = []
-        self.pending_headers = set()
+        self.active_requests = set()
+
+    def received_bytes(self):
+        now = time.monotonic()
+        self.last_progress = now
+        budget = float(os.environ.get("ARTICLE_JOB_TIMEOUT_SEC") or 0)
+        if budget > 0 and now - self.last_report >= min(5, budget / 4):
+            self.last_report = now
+            os.environ["ARTICLE_JOB_DEADLINE"] = str(time.time() + budget)
+            safe_console_print("WILEY_TRANSFER|progress")
 
     def attach(self, page):
         session = page.context.new_cdp_session(page)
@@ -950,32 +960,53 @@ class WileyActivity:
         # A popup is reported after its first document has already committed.
         tracked = {frame["loaderId"]}
 
+        frame_host = (urlparse(frame["url"]).hostname or "").lower()
+        def relevant(url):
+            host = (urlparse(url).hostname or "").lower()
+            return bool(host and (host == frame_host or host == "wiley.com" or host.endswith(".wiley.com")
+                                  or host == "scienceconnect.io" or host.endswith(".scienceconnect.io")))
+
         def started(event):
-            # An article navigation may spend minutes waiting for the first byte.
+            nonlocal frame_host
             key = (session, event["requestId"])
-            if event.get("type") == "Document" and event.get("frameId") == main_frame:
-                self.pending_headers.add(key)
+            kind = event.get("type")
+            url = event["request"]["url"]
+            main_doc = kind == "Document" and event.get("frameId") == main_frame
+            if main_doc:
+                frame_host = (urlparse(url).hostname or "").lower()
+            if main_doc or (kind in ("Fetch", "XHR") and relevant(url)):
+                self.active_requests.add(key)
                 self.last_progress = time.monotonic()
 
         def response(event):
-            self.pending_headers.discard((session, event["requestId"]))
             info = event["response"]
             kind = event["type"]
             path = urlparse(info["url"]).path.lower()
             if (kind == "Document" or "pdf" in info["mimeType"].lower()
                     or (kind in ("XHR", "Fetch", "Script") and
-                        ("/doi/" in path or "/epdf" in path or "/viewer" in path))):
+                        (relevant(info["url"]) or "/doi/" in path or "/epdf" in path or "/viewer" in path))):
                 tracked.add(event["requestId"])
                 self.last_progress = time.monotonic()
 
         def data(event):
             if event["requestId"] in tracked and event.get("dataLength", 0) > 0:
-                self.last_progress = time.monotonic()
+                self.received_bytes()
+
+        download_sizes = {}
+        def downloading(event):
+            guid, size = event["guid"], event["receivedBytes"]
+            if size > download_sizes.get(guid, 0):
+                self.received_bytes()
+            download_sizes[guid] = size
+            if event["state"] != "inProgress":
+                download_sizes.pop(guid, None)
 
         def finished(event):
             tracked.discard(event["requestId"])
-            self.pending_headers.discard((session, event["requestId"]))
+            self.active_requests.discard((session, event["requestId"]))
 
+        session.on("Page.downloadProgress", downloading)
+        session.send("Page.enable")
         session.on("Network.requestWillBeSent", started)
         session.on("Network.responseReceived", response)
         session.on("Network.dataReceived", data)
@@ -993,8 +1024,8 @@ class WileyActivity:
     def wait(self, active_page, probe, check, label, *, download_ready=None):
         """Return on a useful browser event or control, or after genuine inactivity."""
         self.last_progress = time.monotonic()
-        hard_end = time.monotonic() + job_bounded_wait(24 * 3600, margin_sec=5)
-        while time.monotonic() < hard_end:
+        standalone_limit = 600
+        while job_bounded_wait(standalone_limit, margin_sec=0) > 0:
             check()
             if download_ready and download_ready():
                 return True
@@ -1016,7 +1047,9 @@ class WileyActivity:
                 return value
             if download_ready and download_ready():
                 return True
-            if not self.pending_headers and time.monotonic() - self.last_progress >= WILEY_IDLE_SEC:
+            idle = time.monotonic() - self.last_progress
+            idle_limit = float(os.environ.get("ARTICLE_JOB_TIMEOUT_SEC") or standalone_limit) if self.active_requests else WILEY_IDLE_SEC
+            if idle >= idle_limit:
                 log_line(f"Wiley: no loading progress while waiting for {label}; trying the next route")
                 return None
             page.wait_for_timeout(300)
@@ -1038,7 +1071,8 @@ NOT_A_CUT_OFF = ("ERR_ABORTED", "ERR_INTERNET_DISCONNECTED", "ERR_NETWORK_CHANGE
 class LoginServiceWatch:
     """Notes a failed top-level visit to a login service in this browser context."""
 
-    def __init__(self, context):
+    def __init__(self, context, *, pages=None):
+        self.pages = pages
         self.context, self.url = context, ""
         context.on("requestfailed", self._failed)
 
@@ -1048,7 +1082,8 @@ class LoginServiceWatch:
             failure = str(request.failure or "")            # "net::ERR_CONNECTION_RESET"
             if (any(host == h or host.endswith("." + h) for h in LOGIN_SERVICE_HOSTS)
                     and failure.rsplit(":", 1)[-1].strip() not in NOT_A_CUT_OFF
-                    and request.is_navigation_request() and request.frame.parent_frame is None):
+                    and request.is_navigation_request() and request.frame.parent_frame is None
+                    and (self.pages is None or request.frame.page in self.pages)):
                 if not self.url:
                     log_line(f"Login service not reachable: {request.url} ({failure})")
                 self.url = request.url
@@ -1103,9 +1138,10 @@ def download_wiley(context, raw: str, doi: str | None, resolved_url: str | None)
     pages = []
     downloads = []
     activity = WileyActivity()
-    watch = LoginServiceWatch(context)
+    watch = LoginServiceWatch(context, pages=set())
 
     def attach(tab):
+        watch.pages.add(tab)
         pages.append(tab)
         tab.on("download", lambda d: downloads.append(d))
         tab.on("popup", attach)
@@ -1115,6 +1151,7 @@ def download_wiley(context, raw: str, doi: str | None, resolved_url: str | None)
         return next((tab for tab in reversed(pages) if not tab.is_closed()), page)
 
     def save_download():
+        nonlocal completed
         if not downloads:
             return None
         dest = next_destination("Wiley", doi)
@@ -1124,6 +1161,7 @@ def download_wiley(context, raw: str, doi: str | None, resolved_url: str | None)
             downloads.pop(0).save_as(partial)
             if valid_pdf(partial):
                 partial.replace(dest)
+                completed = True
                 return dest
         except Exception as exc:
             log_line(f"Wiley: browser download did not finish: {exc}")
@@ -1158,6 +1196,7 @@ def download_wiley(context, raw: str, doi: str | None, resolved_url: str | None)
     attempted_urls = set()
 
     def try_capture(url: str, label: str, timeout_s: int = 45) -> Path | None:
+        nonlocal completed
         if url in attempted_urls:
             return None
         attempted_urls.add(url)
@@ -1169,6 +1208,7 @@ def download_wiley(context, raw: str, doi: str | None, resolved_url: str | None)
             if capture_pdf_with_fetch(context, url, partial, timeout_s, source_label="Wiley PDF",
                                       wiley_watch=watch):
                 partial.replace(dest)
+                completed = True
                 return dest
         finally:
             partial.unlink(missing_ok=True)
@@ -1203,6 +1243,7 @@ def download_wiley(context, raw: str, doi: str | None, resolved_url: str | None)
         evidence = wiley_viewer_evidence(tab)
         return evidence["page_indicator"] or evidence["rendered"]
 
+    completed = False
     try:
         attach(page)
         log_line(f"Wiley article open: {article_url}")
@@ -1280,8 +1321,11 @@ def download_wiley(context, raw: str, doi: str | None, resolved_url: str | None)
         activity.close()
         watch.close()
         note_supplements(page)
-        for tab in reversed(pages):
-            close_page_safely(tab)
+        if completed:
+            for tab in reversed(pages):
+                close_page_safely(tab)
+        else:
+            log_line("Wiley: PDF not saved; leaving article and viewer tabs open")
 
 
 
@@ -1367,6 +1411,8 @@ def capture_pdf_with_fetch(context, target_url: str, dest: Path, timeout_sec: in
     activity = WileyActivity() if wiley_watch is not None else None
     if activity:
         activity.attach(page)
+        if wiley_watch.pages is not None:
+            wiley_watch.pages.add(page)
     saved = {"ok": False}
     normal_downloads = []
 
@@ -1402,6 +1448,33 @@ def capture_pdf_with_fetch(context, target_url: str, dest: Path, timeout_sec: in
                 or "pdfft" in url.lower()
             )
         )
+
+        if candidate and activity and not saved["ok"]:
+            # Fetch.getResponseBody waits for the entire response. Stream the
+            # body so the queue can see a slow transfer while it is happening.
+            stream = None
+            try:
+                stream = cdp.send("Fetch.takeResponseBodyAsStream", {"requestId": request_id})["stream"]
+                with dest.open("wb") as out:
+                    while True:
+                        part = cdp.send("IO.read", {"handle": stream, "size": 64 * 1024})
+                        raw = part["data"]
+                        if raw:
+                            out.write(base64.b64decode(raw) if part.get("base64Encoded") else raw.encode("latin-1"))
+                            activity.received_bytes()
+                        if part["eof"]:
+                            break
+                saved["ok"] = valid_pdf(dest)
+            except Exception as exc:
+                log_line(f"{source_label} stream read failed: {exc}")
+            finally:
+                if stream is not None:
+                    try:
+                        cdp.send("IO.close", {"handle": stream})
+                    finally:
+                        cdp.send("Fetch.failRequest", {"requestId": request_id, "errorReason": "Aborted"})
+            if stream is not None:
+                return
 
         if candidate and not saved["ok"]:
             try:
@@ -4802,7 +4875,7 @@ def connect_cdp_browser(playwright, cdp_url: str, ensure_func, label: str):
         try:
             ensure_func()
 
-            if attempt == 1:
+            if attempt == 1 and BROWSER_PORT != WILEY_BROWSER_PORT:
                 pages = cdp_page_targets(cdp_url)
                 if pages is not None and len(pages) > CDP_MAX_IDLE_TABS:
                     log_line(f"{label}: {len(pages)} tabs open before attach")
@@ -4846,6 +4919,10 @@ def connect_cdp_browser(playwright, cdp_url: str, ensure_func, label: str):
             if attempt >= max_attempts:
                 break
 
+            if BROWSER_PORT == WILEY_BROWSER_PORT:
+                # Unfinished articles can be open for manual use.
+                time.sleep(1)
+                continue
             if attempt == 1:
                 # Usually a leftover tab blocks the attach; closing tabs keeps
                 # the browser (and its in-memory session) alive.
@@ -4868,7 +4945,7 @@ def connect_cdp_browser(playwright, cdp_url: str, ensure_func, label: str):
             time.sleep(2)
 
     raise DownloadError(
-        f"{label}: CDP unusable after forced restart(s): {last_error}"
+        f"{label}: CDP connection unavailable after retries: {last_error}"
     )
 
 
@@ -5419,7 +5496,7 @@ def process_one(raw: str) -> Path:
                     f"Target/browser closed; self-heal retry {attempt + 1}/3: {msg}"
                 )
                 try:
-                    with browser_route(getattr(exc, "wiley_browser_closed", False)):
+                    if BROWSER_PORT != WILEY_BROWSER_PORT and not getattr(exc, "wiley_browser_closed", False):
                         restart_browser_running()
                 except Exception as restart_exc:
                     log_line(

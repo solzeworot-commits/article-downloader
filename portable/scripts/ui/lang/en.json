@@ -228,6 +228,7 @@
   "Издательства блокируют весь вуз за слишком частые скачивания.": "Publishers block the whole university for downloading too often.",
   "Не больше статей в день": "At most articles a day",
   "0 — без лимита. Остальное продолжится на следующий день.": "0 — no limit. The rest continues the next day.",
+  "Для Wiley отсчёт начинается заново, когда браузер получает данные статьи или PDF.": "For Wiley, the timer restarts when the browser receives article or PDF data.",
   "Время на одну статью, мин": "Time per article, min",
   "Ждать капчу при запуске, мин": "Wait for the CAPTCHA at start, min",
   "Потом скачивание начнётся, даже если капча не пройдена.": "After that downloading starts even if the CAPTCHA is not passed.",

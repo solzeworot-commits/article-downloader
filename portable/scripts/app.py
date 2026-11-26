@@ -86,7 +86,7 @@ PDF_TEXT_CACHE = ROOT / "logs" / "pdf_text"      # the pages of the PDFs, for «
 BIBLIO_DIR = ROOT / "Список литературы"
 
 UI_PORT = 17865
-APP_VERSION = "9.2.9"
+APP_VERSION = "9.2.10"
 APP_AUTHOR = "Bucaneiro"
 OFFICIAL_URL = "https://github.com/solzeworot-commits/article-downloader"
 DOWNLOAD_URL = OFFICIAL_URL + "/releases/tag/portable-latest"
@@ -260,8 +260,10 @@ def child_env(deadline_sec: float | None = None) -> dict:
         ARTICLE_SUPPLEMENTARY="1" if S.settings.get("supplementary", True) else "0",
     )
     if deadline_sec:
+        env["ARTICLE_JOB_TIMEOUT_SEC"] = str(deadline_sec)
         env["ARTICLE_JOB_DEADLINE"] = f"{time.time() + deadline_sec:.0f}"
     else:
+        env.pop("ARTICLE_JOB_TIMEOUT_SEC", None)
         env.pop("ARTICLE_JOB_DEADLINE", None)
     return env
 
@@ -941,9 +943,15 @@ def _run_item(item: dict, *, wiley_only=False):
     with S.lock:
         S.proc = proc
 
+    expires = time.monotonic() + limit + 30
+
     def read_output():
+        nonlocal expires
         for raw in proc.stdout:
             line = raw.rstrip("\n")
+            if line == "WILEY_TRANSFER|progress":
+                expires = time.monotonic() + limit + 30
+                continue
             log.append(line)
             if line in ("VERIFICATION|manual", "VERIFICATION|checking", "VERIFICATION|clear"):
                 with S.lock:
@@ -965,14 +973,13 @@ def _run_item(item: dict, *, wiley_only=False):
     reader.start()
 
     known, timed_out = set(), False
-    hard_deadline = time.time() + limit + 30
     while True:
         try:
             code = proc.wait(timeout=2)
             break
         except subprocess.TimeoutExpired:
             known |= child_pids(proc.pid)
-            if S.stop_requested or time.time() > hard_deadline:
+            if S.stop_requested or time.monotonic() > expires:
                 timed_out = not S.stop_requested
                 kill_job_tree(proc, known)
     reader.join(timeout=10)

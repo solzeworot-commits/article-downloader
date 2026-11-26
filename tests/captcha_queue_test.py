@@ -3,6 +3,7 @@ import io
 import os
 import sys
 import tempfile
+import threading
 import time
 import unittest
 from pathlib import Path
@@ -25,6 +26,36 @@ class CaptchaQueueTest(unittest.TestCase):
         self.ad, self.app = ad, app
         self.stack.enter_context(patch.object(app, "QUEUE_PATH", Path(temp.name) / "queue.json"))
         self.stack.enter_context(patch.object(app, "S", app.State()))
+
+    def test_wiley_transfer_extends_queue_deadline(self):
+        app = self.app
+        app.S.settings.update(job_timeout_min=2)
+        app.S.add_entries(["10.1002/slow"])
+        clock = [0]
+        transfer, consumed = threading.Event(), threading.Event()
+        def output():
+            yield "PUBLISHER|wiley\n"
+            transfer.wait(3)
+            yield "WILEY_TRANSFER|progress\n"
+            consumed.set()
+            yield "RESULT|SUCCESS|slow.pdf\n"
+        proc = Mock(stdout=output())
+        def wait(timeout):
+            if clock[0] == 0:
+                clock[0] = 90
+                transfer.set()
+                assert consumed.wait(3)
+                clock[0] = 160
+                raise app.subprocess.TimeoutExpired("job", timeout)
+            return 0
+        proc.wait.side_effect = wait
+        with (patch.object(app.time, "monotonic", side_effect=lambda: clock[0]),
+              patch.object(app, "spawn_downloader", return_value=proc),
+              patch.object(app, "child_pids", return_value=set()),
+              patch.object(app, "kill_job_tree") as kill, patch.object(app, "_report")):
+            app._run_item(app.S.items[0])
+            kill.assert_not_called()
+        self.assertEqual(app.S.items[0]["status"], "success")
 
     def test_timeout_defers_one_item_then_finishes(self):
         app = self.app
