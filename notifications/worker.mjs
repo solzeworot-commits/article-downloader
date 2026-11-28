@@ -14,15 +14,21 @@ function secret() {
   return crypto.randomUUID().replaceAll("-", "");
 }
 
-async function send(env, provider, recipient, text) {
+async function send(env, provider, recipient, text, remoteAccess = false) {
   const tg = provider === "telegram";
   const target = tg ? "https://api.telegram.org/bot" + env.TELEGRAM_TOKEN + "/sendMessage"
                     : "https://platform-api2.max.ru/messages?user_id=" + encodeURIComponent(recipient);
   const headers = { "Content-Type": "application/json" };
   if (!tg) headers.Authorization = env.MAX_TOKEN;
+  const message = tg ? { chat_id: recipient, text, link_preview_options: { is_disabled: true } } : { text };
+  if (tg && remoteAccess) {
+    message.reply_markup = { inline_keyboard: [[
+      { text: "Открыть мой компьютер", url: "https://remotedesktop.google.com/access" }
+    ]] };
+  }
   const res = await fetch(target, {
     method: "POST", redirect: "manual", headers,
-    body: JSON.stringify(tg ? { chat_id: recipient, text, link_preview_options: { is_disabled: true } } : { text }),
+    body: JSON.stringify(message),
   });
   if (!res.ok) throw new Error("Messenger unavailable");
 }
@@ -127,7 +133,7 @@ async function handle(req, env) {
     const exists = await env.DB.prepare("SELECT 1 FROM devices WHERE device=?").bind(device).first();
     return fail(exists ? 429 : 401);
   }
-  await send(env, row.provider, row.recipient, path === "/alert" ? alertText : testText);
+  await send(env, row.provider, row.recipient, path === "/alert" ? alertText : testText, true);
   return ok();
 }
 

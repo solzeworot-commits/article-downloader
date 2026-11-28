@@ -288,6 +288,9 @@ def wait_for_manual_verification(page, source: str, timeout_sec: int = 90, *, do
                         page.bring_to_front()
                     except Exception:
                         pass
+            if signal == "manual" and os.environ.get("ARTICLE_DEFER_MANUAL") == "1":
+                _manual_tabs.add(page)
+                raise CaptchaRequired(f"{source}: waiting for manual verification in the open tab")
             if state == "closed":
                 raise CaptchaRequired(f"{source}: verification tab was closed")
             if state == "error":
@@ -302,6 +305,8 @@ def wait_for_manual_verification(page, source: str, timeout_sec: int = 90, *, do
         if reported != "clear":
             safe_console_print("VERIFICATION|clear")
 
+    if not notified and os.environ.get("ARTICLE_DEFER_MANUAL") == "1":
+        raise DownloadError(f"{source}: verification page did not finish loading")
     raise CaptchaRequired(
         f"{source}: manual verification was not completed within "
         f"{timeout_sec} seconds"
@@ -334,6 +339,9 @@ def _target_closed_error(exc: Exception) -> bool:
     )
 
 
+_manual_tabs = set()
+
+
 def close_page_safely(page):
     """
     23.10: after a failed navigation to an unreachable host (connection
@@ -341,6 +349,8 @@ def close_page_safely(page):
     closed from outside. Close the target through the DevTools HTTP endpoint
     first; page.close() then returns at once.
     """
+    if page in _manual_tabs:
+        return
     try:
         session = page.context.new_cdp_session(page)
         target_id = session.send("Target.getTargetInfo")["targetInfo"]["targetId"]
@@ -5160,6 +5170,10 @@ def run_warmup(bases_file: Path) -> int:
                     pass
                 front = first_captcha
 
+            if first_captcha is not None and os.environ.get("ARTICLE_DEFER_MANUAL") == "1":
+                _manual_tabs.update(tab["page"] for tab in tabs if tab["state"] == "captcha")
+                break
+
             # Two clean rounds: a check page reloads itself right after it
             # is passed and may briefly look finished before that.
             clear_rounds = clear_rounds + 1 if blocking == 0 else 0
@@ -5557,6 +5571,8 @@ def _process_one_once(raw: str) -> Path:
 
         log_line(f"Source: {source}")
         safe_console_print(f"PUBLISHER|{source}")
+        if source in os.environ.get("ARTICLE_HELD_PUBLISHERS", "").split(","):
+            raise CaptchaRequired(f"{source}: publisher downloads deferred")
         if resolved:
             log_line(f"Resolved: {resolved}")
 

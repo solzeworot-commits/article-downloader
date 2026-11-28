@@ -19,8 +19,8 @@
   "Сохранять доступные приложения, даже если полный текст статьи платный.": "Save available supplements even when the full article requires a subscription.",
   "Скачать Elsevier": "Download Elsevier",
   "Скачать Wiley в Chrome": "Download Wiley in Chrome",
-  "Продолжить Elsevier": "Resume Elsevier",
-  "Нажмите «Продолжить Elsevier»": "Click “Resume Elsevier”",
+  "Скачать отложенные": "Download deferred articles",
+  "Нажмите «Скачать отложенные»": "Click “Download deferred articles”",
   "!-- © 2026 Bucaneiro. Загрузчик статей — бесплатная программа; условия в файле ЛИЦЕНЗИЯ.txt. --": "!-- © 2026 Bucaneiro. Article Downloader is a free program; terms in ЛИЦЕНЗИЯ.txt. --",
   "Загрузчик статей": "Article Downloader",
   "Загрузчик статей‌​‌": "Article Downloader‌​‌",
@@ -1102,13 +1102,13 @@
   "📋 Скопировано DOI: $": "📋 DOIs copied: $",
   "Не скопировалось — выделите список и нажмите Ctrl+C": "Not copied — select the list and press Ctrl+C",
   "DOI. Его можно открыть, отобрать или отправить заново.": "DOI. You can open it, screen it or send it again.",
-  "Если ScienceDirect ждёт проверки, статьи Elsevier останутся в очереди. После обработки остальных статей нажмите «Продолжить Elsevier» на рабочем компьютере. Для других издателей программа повторяет попытку в конце очереди.": "When ScienceDirect requires verification, the Elsevier articles stay in the queue. After the other articles finish, click “Resume Elsevier” on the work computer. Articles from other publishers are retried at the end of the queue.",
+  "При капче программа откладывает статьи издателя и продолжает очередь. Пройдите проверку в открытой вкладке и нажмите «Скачать отложенные» в очереди.": "When a publisher requests verification, its articles are put on hold and the queue continues. Complete the check in the open tab and click “Download deferred articles” in the queue.",
   "Выберите список, чтобы открыть базы и начать скачивание.": "Choose a list to open the databases and start downloading.",
   "открывает базы в браузере": "opening databases in the browser",
   "время ожидания баз вышло": "database checks timed out",
-  "Статьи Elsevier отложены.": "Elsevier articles are on hold.",
-  "Нажмите «Продолжить Elsevier», чтобы вернуться к скачиванию.": "Click “Resume Elsevier” to continue downloading.",
-  "Отложена до возобновления Elsevier": "On hold until Elsevier downloads resume",
+  "Есть отложенные статьи.": "Some articles are on hold.",
+  "После проверки нажмите «Скачать отложенные».": "After verification click “Download deferred articles”.",
+  "Отложена до проверки у издателя": "On hold for publisher verification",
   "сайт выполняет проверку": "site check in progress",
   "ПАУЗА": "PAUSED"
  },
@@ -1307,6 +1307,6 @@
   "У этого списка нет нескачанных статей.": "This list has no articles that failed to download.",
   "Wiley: меню скачивания перекрыто. В открытой вкладке выберите Download → PDF.": "Wiley: the download menu is covered. In the open tab choose Download → PDF.",
   "Wiley: служба входа wiley.scienceconnect.io недоступна из этой сети — статью нужно найти другим путём": "Wiley: its sign-in service wiley.scienceconnect.io cannot be reached from this network — find the article another way",
-  "Статьи Elsevier отложены.": "Elsevier articles are on hold."
+  "Есть отложенные статьи.": "Some articles are on hold."
  }
 }

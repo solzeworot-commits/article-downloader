@@ -88,7 +88,7 @@ PDF_TEXT_CACHE = ROOT / "logs" / "pdf_text"      # the pages of the PDFs, for «
 BIBLIO_DIR = ROOT / "Список литературы"
 
 UI_PORT = 17865
-APP_VERSION = "9.2.16"
+APP_VERSION = "9.2.17"
 APP_AUTHOR = "Bucaneiro"
 OFFICIAL_URL = "https://github.com/solzeworot-commits/article-downloader"
 DOWNLOAD_URL = OFFICIAL_URL + "/releases/tag/portable-latest"
@@ -272,6 +272,10 @@ def child_env(deadline_sec: float | None = None) -> dict:
 
 
 def spawn_downloader(args: list[str], deadline_sec: float | None = None):
+    env = child_env(deadline_sec)
+    if deadline_sec and "--supplements-only" not in args:
+        env["ARTICLE_DEFER_MANUAL"] = "1"
+        env["ARTICLE_HELD_PUBLISHERS"] = ",".join(S.held_publishers())
     return subprocess.Popen(
         [child_python(), str(DOWNLOADER), *args],
         stdout=subprocess.PIPE,
@@ -280,7 +284,7 @@ def spawn_downloader(args: list[str], deadline_sec: float | None = None):
         text=True,
         encoding="utf-8",
         errors="replace",
-        env=child_env(deadline_sec),
+        env=env,
         cwd=str(ROOT),
         creationflags=NO_WINDOW,
     )
@@ -465,11 +469,31 @@ def wiley_item(item: dict) -> bool:
                 or item.get("message", "").startswith(("Wiley:", "WILEY_LOGIN_BLOCKED")))
 
 
+def queue_publisher(item):
+    source = item.get("publisher")
+    if source:
+        return source if source in BASE_BY_KEY else ""
+    if elsevier_item(item):
+        return "elsevier"
+    if wiley_item(item):
+        return "wiley"
+    query = unquote(item["query"]).lower()
+    prefix = re.match(r"^(?:https?://(?:dx\.)?doi\.org/)?(10\.\d+)/", query)
+    if prefix:
+        return next((key for key, _, _, _, prefixes in BASES if prefix[1] in prefixes), "")
+    return ""
+
+
+def deferred(item):
+    return bool(item.get("captcha_hold") or item.get("elsevier_hold"))
+
+
 class State:
     def __init__(self):
         self.lock = threading.RLock()
         self.settings = load_settings()
         self.items: list[dict] = []
+        self.resume_requested = set()
         self.next_id = 1
         self.items_version = 1
         self.day = time.strftime("%Y-%m-%d")
@@ -551,13 +575,13 @@ class State:
         for item in self.items:
             if item.get("status") == "running":
                 item["status"] = "pending"
-        # Restore articles left at a terminal CAPTCHA by earlier versions.
         for item in self.items:
-            if item["status"] == "captcha" and (is_elsevier_query(item["query"])
-                    or item.get("message", "").startswith(("Elsevier:", "Elsevier PDF:"))):
-                item.update(status="pending", elsevier_hold=True, message="")
-        if self.elsevier_waiting():
-            self.hold_elsevier()
+            if item["status"] == "captcha":
+                if item.get("message", "").startswith(("Elsevier:", "Elsevier PDF:")):
+                    item["publisher"] = "elsevier"
+                item.update(status="pending", captcha_hold=True)
+        for publisher in self.held_publishers():
+            self.hold_publisher(publisher)
         self.next_id = max([i["id"] for i in self.items] + [0]) + 1
         if data.get("day") == self.day:
             self.day_count = int(data.get("day_count", 0))
@@ -581,9 +605,16 @@ class State:
         return sum(1 for item in self.items if item.get("elsevier_hold"))
 
     def hold_elsevier(self):
-        for item in self.items:
-            if item["status"] == "pending" and is_elsevier_query(item["query"]):
-                item["elsevier_hold"] = True
+        self.hold_publisher("elsevier")
+
+    def held_publishers(self):
+        return {key for i in self.items if deferred(i) and (key := queue_publisher(i))}
+
+    def hold_publisher(self, key):
+        if key:
+            for item in self.items:
+                if item["status"] == "pending" and queue_publisher(item) == key:
+                    item["elsevier_hold" if key == "elsevier" else "captcha_hold"] = True
 
     def add_entries(self, entries: list[str], *, reuse_failed=False) -> tuple[int, int]:
         added = duplicates = 0
@@ -591,7 +622,7 @@ class State:
             known = {i["query"].lower(): i for i in self.items
                      if reuse_failed or i["status"] not in ("failed", "no_access", "unsupported")}
             updated = False
-            hold_elsevier = bool(self.elsevier_waiting())
+            held = self.held_publishers()
             for entry in entries:
                 doi = wiley_route.article_doi(entry)
                 article_url = entry if doi else None
@@ -611,8 +642,9 @@ class State:
                 known[entry.lower()] = self.items[-1]
                 if article_url:
                     self.items[-1]["wiley_url"] = article_url
-                if hold_elsevier and is_elsevier_query(entry):
-                    self.items[-1]["elsevier_hold"] = True
+                key = queue_publisher(self.items[-1])
+                if key in held:
+                    self.items[-1]["elsevier_hold" if key == "elsevier" else "captcha_hold"] = True
                 self.next_id += 1
                 added += 1
             if added or updated:
@@ -634,7 +666,7 @@ class State:
     def next_pending(self, selected=None):
         with self.lock:
             pending = [(i["attempts"], n, i) for n, i in enumerate(self.items)
-                       if i["status"] == "pending" and not i.get("elsevier_hold")
+                       if i["status"] == "pending" and not deferred(i)
                        and (selected is None or i["id"] in selected)]
             return min(pending, key=lambda t: t[:2])[2] if pending else None
 
@@ -743,7 +775,7 @@ def start_warmup():
             S.warm.update(done=True, error=S.browser["error"])
             return
         enabled = [b for b in BASES if S.settings["bases"].get(b[0], True)
-                   and not (b[0] == "elsevier" and S.elsevier_waiting())]
+                   and b[0] not in S.held_publishers()]
         if not enabled:
             S.warm = S._warm_blank()
             S.warm.update(done=True, cleared=True, finished_at=time.time())
@@ -772,6 +804,10 @@ def _warmup_thread(bases: list[dict]):
                     base = S.warm["bases"].setdefault(key, {})
                     if (base.get("state") == "captcha") != (state == "captcha"):
                         S.cloud_wake.set()
+                    if state == "captcha" and base.get("state") != "captcha":
+                        personal_alerts.manual()
+                        S.hold_publisher(key)
+                        S.touch_items()
                     base["state"] = state
                     if detail or state != "ok":
                         base["detail"] = detail
@@ -784,10 +820,6 @@ def _warmup_thread(bases: list[dict]):
                 with S.lock:
                     if status == "SUCCESS":
                         S.warm["cleared"] = True
-                    elif (status == "CAPTCHA_REQUIRED" and not S.warm["skipped"]
-                          and S.warm["bases"].get("elsevier", {}).get("state") in ("captcha", "checking")):
-                        S.hold_elsevier()
-                        S.touch_items()
                     elif status == "FAILED":
                         S.warm["error"] = message
         proc.wait()
@@ -814,9 +846,17 @@ def skip_warmup():
 # queue runner
 # ---------------------------------------------------------------------------
 
-def start_queue(*, resume_elsevier=False, publisher=None, list_keys=None):
+def start_queue(*, resume_deferred=False, resume_elsevier=False, publisher=None, list_keys=None, resume_ids=None):
     selected = None
     with S.lock:
+        if resume_deferred:
+            selected = {i["id"] for i in S.items if deferred(i)}
+            if resume_ids is not None:
+                selected &= resume_ids
+            if not selected:
+                return
+            if S.running and not S.stop_requested:
+                S.resume_requested.update(selected)
         if S.running:
             return
         if publisher:
@@ -825,24 +865,31 @@ def start_queue(*, resume_elsevier=False, publisher=None, list_keys=None):
                 candidates = [i for i in candidates if i["query"].lower() in list_keys]
             selected = {i["id"] for i in candidates}
             for item in candidates:
-                if publisher == "elsevier":
-                    item.pop("elsevier_hold", None)
+                item.pop("elsevier_hold", None)
+                item.pop("captcha_hold", None)
                 if item["status"] != "pending":
                     item.update(status="pending", attempts=0, message="")
             if candidates:
                 S.touch_items()
+        if resume_deferred:
+            for item in S.items:
+                if item["id"] in selected:
+                    item.pop("captcha_hold", None)
+                    item.pop("elsevier_hold", None)
+            S.touch_items()
         if resume_elsevier:
             if not S.elsevier_waiting():
                 return
             for item in S.items:
-                item.pop("elsevier_hold", None)
+                if item.pop("elsevier_hold", None):
+                    item.pop("captcha_hold", None)
             S.touch_items()
         if S.next_pending(selected) is None:
             return
         warm = S.warm
         stale = (not warm["done"] or warm["skipped"] or warm["error"]
                  or time.time() - warm["finished_at"] > WARM_FRESH_SEC)
-        if not publisher and not resume_elsevier and not warm["running"] and stale:
+        if not publisher and not resume_deferred and not resume_elsevier and not warm["running"] and stale:
             start_warmup()
         S.running = True
         S.stop_requested = False
@@ -918,6 +965,9 @@ def _runner(selected=None, publisher=None, supplement_item=None):
             S.proc = None
             S.touch_items()
             S.running = False
+            requested, S.resume_requested = S.resume_requested, set()
+            if requested and not S.stop_requested and S.phase != "limit":
+                start_queue(resume_deferred=True, resume_ids=requested)
 
 
 REPORT_STATUS = {
@@ -1053,18 +1103,17 @@ def _run_item(item: dict, *, wiley_only=False, supplements_only=False):
         elif not result["status"]:
             message = next((l for l in reversed(log) if l.strip()), tr("код {code}", code=code))
 
-        if status == "captcha" and (message.startswith(("Elsevier:", "Elsevier PDF:"))
-                                    or is_elsevier_query(item["query"])):
-            status, message = "pending", ""
-            item["elsevier_hold"] = True
-            S.hold_elsevier()
-        elif status == "captcha" and item["attempts"] < 2:
-            status = "pending"
-            message = tr("была капча — повторю в конце очереди")
-        message = readable_reason(status, message)
-
         if result.get("publisher"):
             item["publisher"] = result["publisher"]
+        if status == "captcha":
+            if message.startswith(("Elsevier:", "Elsevier PDF:")):
+                item["publisher"] = "elsevier"
+            status = "pending"
+            item["captcha_hold"] = True
+            item["status"] = status
+            S.hold_publisher(queue_publisher(item))
+            S.day_count = max(0, S.day_count - 1)
+        message = readable_reason(status, message)
         item["status"] = status
         item["message"] = message[:500]
         item["file"] = message if status == "success" else ""
@@ -2676,6 +2725,7 @@ def cloud_work_status(shared: Path, taken: dict) -> dict:
         data = {"app": "ArticleDownloader", "version": APP_VERSION, "computer": computer_name(),
                 "running": S.running, "phase": S.phase, "limit": S.phase == "limit",
                 "elsevier_waiting": bool(S.elsevier_waiting()),
+                "deferred": any(deferred(i) for i in S.items),
                 "captcha": bool(S.captcha_now or warm_captcha)}
     lists = {}
     for name, rec in taken.items():
@@ -2861,7 +2911,7 @@ def tray_tip() -> str:
     """The icon's tooltip: what the program is doing."""
     with S.lock:
         phase, captcha = S.phase, S.captcha_now
-        held = S.elsevier_waiting()
+        held = any(deferred(i) for i in S.items)
         done = sum(1 for i in S.items if i["status"] == "success")
         left = sum(1 for i in S.items if i["status"] in ("pending", "running"))
     tip = f"{tr('Загрузчик статей')} {APP_VERSION}"
@@ -2872,7 +2922,7 @@ def tray_tip() -> str:
     if phase == "limit":
         return tip + "\n" + tr("Дневной лимит: продолжу завтра")
     if held:
-        return tip + "\n" + tr("Статьи Elsevier отложены.")
+        return tip + "\n" + tr("Есть отложенные статьи.")
     if cloud_cfg()[0] == "work":
         return tip + "\n" + tr("☁ Рабочий компьютер: жду списки из облака")
     return tip
@@ -3132,6 +3182,8 @@ def public_state(known_version: int) -> dict:
             "captcha_now": S.captcha_now,
             "checking_now": S.checking_now,
             "elsevier_waiting": S.elsevier_waiting(),
+            "deferred_count": sum(deferred(i) for i in S.items),
+            "can_resume_deferred": any(deferred(i) and i["id"] not in S.resume_requested for i in S.items),
             "wiley_available": not S.running and bool(S.publisher_candidates("wiley")),
             "elsevier_available": not S.running and bool(S.publisher_candidates("elsevier")),
             "warm": {k: v for k, v in S.warm.items() if k != "bases"} | {"bases": bases},
@@ -3164,7 +3216,7 @@ def public_state(known_version: int) -> dict:
         if known_version != S.items_version:
             data["items"] = [
                 {k: i.get(k, "") for k in ("id", "query", "status", "file",
-                                            "message", "attempts", "supp", "supp_message", "elsevier_hold")}
+                                            "message", "attempts", "supp", "supp_message", "elsevier_hold", "captcha_hold")}
                 for i in S.items
             ]
     data["cloud"] = cloud_state()      # outside the lock: a cloud folder can be slow to read
@@ -3256,6 +3308,10 @@ def handle_api(path: str, body: dict) -> dict:
 
     if path == "/api/stop":
         stop_queue()
+        return {}
+
+    if path == "/api/resume_deferred":
+        start_queue(resume_deferred=True)
         return {}
 
     if path == "/api/resume_elsevier":

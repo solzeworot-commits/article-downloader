@@ -56,7 +56,7 @@ test("Private device pairing, event delivery, expiration and revocation", async 
   t.mock.method(globalThis, "fetch", async (url, options) => {
     assert.equal(options.redirect, "manual");
     const body = JSON.parse(options.body);
-    out.push({target:body.chat_id || new URL(url).searchParams.get("user_id"), text:body.text, host:new URL(url).hostname});
+    out.push({target:body.chat_id || new URL(url).searchParams.get("user_id"), text:body.text, keyboard:body.reply_markup?.inline_keyboard, host:new URL(url).hostname});
     return Response.json({ok:true});
   });
   const post = (path, body, headers) => worker.fetch(new Request("https://example.org" + path, {
@@ -87,6 +87,9 @@ test("Private device pairing, event delivery, expiration and revocation", async 
   assert.equal((await device("b","alert")).status,200);
   assert.equal((await device("x","alert")).status,401);
   assert.deepEqual(out.map(m=>[m.host,m.target]),[["api.telegram.org","101"],["platform-api2.max.ru","202"]]);
+
+  assert.deepEqual(out[0].keyboard, [[{text:"Открыть мой компьютер", url:"https://remotedesktop.google.com/access"}]]);
+  assert.equal(out[1].keyboard, undefined);
 
   await tg(101,"/stop");
   assert.equal((await device("a","test")).status,401);

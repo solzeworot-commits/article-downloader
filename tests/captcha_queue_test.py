@@ -89,9 +89,9 @@ class CaptchaQueueTest(unittest.TestCase):
               patch.object(app, "start_warmup") as warmup, patch.object(app, "_report")):
             app._runner()
         self.assertEqual([call.args[0] for call in spawn.call_args_list],
-                         [["first"], ["second"], ["first"]])
+                         [["first"], ["second"]])
         warmup.assert_not_called()
-        self.assertEqual([item["status"] for item in app.S.items], ["captcha", "success"])
+        self.assertEqual([item["status"] for item in app.S.items], ["pending", "success"])
 
     def test_elsevier_hold_survives_restart_and_resumes(self):
         app = self.app
@@ -136,7 +136,41 @@ class CaptchaQueueTest(unittest.TestCase):
         app.S.save_queue()
         app.S.load_queue()
         self.assertEqual(app.S.elsevier_waiting(), 1)
-        self.assertEqual([i["status"] for i in app.S.items], ["pending", "captcha"])
+        self.assertEqual([i["status"] for i in app.S.items], ["pending", "pending"])
+
+    def test_wiley_hold_and_batch_resume(self):
+        app = self.app
+        app.S.settings.update(pause_sec=0, daily_limit=0)
+        app.S.add_entries(["10.1002/example", "10.1111/test", "10.1007/open"])
+        def worker(args, deadline_sec):
+            result = "CAPTCHA_REQUIRED|Wiley: manual" if args == ["10.1002/example"] else "SUCCESS|ok.pdf"
+            return Mock(stdout=io.StringIO("RESULT|" + result + "\n"))
+        with patch.object(app, "spawn_downloader", side_effect=worker) as spawn, patch.object(app, "_report"):
+            app._runner()
+            self.assertEqual(spawn.call_count, 2)
+        app.S.load_queue()
+        self.assertEqual([app.deferred(i) for i in app.S.items], [True, True, False])
+        app.S.running = True
+        app.handle_api("/api/resume_deferred", {})
+        self.assertEqual(app.S.resume_requested, {1, 2})
+        app.S.running = False
+        with patch.object(app.threading, "Thread") as thread, patch.object(app, "start_warmup") as warmup:
+            app.handle_api("/api/resume_deferred", {})
+            self.assertEqual(thread.call_args.kwargs["args"][0], {1, 2})
+            warmup.assert_not_called()
+        self.assertFalse(any(app.deferred(i) for i in app.S.items))
+
+    def test_manual_queue_deferral_keeps_browser_tab(self):
+        import os
+        ad = self.ad
+        page = Mock()
+        with (patch.dict(os.environ, ARTICLE_DEFER_MANUAL="1"),
+              patch.object(ad, "_verification_state", return_value=("captcha", "")),
+              self.assertRaises(ad.CaptchaRequired)):
+            ad.wait_for_manual_verification(page, "Wiley")
+        ad.close_page_safely(page)
+        page.close.assert_not_called()
+        ad._manual_tabs.discard(page)
 
     def test_redirect_needs_two_ready_readings(self):
         ad = self.ad
