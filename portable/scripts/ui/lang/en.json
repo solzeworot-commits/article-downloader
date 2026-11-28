@@ -1,7 +1,7 @@
 {
  "page": {
   "Личные уведомления о капче": "Private CAPTCHA alerts",
-  "Откройте личный чат с ботом проекта в Telegram или MAX, нажмите «Старт» и вставьте полученную ссылку.": "Open a private chat with the project bot in Telegram or MAX, press Start and paste the link it sends you.",
+  "Откройте бота в Telegram, нажмите «Старт» и вставьте сюда ссылку из его личного сообщения.": "Open the Telegram bot, press Start and paste the link from its private message here.",
   "Привязать личный чат": "Connect private chat",
   "Проверить уведомление": "Send a test alert",
   "Отвязать этот компьютер": "Disconnect this computer",
