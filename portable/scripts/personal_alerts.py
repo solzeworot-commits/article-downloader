@@ -21,6 +21,7 @@ class NoRedirect(HTTPRedirectHandler):
 def relay_request(origin, path, token, payload=None):
     request = Request(origin + path, data=json.dumps(payload or {}).encode(), headers={
         "Authorization": "Bearer " + token, "Content-Type": "application/json",
+        "User-Agent": "ArticleDownloader-Notifications/1.0",
     })
     with build_opener(NoRedirect()).open(request, timeout=8) as response:
         return json.loads(response.read(2048))
