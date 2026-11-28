@@ -131,6 +131,7 @@ GUIDE_LINKS = {
     "gosuslugi_crt": "https://www.gosuslugi.ru/crt",
     "yandex_cloud": "https://console.yandex.cloud/",
     "chat_tg": "https://t.me/ArticleDownloaderChat",
+    "alerts_tg": "https://t.me/ArticleDownloaderAlertsBot",
     "chat_max": "https://max.ru/join/_ADhfiFX_Bf37RsP1VR8hDHUdFgj_im_R5DqDx4Iseo",
     "official": DOWNLOAD_URL,
     "photo_source": "https://commons.wikimedia.org/wiki/File:Jolly_Roger_at_Portsmouth_Historic_Dockyard.jpg",

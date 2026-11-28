@@ -41,9 +41,32 @@ function privateCommand(provider, event) {
   return { id: msg.sender?.user_id, text: msg.body?.text };
 }
 
+async function telegramSecret(env) {
+  if (env.TELEGRAM_WEBHOOK_SECRET) return env.TELEGRAM_WEBHOOK_SECRET;
+  if (env.TELEGRAM_TOKEN && env.TELEGRAM_WEBHOOK_ORIGIN) {
+    return hash("article-downloader:telegram:webhook:v1:" + env.TELEGRAM_TOKEN);
+  }
+}
+
+async function configureTelegram(env) {
+  const origin = env.TELEGRAM_WEBHOOK_ORIGIN;
+  if (!origin || !env.TELEGRAM_TOKEN) return;
+  if (!/^https:\/\/article-downloader-notify\.[a-z0-9-]+\.workers\.dev$/.test(origin)) throw new Error("Invalid webhook origin");
+  const api = "https://api.telegram.org/bot" + env.TELEGRAM_TOKEN + "/";
+  const info = await fetch(api + "getWebhookInfo", {method: "POST", redirect: "error"});
+  if (!info.ok) throw new Error("Telegram webhook lookup failed");
+  const {result} = await info.json();
+  if (result.url) return;
+  const response = await fetch(api + "setWebhook", {
+    method: "POST", redirect: "error", headers: {"Content-Type": "application/json"},
+    body: JSON.stringify({url: origin + "/hook/telegram", secret_token: await telegramSecret(env), allowed_updates: ["message"]})
+  });
+  if (!response.ok || !(await response.json()).ok) throw new Error("Telegram webhook registration failed");
+}
+
 async function webhook(req, env, provider, now) {
   const tg = provider === "telegram";
-  const expected = tg ? env.TELEGRAM_WEBHOOK_SECRET : env.MAX_WEBHOOK_SECRET;
+  const expected = tg ? await telegramSecret(env) : env.MAX_WEBHOOK_SECRET;
   const actual = req.headers.get(tg ? "X-Telegram-Bot-Api-Secret-Token" : "X-Max-Bot-Api-Secret");
   if (!expected || !actual || await hash(actual) !== await hash(expected)) return fail(403);
   const cmd = privateCommand(provider, await req.json());
@@ -115,5 +138,6 @@ export default {
   },
   async scheduled(event, env) {
     await env.DB.prepare("DELETE FROM codes WHERE issued<=?").bind(Math.floor(event.scheduledTime/1000)-600).run();
+    await configureTelegram(env);
   },
 };

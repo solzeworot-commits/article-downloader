@@ -28,6 +28,27 @@ function database() {
   };
 }
 
+test("Scheduled setup registers an empty Telegram webhook once, with a private signing secret", async t => {
+  const env = {DB:database(), TELEGRAM_TOKEN:"test-token", TELEGRAM_WEBHOOK_ORIGIN:"https://article-downloader-notify.test.workers.dev"};
+  let registration;
+  let sets = 0;
+  t.mock.method(globalThis, "fetch", async (url, options) => {
+    if (url.endsWith("/getWebhookInfo")) return Response.json({ok:true,result:{url:registration?.url || ""}});
+    assert.ok(url.endsWith("/setWebhook"));
+    registration = JSON.parse(options.body);
+    sets++;
+    return Response.json({ok:true});
+  });
+  const event = {scheduledTime:Date.now()};
+  await worker.scheduled(event, env);
+  await worker.scheduled(event, env);
+  assert.equal(sets,1);
+  assert.equal(registration.url,env.TELEGRAM_WEBHOOK_ORIGIN + "/hook/telegram");
+  assert.match(registration.secret_token,/^[0-9a-f]{64}$/);
+  const request = new Request(registration.url, {method:"POST",headers:{"X-Telegram-Bot-Api-Secret-Token":registration.secret_token},body:"{}"});
+  assert.equal((await worker.fetch(request,env)).status,200);
+});
+
 test("Private device pairing, event delivery, expiration and revocation", async t => {
   const env = {DB:database(), TELEGRAM_TOKEN:"fake", MAX_TOKEN:"fake", TELEGRAM_WEBHOOK_SECRET:"tg-secret", MAX_WEBHOOK_SECRET:"max-secret"};
   const out = [];

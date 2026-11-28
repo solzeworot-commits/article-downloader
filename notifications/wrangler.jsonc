@@ -4,7 +4,8 @@
   "compatibility_date": "2025-12-01",
   "workers_dev": true,
   "d1_databases": [
-    { "binding": "DB", "database_name": "article-downloader-notifications" }
+    { "binding": "DB", "database_name": "article-downloader-notifications", "database_id": "c457f30c-b9c2-4934-bcf1-003196c1bdba" }
   ],
+  "vars": { "TELEGRAM_WEBHOOK_ORIGIN": "https://article-downloader-notify.shlykovsn.workers.dev" },
   "triggers": { "crons": ["13 3 * * *"] }
 }
