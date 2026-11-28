@@ -21,7 +21,7 @@ async function send(env, provider, recipient, text) {
   const headers = { "Content-Type": "application/json" };
   if (!tg) headers.Authorization = env.MAX_TOKEN;
   const res = await fetch(target, {
-    method: "POST", redirect: "error", headers,
+    method: "POST", redirect: "manual", headers,
     body: JSON.stringify(tg ? { chat_id: recipient, text, link_preview_options: { is_disabled: true } } : { text }),
   });
   if (!res.ok) throw new Error("Messenger unavailable");
@@ -53,12 +53,12 @@ async function configureTelegram(env) {
   if (!origin || !env.TELEGRAM_TOKEN) return;
   if (!/^https:\/\/article-downloader-notify\.[a-z0-9-]+\.workers\.dev$/.test(origin)) throw new Error("Invalid webhook origin");
   const api = "https://api.telegram.org/bot" + env.TELEGRAM_TOKEN + "/";
-  const info = await fetch(api + "getWebhookInfo", {method: "POST", redirect: "error"});
+  const info = await fetch(api + "getWebhookInfo", {method: "POST", redirect: "manual"});
   if (!info.ok) throw new Error("Telegram webhook lookup failed");
   const {result} = await info.json();
   if (result.url) return;
   const response = await fetch(api + "setWebhook", {
-    method: "POST", redirect: "error", headers: {"Content-Type": "application/json"},
+    method: "POST", redirect: "manual", headers: {"Content-Type": "application/json"},
     body: JSON.stringify({url: origin + "/hook/telegram", secret_token: await telegramSecret(env), allowed_updates: ["message"]})
   });
   if (!response.ok || !(await response.json()).ok) throw new Error("Telegram webhook registration failed");

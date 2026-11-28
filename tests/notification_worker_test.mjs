@@ -33,6 +33,7 @@ test("Scheduled setup registers an empty Telegram webhook once, with a private s
   let registration;
   let sets = 0;
   t.mock.method(globalThis, "fetch", async (url, options) => {
+    assert.equal(options.redirect, "manual");
     if (url.endsWith("/getWebhookInfo")) return Response.json({ok:true,result:{url:registration?.url || ""}});
     assert.ok(url.endsWith("/setWebhook"));
     registration = JSON.parse(options.body);
@@ -53,6 +54,7 @@ test("Private device pairing, event delivery, expiration and revocation", async 
   const env = {DB:database(), TELEGRAM_TOKEN:"fake", MAX_TOKEN:"fake", TELEGRAM_WEBHOOK_SECRET:"tg-secret", MAX_WEBHOOK_SECRET:"max-secret"};
   const out = [];
   t.mock.method(globalThis, "fetch", async (url, options) => {
+    assert.equal(options.redirect, "manual");
     const body = JSON.parse(options.body);
     out.push({target:body.chat_id || new URL(url).searchParams.get("user_id"), text:body.text, host:new URL(url).hostname});
     return Response.json({ok:true});
