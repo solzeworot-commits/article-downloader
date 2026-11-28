@@ -1330,6 +1330,19 @@ extraction"></textarea>
       <label for="s-supp">Скачивать и дополнительные материалы (Supplementary)</label>
       <span><input type="checkbox" id="s-supp"></span>
     </div>
+    <fieldset>
+      <legend>Личные уведомления о капче</legend>
+      <div id="alert-unpaired">
+        <label for="alert-link">Откройте личный чат с ботом проекта в Telegram или MAX, нажмите «Старт» и вставьте полученную ссылку.</label>
+        <input id="alert-link" type="password" autocomplete="off" spellcheck="false">
+        <button type="button" id="alert-bind">Привязать личный чат</button>
+      </div>
+      <div id="alert-paired" hidden><strong id="alert-provider"></strong>
+        <button type="button" id="alert-test">Проверить уведомление</button>
+        <button type="button" id="alert-unlink">Отвязать этот компьютер</button>
+      </div>
+      <small id="alert-status" role="status"></small>
+    </fieldset>
     <div class="form-row" id="s-tray-row">
       <label for="s-tray">Сворачивать окно в трей (значок у часов)</label>
       <span><input type="checkbox" id="s-tray"></span>
@@ -1717,8 +1730,39 @@ $("btn-settings").onclick = () => {
   $("s-tray-row").hidden = state.platform !== "windows";
   $("s-bases").innerHTML = state.warm.bases.map((b) =>
     `<label><input type="checkbox" data-base="${b.key}" ${s.bases[b.key] !== false ? "checked" : ""}> ${esc(b.name)}</label>`).join("");
+  $("alert-link").value = "";
+  alertAction("status");
   $("dlg-settings").showModal();
 };
+const alertNotes = {
+  sent: "Уведомление отправлено.",
+  invalid_link: "Вставьте полную ссылку из личного сообщения бота.",
+  expired: "Ссылка уже использована или устарела. Запросите новую у бота.",
+  unavailable: "Служба уведомлений недоступна. Попробуйте позже.",
+  unlinked: "Бот отключён. Отвяжите этот компьютер и повторите подключение.",
+  recent: "Предыдущее сообщение отправлено недавно. Подождите несколько секунд."
+};
+async function alertAction(action) {
+  const buttons = ["alert-bind", "alert-test", "alert-unlink"].map($);
+  buttons.forEach(b => b.disabled = true);
+  try {
+    const res = await api("/api/alerts/" + action, action === "bind" ? {link: $("alert-link").value.trim()} : {});
+    if (!res.error) {
+      $("alert-paired").hidden = !res.provider;
+      $("alert-unpaired").hidden = !!res.provider;
+      $("alert-provider").textContent = res.provider === "telegram" ? "Telegram" : "MAX";
+      if (action === "bind") $("alert-link").value = "";
+    }
+    $("alert-status").textContent = alertNotes[res.error || res.note] || "";
+  } catch {
+    $("alert-status").textContent = alertNotes.unavailable;
+  } finally {
+    buttons.forEach(b => b.disabled = false);
+  }
+}
+for (const action of ["bind", "test", "unlink"]) {
+  $("alert-" + action).onclick = () => alertAction(action);
+}
 $("btn-save").onclick = async () => {
   const bases = {};
   document.querySelectorAll("[data-base]").forEach((el) => { bases[el.dataset.base] = el.checked; });

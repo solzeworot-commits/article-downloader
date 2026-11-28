@@ -231,3 +231,8 @@ portable/settings.json
 portable/Отчёт.csv
 # Test bench copies
 bench/
+
+# Local Worker credentials and build cache
+notifications/.dev.vars*
+notifications/.wrangler/
+notifications/node_modules/

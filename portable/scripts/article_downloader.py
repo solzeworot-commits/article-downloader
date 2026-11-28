@@ -270,6 +270,7 @@ def wait_for_manual_verification(page, source: str, timeout_sec: int = 90, *, do
     deadline = started + timeout_sec
     clear_rounds = 0
     reported = "clear"
+    notified = False
     try:
         while time.monotonic() < deadline:
             if download_ready and download_ready():
@@ -280,6 +281,9 @@ def wait_for_manual_verification(page, source: str, timeout_sec: int = 90, *, do
                 reported = signal
                 safe_console_print(f"VERIFICATION|{signal}")
                 if signal == "manual":
+                    if not notified:
+                        safe_console_print("CAPTCHA_ALERT|manual")
+                        notified = True
                     try:
                         page.bring_to_front()
                     except Exception:

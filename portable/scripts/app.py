@@ -58,6 +58,7 @@ import osutil
 import review as rv
 import support as sp
 import wiley_route
+from personal_alerts import PersonalAlerts
 from i18n import tr
 
 
@@ -642,6 +643,7 @@ class State:
 
 
 S = State()
+personal_alerts = PersonalAlerts()
 
 
 # ---------------------------------------------------------------------------
@@ -989,6 +991,10 @@ def _run_item(item: dict, *, wiley_only=False, supplements_only=False):
                         S.captcha_now = line == "VERIFICATION|manual"
                         S.checking_now = line == "VERIFICATION|checking"
                         S.cloud_wake.set()
+            if line == "CAPTCHA_ALERT|manual":
+                with S.lock:
+                    if S.proc is proc and not S.stop_requested:
+                        personal_alerts.manual()
             if line.startswith("PUBLISHER|"):
                 result["publisher"] = line.partition("|")[2]
             if line.startswith("RESULT|"):
@@ -3188,6 +3194,22 @@ def update_settings(new: dict):
 
 
 def handle_api(path: str, body: dict) -> dict:
+    if path in ("/api/alerts/status", "/api/alerts/bind", "/api/alerts/unlink", "/api/alerts/test"):
+        try:
+            if path.endswith("/bind"):
+                personal_alerts.bind(body.get("link"))
+            elif path.endswith("/unlink"):
+                personal_alerts.unlink()
+            elif path.endswith("/test"):
+                binding = personal_alerts.binding
+                if binding:
+                    personal_alerts.send(binding, test=True)
+        except urllib.error.HTTPError as exc:
+            return {"error": "expired" if exc.code == 410 else "unavailable"}
+        except (ValueError, OSError) as exc:
+            return {"error": "invalid_link" if str(exc) == "invalid_link" else "unavailable"}
+        return personal_alerts.status()
+
     if path == "/api/parse":
         title_mode = bool(body.get("title_mode"))
         text = body.get("text") or ""

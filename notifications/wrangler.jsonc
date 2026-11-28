@@ -1,0 +1,10 @@
+{
+  "name": "article-downloader-notify",
+  "main": "worker.mjs",
+  "compatibility_date": "2025-12-01",
+  "workers_dev": true,
+  "d1_databases": [
+    { "binding": "DB", "database_name": "article-downloader-notifications" }
+  ],
+  "triggers": { "crons": ["13 3 * * *"] }
+}
